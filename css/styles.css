@@ -210,3 +210,197 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 .emi-three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem;margin-bottom:0.75rem}
 @media(max-width:700px){.emi-three-col{grid-template-columns:1fr}}
 .running-hd{background:#E8F0FE;color:#1a56db}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVE — Android Chrome (≤600px)
+   Best-practice approach:
+   • Single-column layouts everywhere
+   • Bottom navigation bar (Android pattern)
+   • Larger tap targets (min 44px)
+   • Sticky bottom payment form on EMI tab
+   • Tabbed switcher for Upcoming/Overdue columns
+   • No horizontal scrolling
+   ═══════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 600px) {
+
+  /* ── Base ─────────────────────────────────────────────────────────── */
+  body { font-size: 15px; }
+  .main { padding: 0.75rem 0.75rem 80px; } /* bottom padding for bottom nav */
+
+  /* ── Header: compact ─────────────────────────────────────────────── */
+  .header { padding: 8px 12px; }
+  .header-title { font-size: 14px; }
+  .header-right { gap: 6px; font-size: 11px; }
+  .header-right .btn-sm { padding: 3px 8px; font-size: 11px; }
+  #hdr-badge { display: none; } /* save space on mobile */
+
+  /* ── Top nav → hidden on mobile (replaced by bottom nav) ─────────── */
+  .nav { display: none; }
+
+  /* ── Bottom nav bar ───────────────────────────────────────────────── */
+  #bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: #fff;
+    border-top: 0.5px solid #ddd;
+    z-index: 100;
+    height: 56px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .bnav-btn {
+    flex: 0 0 auto;
+    min-width: 64px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 6px 10px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 10px;
+    color: #888;
+    font-family: inherit;
+    white-space: nowrap;
+    border-top: 2px solid transparent;
+  }
+  .bnav-btn.active { color: #534AB7; border-top-color: #534AB7; }
+  .bnav-btn .bnav-icon { font-size: 18px; line-height: 1; }
+  .bnav-badge {
+    background: #BA7517; color: #fff;
+    border-radius: 20px; font-size: 9px;
+    padding: 1px 5px; margin-left: 3px;
+    vertical-align: top;
+  }
+
+  /* ── Form grids → single column ─────────────────────────────────── */
+  .fg-2, .fg-3 { grid-template-columns: 1fr; }
+  .full { grid-column: 1; }
+
+  /* ── New Loan: stack customer panel below form ───────────────────── */
+  .new-loan-layout { grid-template-columns: 1fr; }
+  .customer-loans-panel { position: static; margin-top: 0.75rem; }
+
+  /* ── EMI tab: tabbed switcher instead of two columns ─────────────── */
+  .emi-two-col { display: block; }
+  .emi-col-wrap { display: none; border-radius: 0; border: none; }
+  .emi-col-wrap.mob-active { display: flex; }
+  /* tab switcher bar */
+  .mob-col-tabs {
+    display: flex;
+    background: #fff;
+    border: 0.5px solid #ddd;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 0.75rem;
+  }
+  .mob-col-tab {
+    flex: 1;
+    padding: 10px 8px;
+    border: none;
+    background: none;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    color: #888;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+  }
+  .mob-col-tab.active { background: #534AB7; color: #fff; }
+
+  /* All Loans tab: same tabbed approach for three columns */
+  .emi-three-col { display: block; }
+  .emi-three-col .emi-col-wrap { display: none; }
+  .emi-three-col .emi-col-wrap.mob-active { display: flex; }
+  .mob-three-tabs {
+    display: flex;
+    background: #fff;
+    border: 0.5px solid #ddd;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 0.75rem;
+  }
+  .mob-three-tab {
+    flex: 1;
+    padding: 9px 4px;
+    border: none;
+    background: none;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    color: #888;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .mob-three-tab.active { background: #534AB7; color: #fff; }
+
+  /* ── EMI card columns: full height on mobile ─────────────────────── */
+  .emi-col-body { max-height: none; overflow-y: visible; padding: 6px; }
+
+  /* ── EMI cards: larger tap targets ───────────────────────────────── */
+  .emi-card { padding: 12px; border-radius: 10px; }
+  .emi-card-id { font-size: 13px; }
+  .emi-card-name { font-size: 14px; }
+  .emi-card-date-big { font-size: 13px; }
+
+  /* ── EMI detail panel: sticky bottom sheet feel ──────────────────── */
+  #emi-detail {
+    position: fixed;
+    bottom: 56px; /* above bottom nav */
+    left: 0; right: 0;
+    max-height: 70vh;
+    overflow-y: auto;
+    border-radius: 16px 16px 0 0;
+    border: none;
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.15);
+    z-index: 90;
+    margin: 0;
+  }
+
+  /* ── KV grid: slightly more readable on mobile ───────────────────── */
+  .kv { grid-template-columns: 120px 1fr; gap: 3px 10px; }
+  .kv-l { font-size: 11px; }
+  .kv-v { font-size: 12px; }
+
+  /* ── Buttons: full-width submit rows ─────────────────────────────── */
+  .submit-row { flex-direction: column-reverse; }
+  .submit-row .btn { width: 100%; justify-content: center; padding: 11px; font-size: 14px; }
+
+  /* ── Cards ───────────────────────────────────────────────────────── */
+  .card { padding: 0.9rem; border-radius: 10px; }
+
+  /* ── Inputs: slightly larger touch targets ───────────────────────── */
+  input, select, textarea { padding: 10px 12px; font-size: 14px; }
+  label { font-size: 13px; }
+
+  /* ── Three-col detail panel ──────────────────────────────────────── */
+  #cd-detail-panel {
+    position: fixed;
+    bottom: 56px;
+    left: 0; right: 0;
+    max-height: 70vh;
+    overflow-y: auto;
+    border-radius: 16px 16px 0 0;
+    border: none;
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.15);
+    z-index: 90;
+    margin: 0;
+  }
+}
+
+/* Desktop: hide bottom nav */
+@media (min-width: 601px) {
+  #bottom-nav { display: none !important; }
+  .mob-col-tabs { display: none !important; }
+  .mob-three-tabs { display: none !important; }
+  .emi-two-col .emi-col-wrap { display: flex !important; }
+  .emi-three-col .emi-col-wrap { display: flex !important; }
+}

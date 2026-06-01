@@ -80,6 +80,10 @@ function renderEmiColumns(query) {
 
   $('col-upcoming-count').textContent = upcoming.length;
   $('col-overdue-count').textContent  = overdue.length;
+  // Sync mobile tab badges
+  const muc = $('mob-upcoming-count'), moc = $('mob-overdue-count');
+  if (muc) muc.textContent = upcoming.length;
+  if (moc) moc.textContent = overdue.length;
   const noDataMsg = (!S.sheetLoans || !S.sheetLoans.length) ? '<div class="emi-col-empty">Fetching from Sheets…</div>' : '';
   $('col-upcoming-list').innerHTML = upcoming.length ? upcoming.map(l => emiCard(l, 'upcoming')).join('') : (noDataMsg || '<div class="emi-col-empty">No upcoming EMIs</div>');
   $('col-overdue-list').innerHTML  = overdue.length  ? overdue.map(l  => emiCard(l, 'overdue')).join('')  : (noDataMsg || '<div class="emi-col-empty">All clear ✓</div>');
