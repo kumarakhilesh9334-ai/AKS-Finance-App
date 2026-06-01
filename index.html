@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AKS Financing</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<!-- ── AUTH SCREEN ─────────────────────────────────────────────────────── -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <h1>AKS Financing</h1>
+    <p style="font-size:13px;color:#888;margin-bottom:1.25rem">Sign in to continue</p>
+    <div style="margin-bottom:0.75rem"><label>Username</label><input id="l-user" type="text" placeholder="Username" autocomplete="off"></div>
+    <div style="margin-bottom:1rem"><label>PIN</label><input id="l-pin" type="password" placeholder="PIN" maxlength="6"></div>
+    <div id="l-err" class="alert al-e" style="display:none"></div>
+    <button class="btn btn-primary" style="width:100%" onclick="doLogin()">Sign in</button>
+    <p class="auth-hint">Demo: AKS / 0000 (admin) &nbsp;·&nbsp; agent1 / 1111 (agent)</p>
+  </div>
+</div>
+
+<!-- ── APP SHELL ───────────────────────────────────────────────────────── -->
+<div id="app" style="display:none">
+  <div class="header">
+    <span class="header-title">AKS Financing</span>
+    <div class="header-right">
+      <span id="hdr-name"></span>
+      <span id="hdr-badge"></span>
+      <button class="btn btn-sm" onclick="doLogout()">Sign out</button>
+    </div>
+  </div>
+  <div class="nav" id="nav"></div>
+  <div class="main">
+    <div id="alert-box"></div>
+
+    <!-- ── NEW LOAN ──────────────────────────────────────────────────── -->
+    <div class="page" id="page-new-loan">
+      <div style="font-size:15px;font-weight:500;margin-bottom:1rem">New loan application</div>
+      <div class="new-loan-layout">
+
+        <!-- LEFT: form -->
+        <div class="card" style="margin-bottom:0">
+          <div class="fg fg-2">
+            <div class="form-section">Customer details</div>
+
+            <!-- Aadhaar/PAN with autocomplete — FIRST field -->
+            <div class="full" id="idnum-wrap" style="position:relative">
+              <label>Aadhaar / PAN <span style="font-size:11px;color:#888">— type to search existing customers</span></label>
+              <input type="text" id="f-idnum" placeholder="Aadhaar or PAN" autocomplete="off" oninput="onIdNumInput();genLoanId()">
+              <div id="idnum-dropdown" class="idnum-dd" style="display:none"></div>
+            </div>
+            <div><label>Customer name</label><input type="text" id="f-cname" placeholder="Full name" oninput="genLoanId()"></div>
+            <div><label>Mobile number</label><input type="text" id="f-phone" placeholder="10-digit" maxlength="10"></div>
+            <div><label>Bill date</label><input type="date" id="f-billdate"></div>
+            <div class="full"><label>Guarantor / Alternate no / Comments</label><textarea id="f-guar" placeholder="Guarantor name, alternate number, or any comments"></textarea></div>
+
+            <div class="form-section">Device details</div>
+            <div><label>Mobile model</label><input type="text" id="f-model" placeholder="e.g. Samsung Galaxy A55"></div>
+            <div><label>Device type</label>
+              <select id="f-dtype" onchange="onDeviceTypeChange()">
+                <option>Mobile</option><option>TV</option><option>Fridge</option><option>Sound Box</option><option>Loan</option><option>Other</option>
+              </select>
+            </div>
+            <div><label>Device amount (₹)</label><input type="number" id="f-price" placeholder="0" oninput="calcLoan()"></div>
+            <div><label>Down payment (₹)</label><input type="number" id="f-down" placeholder="0" oninput="calcLoan()"></div>
+            <div><label>Processing fee (₹)</label><input type="number" id="f-pfee" oninput="calcLoan()"></div>
+            <div><label>App lock charge (₹)</label><input type="number" id="f-applock" oninput="calcLoan()"></div>
+
+            <div class="form-section">Loan details</div>
+            <div>
+              <label>EMI duration (months)</label>
+              <input type="number" id="f-tenure" placeholder="e.g. 6" oninput="calcLoan()">
+            </div>
+            <div>
+              <label>Monthly EMI (₹)</label>
+              <input type="number" id="f-monthly-emi" placeholder="e.g. 2500" oninput="calcLoan()">
+            </div>
+            <div>
+              <label>Interest (₹) <span style="font-size:11px;color:#aaa">— auto-computed</span></label>
+              <input type="number" id="f-int" placeholder="auto" readonly style="background:#f5f5f3;color:#999;cursor:not-allowed">
+            </div>
+            <div>
+              <label>EMI start date <span style="font-size:11px;color:#888">(5, 10, 15, 20, 25 only)</span></label>
+              <input type="date" id="f-emistart" onchange="onEmiStartChange()">
+              <div id="emistart-err" style="display:none;font-size:11px;color:#BA7517;margin-top:3px"></div>
+            </div>
+            <div><label>AK share (%)</label>
+              <select id="f-akshare" onchange="calcLoan()">
+                <option value="0">0% (AKS only)</option>
+                <option value="50">50%</option>
+                <option value="100">100% (AK only)</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+            <div id="ak-custom-wrap" style="display:none"><label>AK custom share (%)</label><input type="number" id="f-akcustom" placeholder="0-100" min="0" max="100" oninput="calcLoan()"></div>
+          </div>
+
+          <!-- Summary box -->
+          <div class="calc-box" id="calc-preview" style="display:none;margin-top:0.75rem">
+            <div style="font-size:11px;font-weight:500;color:#534AB7;margin-bottom:6px">Summary</div>
+            <div class="calc-row"><span>Finance amount</span><span id="cp-finance">—</span></div>
+            <div class="calc-row"><span>Total amount</span><span id="cp-total">—</span></div>
+            <div class="calc-row total"><span>Monthly EMI</span><span id="cp-emi">—</span></div>
+            <div class="calc-row"><span>Interest</span><span id="cp-interest">—</span></div>
+            <div class="calc-row"><span>Rate of interest (p.a.)</span><span id="cp-roi" style="color:#BA7517;font-weight:500">—</span></div>
+            <div class="calc-row"><span>Loan ID</span><span id="cp-loanid" style="color:#534AB7;font-weight:500">—</span></div>
+            <div class="calc-row"><span>AK amount</span><span id="cp-ak">—</span></div>
+            <div class="calc-row"><span>AKS amount</span><span id="cp-aks">—</span></div>
+          </div>
+
+          <div class="submit-row">
+            <button class="btn" onclick="resetLoanForm()">Clear</button>
+            <button class="btn btn-primary" onclick="submitLoan()">Submit for approval</button>
+          </div>
+        </div>
+
+        <!-- RIGHT: existing customer loans -->
+        <div id="customer-loans-panel" class="customer-loans-panel" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- ── LOG EMI ────────────────────────────────────────────────────── -->
+    <div class="page" id="page-emi">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+        <span style="font-size:15px;font-weight:500">Log EMI payment</span>
+        <button class="btn btn-sm" onclick="fetchLoansFromSheets().then(()=>renderEmiColumns($('emi-search').value))" title="Refresh">↻ Refresh</button>
+      </div>
+      <div class="emi-fetch-status" id="emi-fetch-status"></div>
+      <div class="emi-search-wrap">
+        <span class="emi-search-icon">🔍</span>
+        <input type="text" id="emi-search" placeholder="Search Loan ID or customer — results appear in both columns…" oninput="renderEmiColumns(this.value)">
+      </div>
+      <div class="emi-two-col">
+        <div class="emi-col-wrap">
+          <div class="emi-col-hd upcoming-hd"><span>🟢 Upcoming</span><span class="emi-section-count" id="col-upcoming-count">0</span></div>
+          <div class="emi-col-body" id="col-upcoming-list"><div class="emi-col-empty">Loading…</div></div>
+        </div>
+        <div class="emi-col-wrap">
+          <div class="emi-col-hd overdue-hd"><span>🔴 Overdue</span><span class="emi-section-count" id="col-overdue-count">0</span></div>
+          <div class="emi-col-body" id="col-overdue-list"><div class="emi-col-empty">Loading…</div></div>
+        </div>
+      </div>
+      <div class="card" id="emi-detail" style="display:none;margin-top:0.75rem">
+        <div class="kv" id="emi-kv" style="margin-bottom:0.75rem"></div>
+        <div id="emi-slots-wrap">
+          <div class="divider"></div>
+          <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:6px">EMI history</div>
+          <div id="emi-slots"></div>
+        </div>
+        <div class="divider"></div>
+        <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px" id="emi-next-label"></div>
+        <div class="fg fg-2">
+          <div><label>Amount received (₹)</label><input type="number" id="emi-amt" placeholder="0" oninput="checkEmiDiff()"></div>
+          <div><label>Payment date</label><input type="date" id="emi-date"></div>
+          <div><label>Payment mode</label>
+            <select id="emi-mode"><option>Cash</option><option>UPI</option><option>Bank transfer</option><option>Other</option></select>
+          </div>
+          <div id="emi-reason-wrap" style="display:none"><label>Reason for difference <span style="color:#A32D2D">*</span></label>
+            <select id="emi-reason">
+              <option value="">— Select reason —</option>
+              <option>Late payment fine included</option><option>Extra EMI received</option>
+              <option>Early loan closing settlement</option><option>Partial payment</option><option>Other</option>
+            </select>
+          </div>
+          <div class="full" id="emi-diff-warn" style="display:none"><div class="diff-warn" id="emi-diff-msg"></div></div>
+          <div class="full"><label>Notes</label><textarea id="emi-notes" placeholder="Any additional remarks..."></textarea></div>
+        </div>
+        <div class="submit-row">
+          <button class="btn" onclick="$('emi-detail').style.display='none';S.selectedEmiLoanId=null;document.querySelectorAll('.emi-card').forEach(r=>r.classList.remove('selected'))">Cancel</button>
+          <button class="btn btn-primary" onclick="submitEmi()">Submit for approval</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CLOSED & DEFAULTED (admin only) ───────────────────────────── -->
+    <div class="page" id="page-all-loans">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+        <span style="font-size:15px;font-weight:500">All Loans</span>
+        <button class="btn btn-sm" onclick="fetchLoansFromSheets().then(()=>renderClosedDefaulted(''))" title="Refresh">↻ Refresh</button>
+      </div>
+      <div class="emi-search-wrap">
+        <span class="emi-search-icon">🔍</span>
+        <input type="text" id="cd-search" placeholder="Search Loan ID or customer…" oninput="renderClosedDefaulted(this.value)">
+      </div>
+      <div class="emi-three-col">
+        <div class="emi-col-wrap">
+          <div class="emi-col-hd running-hd"><span>🔵 Running</span><span class="emi-section-count" id="cd-running-count">0</span></div>
+          <div class="emi-col-body" id="cd-running-list"><div class="emi-col-empty">Loading…</div></div>
+        </div>
+        <div class="emi-col-wrap">
+          <div class="emi-col-hd closed-hd"><span>⚪ Closed</span><span class="emi-section-count" id="cd-closed-count">0</span></div>
+          <div class="emi-col-body" id="cd-closed-list"><div class="emi-col-empty">Loading…</div></div>
+        </div>
+        <div class="emi-col-wrap">
+          <div class="emi-col-hd defaulted-hd"><span>⚠️ Defaulted</span><span class="emi-section-count" id="cd-defaulted-count">0</span></div>
+          <div class="emi-col-body" id="cd-defaulted-list"><div class="emi-col-empty">Loading…</div></div>
+        </div>
+      </div>
+
+      <!-- Bottom detail panel — shown when a card is clicked -->
+      <div class="card" id="cd-detail-panel" style="display:none;margin-top:0.75rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
+          <div>
+            <div style="font-size:14px;font-weight:600;color:#534AB7" id="cd-detail-loanid"></div>
+            <div style="font-size:12px;color:#888;margin-top:2px" id="cd-detail-sub"></div>
+          </div>
+          <button class="btn btn-sm" onclick="closeCdDetail()">✕ Close</button>
+        </div>
+        <div class="divider" style="margin-bottom:0.75rem"></div>
+        <div class="kv" id="cd-detail-kv" style="font-size:12px"></div>
+      </div>
+    </div>
+
+    <!-- ── MY SUBMISSIONS ────────────────────────────────────────────── -->
+    <div class="page" id="page-my-subs">
+      <div style="font-size:15px;font-weight:500;margin-bottom:1rem">My submissions</div>
+      <div id="my-subs-list"></div>
+    </div>
+
+    <!-- ── APPROVALS (admin) ─────────────────────────────────────────── -->
+    <div class="page" id="page-approvals">
+      <div style="font-size:15px;font-weight:500;margin-bottom:1rem">Pending approvals</div>
+      <div id="approvals-list"></div>
+    </div>
+
+    <!-- ── EMI HISTORY (admin) ───────────────────────────────────────── -->
+    <div class="page" id="page-emi-hist">
+      <div style="font-size:15px;font-weight:500;margin-bottom:1rem">EMI history</div>
+      <div id="emi-hist-list"></div>
+    </div>
+
+    <!-- ── USERS (admin) ─────────────────────────────────────────────── -->
+    <div class="page" id="page-users">
+      <div style="font-size:15px;font-weight:500;margin-bottom:1rem">User management</div>
+      <div class="card"><div id="users-list"></div></div>
+      <div class="card" style="margin-top:0.75rem">
+        <div style="font-size:13px;font-weight:500;margin-bottom:0.75rem">Add new user</div>
+        <div class="fg fg-2">
+          <div><label>Username</label><input id="nu-user" type="text" placeholder="e.g. ravi"></div>
+          <div><label>Display name</label><input id="nu-name" type="text" placeholder="e.g. Ravi Kumar"></div>
+          <div><label>PIN</label><input id="nu-pin" type="password" placeholder="4–6 digit PIN"></div>
+          <div><label>Role</label><select id="nu-role"><option value="agent">Agent</option><option value="admin">Admin</option></select></div>
+          <div class="full">
+            <label style="margin-bottom:6px">Permissions</label>
+            <label style="display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:13px"><input type="checkbox" id="p-loan" checked> Can submit new loans</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="p-emi" checked> Can log EMI payments</label>
+          </div>
+        </div>
+        <div class="submit-row"><button class="btn btn-primary" onclick="addUser()">Add user</button></div>
+      </div>
+    </div>
+
+    <!-- ── EXPORT (admin) ────────────────────────────────────────────── -->
+    <div class="page" id="page-export">
+      <div style="font-size:15px;font-weight:500;margin-bottom:1rem">Export to Google Sheets</div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:6px">Google Apps Script URL</div>
+        <div class="card-sub" style="margin-bottom:0.75rem">URL is hardcoded. Only update if you create a brand-new deployment.</div>
+        <div class="sheets-url-row">
+          <input type="url" id="sheets-url-input" placeholder="https://script.google.com/macros/s/…/exec">
+          <button class="btn btn-primary btn-sm" onclick="saveSheetUrl()">Update URL</button>
+        </div>
+        <div class="export-status" id="export-status"></div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:0.5rem">Export data</div>
+        <div class="card-sub" style="margin-bottom:1rem">Each button exports to a separate tab, overwriting previous data.</div>
+        <div class="export-btns">
+          <button class="btn btn-export" onclick="exportToSheets('Loans')">⬆ Loans</button>
+          <button class="btn btn-export" onclick="exportToSheets('EMI History')">⬆ EMI History</button>
+          <button class="btn btn-export" onclick="exportToSheets('Pending Approvals')">⬆ Pending Approvals</button>
+        </div>
+        <div style="margin-top:1rem;padding-top:0.75rem;border-top:0.5px solid #eee">
+          <button class="btn btn-primary" onclick="exportAll()">⬆ Export All</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<!-- ── SCRIPTS (order matters) ────────────────────────────────────────── -->
+<script src="js/state.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/nav.js"></script>
+<script src="js/loans.js"></script>
+<script src="js/emi.js"></script>
+<script src="js/approvals.js"></script>
+<script src="js/records.js"></script>
+<script src="js/users.js"></script>
+<script src="js/export.js"></script>
+</body>
+</html>
