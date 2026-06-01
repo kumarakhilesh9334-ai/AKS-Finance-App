@@ -2,6 +2,11 @@
 // Central data store for AKS Financing app.
 // All modules read/write through this object.
 
+const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbzFE_aDkwxYUsB47VPWJGpDft4wvm_k2VqAz7oMRAdaNdNeTumb3VZ_vd50esW-vaEasQ/exec';
+// ↑ Update this ONLY if you create a brand-new Apps Script deployment.
+//   To update the script code without changing the URL:
+//   Apps Script → Deploy → Manage deployments → Edit → New version → Deploy.
+
 const S = {
   users: [
     { id: 'u1', username: 'AKS', pin: '0000', name: 'AKS (You)', role: 'admin', perms: { loan: true, emi: true } },
@@ -12,7 +17,9 @@ const S = {
   pending: [],  // submissions awaiting approval
   cu: null,     // currently logged-in user
   page: null,   // current active page
-  sheetsUrl: localStorage.getItem('aks_sheets_url') || '', // Google Apps Script web app URL
+  sheetsUrl: SHEETS_URL,
+  sheetLoans: [],
+  selectedEmiLoanId: null,
 };
 
 let pid = 100; // auto-increment for pending IDs
