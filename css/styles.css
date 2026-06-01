@@ -1,0 +1,212 @@
+/* ── RESET & BASE ─────────────────────────────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#f5f5f3;color:#1a1a1a;min-height:100vh;font-size:14px}
+
+/* ── FORM ELEMENTS ────────────────────────────────────────────────────── */
+input,select,textarea{width:100%;padding:7px 10px;border:0.5px solid #ccc;border-radius:8px;font-size:13px;font-family:inherit;background:#fff;color:#1a1a1a}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#534AB7}
+textarea{resize:vertical;min-height:60px}
+label{display:block;font-size:12px;color:#666;margin-bottom:3px}
+
+/* ── BUTTONS ──────────────────────────────────────────────────────────── */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer;border:0.5px solid #ccc;background:#fff;color:#1a1a1a;transition:background 0.15s}
+.btn:hover{background:#f0f0f0}
+.btn-primary{background:#534AB7;color:#fff;border-color:#534AB7}
+.btn-primary:hover{background:#3C3489}
+.btn-success{background:#0F6E56;color:#fff;border-color:#0F6E56}
+.btn-success:hover{background:#085041}
+.btn-danger{background:#A32D2D;color:#fff;border-color:#A32D2D}
+.btn-danger:hover{background:#791F1F}
+.btn-export{background:#1a6b3c;color:#fff;border-color:#1a6b3c}
+.btn-export:hover{background:#145230}
+.btn-sm{padding:4px 10px;font-size:12px}
+.btn-ghost{background:none;border:none;padding:4px 8px;cursor:pointer;color:#666;font-size:12px}
+.btn-ghost:hover{color:#1a1a1a}
+
+/* ── LAYOUT ───────────────────────────────────────────────────────────── */
+#auth-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:1rem}
+.auth-card{background:#fff;border-radius:16px;border:0.5px solid #ddd;padding:2rem;width:100%;max-width:360px}
+.auth-card h1{font-size:20px;font-weight:500;margin-bottom:4px}
+.auth-hint{font-size:11px;color:#aaa;text-align:center;margin-top:1rem}
+
+.header{background:#fff;border-bottom:0.5px solid #ddd;padding:10px 1.5rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
+.header-title{font-size:15px;font-weight:500;color:#534AB7}
+.header-right{display:flex;align-items:center;gap:8px;font-size:12px;color:#666}
+
+.nav{background:#fff;border-bottom:0.5px solid #ddd;display:flex;overflow-x:auto;position:sticky;top:41px;z-index:9}
+.nav-btn{padding:9px 16px;font-size:13px;border:none;background:none;cursor:pointer;color:#666;border-bottom:2px solid transparent;white-space:nowrap;font-family:inherit}
+.nav-btn.active{color:#534AB7;border-bottom-color:#534AB7;font-weight:500}
+
+.main{padding:1.25rem;max-width:860px;margin:0 auto}
+.page{display:none}.page.active{display:block}
+
+/* ── CARDS ────────────────────────────────────────────────────────────── */
+.card{background:#fff;border-radius:12px;border:0.5px solid #ddd;padding:1.1rem;margin-bottom:0.85rem}
+.card-hd{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.75rem}
+.card-title{font-size:14px;font-weight:500}
+.card-sub{font-size:12px;color:#888;margin-top:2px}
+
+/* ── GRID ─────────────────────────────────────────────────────────────── */
+.fg{display:grid;gap:0.75rem}
+.fg-2{grid-template-columns:1fr 1fr}
+.fg-3{grid-template-columns:1fr 1fr 1fr}
+.form-section{font-size:11px;font-weight:500;color:#534AB7;letter-spacing:0.5px;text-transform:uppercase;padding-bottom:4px;border-bottom:0.5px solid #EEEDFE;grid-column:1/-1;margin-top:4px}
+.full{grid-column:1/-1}
+.submit-row{display:flex;justify-content:flex-end;gap:8px;margin-top:1rem;padding-top:0.75rem;border-top:0.5px solid #eee}
+
+/* ── BADGES ───────────────────────────────────────────────────────────── */
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500}
+.b-admin{background:#EEEDFE;color:#3C3489}
+.b-agent{background:#E1F5EE;color:#085041}
+.b-pending{background:#FAEEDA;color:#633806}
+.b-approved{background:#EAF3DE;color:#27500A}
+.b-rejected{background:#FCEBEB;color:#791F1F}
+.b-active{background:#E1F5EE;color:#085041}
+.b-closed{background:#F1EFE8;color:#5F5E5A}
+.b-defaulted{background:#FCEBEB;color:#791F1F}
+
+/* ── KV GRID ──────────────────────────────────────────────────────────── */
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12px}
+.kv-l{color:#888}
+.kv-v{font-weight:500;color:#1a1a1a}
+
+/* ── MISC ─────────────────────────────────────────────────────────────── */
+.empty{text-align:center;padding:2rem;color:#aaa;font-size:13px}
+.alert{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:0.85rem}
+.al-s{background:#EAF3DE;color:#27500A;border:0.5px solid #97C459}
+.al-e{background:#FCEBEB;color:#791F1F;border:0.5px solid #F09595}
+.al-w{background:#FAEEDA;color:#633806;border:0.5px solid #FAC775}
+.divider{border:none;border-top:0.5px solid #eee;margin:0.75rem 0}
+.pcount{background:#BA7517;color:#fff;border-radius:20px;font-size:10px;padding:1px 6px;margin-left:4px}
+.diff-warn{background:#FAEEDA;border:0.5px solid #FAC775;border-radius:8px;padding:8px 10px;margin-top:0.5rem;font-size:12px;color:#633806}
+.emi-slot{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:0.5px solid #f0f0f0;font-size:12px}
+.emi-slot:last-child{border-bottom:none}
+.calc-box{background:#f8f7ff;border:0.5px solid #EEEDFE;border-radius:8px;padding:10px;margin-top:0.5rem;font-size:12px}
+.calc-row{display:flex;justify-content:space-between;padding:2px 0}
+.calc-row.total{font-weight:500;border-top:0.5px solid #EEEDFE;padding-top:6px;margin-top:4px}
+.tag{display:inline-block;padding:1px 6px;border-radius:4px;font-size:11px}
+.t-loan{background:#EEEDFE;color:#3C3489}
+.t-emi{background:#E1F5EE;color:#085041}
+.avatar{width:30px;height:30px;border-radius:50%;background:#EEEDFE;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:#3C3489;flex-shrink:0}
+.user-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid #eee}
+.user-row:last-child{border-bottom:none}
+
+/* ── EXPORT PANEL ─────────────────────────────────────────────────────── */
+.export-panel{background:#f0faf5;border:0.5px solid #97C459;border-radius:10px;padding:1rem;margin-bottom:1rem}
+.export-panel-title{font-size:13px;font-weight:500;color:#1a6b3c;margin-bottom:0.5rem}
+.export-status{font-size:12px;margin-top:0.5rem;color:#666;min-height:18px}
+.export-status.ok{color:#27500A}
+.export-status.err{color:#A32D2D}
+.export-status.loading{color:#534AB7}
+.export-btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:0.75rem}
+.sheets-url-row{display:flex;gap:8px;align-items:flex-end;margin-top:0.75rem}
+.sheets-url-row input{flex:1}
+
+/* ── EMI SECTIONS (loan picker) ───────────────────────────────────────── */
+.emi-search-wrap{position:relative;margin-bottom:1rem}
+.emi-search-wrap input{padding-left:32px}
+.emi-search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#aaa;font-size:14px;pointer-events:none}
+.emi-section{margin-bottom:0.85rem}
+.emi-section-hd{font-size:11px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase;color:#555;padding:6px 0 4px;display:flex;align-items:center;gap:6px;border-bottom:0.5px solid #eee;margin-bottom:4px}
+.emi-section-count{background:#e0e0e0;color:#555;border-radius:20px;font-size:10px;padding:1px 7px}
+.emi-section-body{display:flex;flex-direction:column;gap:4px}
+.emi-loan-row{border:0.5px solid #e5e5e5;border-radius:8px;padding:8px 12px;cursor:pointer;transition:background 0.12s,border-color 0.12s;background:#fff}
+.emi-loan-row:hover{background:#f8f7ff;border-color:#534AB7}
+.emi-loan-row.selected{background:#EEEDFE;border-color:#534AB7}
+.emi-loan-row.closed{cursor:default;opacity:0.55}
+.emi-loan-row.closed:hover{background:#fff;border-color:#e5e5e5}
+.emi-loan-row.overdue{border-left:3px solid #A32D2D}
+.emi-loan-row.upcoming{border-left:3px solid #0F6E56}
+.emi-loan-main{font-size:13px;font-weight:500;color:#1a1a1a;margin-bottom:3px}
+.emi-loan-name{font-weight:400;color:#555;margin-left:6px}
+.emi-loan-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.emi-due{font-size:11px;color:#555}
+.overdue-txt{color:#A32D2D;font-weight:500}
+.emi-amt-pill{font-size:11px;background:#EEEDFE;color:#3C3489;border-radius:20px;padding:1px 8px}
+.emi-model-pill{font-size:11px;background:#f0f0f0;color:#666;border-radius:20px;padding:1px 8px}
+/* fetch status */
+.emi-fetch-status{font-size:12px;padding:4px 0;min-height:18px}
+.emi-fetch-status.ok{color:#27500A}
+.emi-fetch-status.warn{color:#BA7517}
+.emi-fetch-status.loading{color:#534AB7}
+
+/* ── EMI additional states ────────────────────────────────────────────── */
+.emi-loan-row.defaulted{border-left:3px solid #BA7517}
+.emi-loan-row.no-action{cursor:default;opacity:0.6}
+.emi-loan-row.no-action:hover{background:#fff;border-color:#e5e5e5}
+.emi-late-pill{font-size:11px;background:#FAEEDA;color:#633806;border-radius:20px;padding:1px 8px}
+
+/* ── TWO-COLUMN EMI LAYOUT ────────────────────────────────────────────── */
+.emi-two-col{display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:0.75rem}
+.emi-col-wrap{background:#fff;border:0.5px solid #ddd;border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.emi-col-hd{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;font-size:12px;font-weight:600;letter-spacing:0.3px}
+.upcoming-hd{background:#E1F5EE;color:#085041}
+.overdue-hd{background:#FCEBEB;color:#791F1F}
+.closed-hd{background:#F1EFE8;color:#5F5E5A}
+.defaulted-hd{background:#FAEEDA;color:#633806}
+.emi-col-body{padding:8px;display:flex;flex-direction:column;gap:6px;overflow-y:auto;max-height:460px;flex:1}
+.emi-col-empty{text-align:center;padding:1.5rem 0.5rem;color:#bbb;font-size:12px}
+
+/* ── EMI CARD ─────────────────────────────────────────────────────────── */
+.emi-card{background:#fff;border:0.5px solid #e5e5e5;border-radius:8px;padding:8px 10px;cursor:pointer;transition:background 0.12s,border-color 0.12s}
+.emi-card:hover{background:#f8f7ff;border-color:#534AB7}
+.emi-card.selected{background:#EEEDFE;border-color:#534AB7}
+.emi-card.no-action{cursor:default;opacity:0.7}
+.emi-card.no-action:hover{background:#fff;border-color:#e5e5e5}
+.emi-card.upcoming{border-left:3px solid #0F6E56}
+.emi-card.overdue{border-left:3px solid #A32D2D}
+.emi-card.defaulted{border-left:3px solid #BA7517}
+.emi-card.closed{border-left:3px solid #888}
+.emi-card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px}
+.emi-card-id{font-size:12px;font-weight:600;color:#534AB7}
+.emi-card-name{font-size:13px;color:#1a1a1a;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.emi-card-meta{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:3px}
+.emi-card-date{font-size:11px;color:#888}
+
+/* ── DAY LABELS ───────────────────────────────────────────────────────── */
+.emi-days{font-size:10px;border-radius:20px;padding:1px 7px;font-weight:500}
+.emi-days.today{background:#EEEDFE;color:#3C3489}
+.emi-days.soon{background:#E1F5EE;color:#085041}
+.emi-days.overdue-lbl{background:#FCEBEB;color:#791F1F}
+
+/* ── NEW LOAN: two-column layout ─────────────────────────────────────── */
+.new-loan-layout{display:grid;grid-template-columns:1fr 320px;gap:0.85rem;align-items:start}
+@media(max-width:700px){.new-loan-layout{grid-template-columns:1fr}}
+.customer-loans-panel{background:#fff;border:0.5px solid #EEEDFE;border-radius:12px;padding:1rem;position:sticky;top:100px}
+.cust-loan-pill{display:flex;align-items:center;gap:4px;padding:5px 8px;border-radius:6px;margin-bottom:3px;font-size:12px}
+
+/* ── AADHAAR DROPDOWN ────────────────────────────────────────────────── */
+.idnum-dd{position:absolute;top:100%;left:0;right:0;background:#fff;border:0.5px solid #534AB7;border-radius:8px;z-index:50;box-shadow:0 4px 16px rgba(0,0,0,0.1);overflow:hidden;margin-top:2px}
+.idnum-option{padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:0.5px solid #f0f0f0}
+.idnum-option:last-child{border-bottom:none}
+.idnum-option:hover{background:#f8f7ff}
+
+/* ── EMI SUGGEST ─────────────────────────────────────────────────────── */
+.emi-suggest{margin-top:4px;font-size:12px;color:#534AB7;background:#f8f7ff;border:0.5px solid #EEEDFE;border-radius:6px;padding:4px 8px;font-weight:500}
+
+/* ── EMI CARD: big date ──────────────────────────────────────────────── */
+.emi-card-date-big{font-size:14px;font-weight:600;color:#1a1a1a;margin-bottom:4px}
+.emi-card.overdue .emi-card-date-big{color:#A32D2D}
+.emi-card.upcoming .emi-card-date-big{color:#0F6E56}
+
+/* ── ALL LOANS: compact expandable cards ─────────────────────────────── */
+.loan-summary-card{background:#fff;border:0.5px solid #e5e5e5;border-radius:10px;padding:10px 12px;margin-bottom:6px;cursor:pointer;transition:background 0.12s}
+.loan-summary-card:hover{background:#fafafa}
+.loan-summary-card.overdue{border-left:3px solid #A32D2D}
+.loan-summary-card.upcoming{border-left:3px solid #0F6E56}
+.loan-summary-card.defaulted{border-left:3px solid #BA7517}
+.loan-summary-card.closed{border-left:3px solid #888}
+.loan-card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px}
+.loan-expand-hint{font-size:11px;color:#534AB7;margin-left:auto;cursor:pointer;white-space:nowrap}
+.loan-detail-panel .kv{font-size:12px}
+
+/* ── EMI card: date top-right ────────────────────────────────────────── */
+.emi-card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:2px}
+.emi-card-date-big{font-size:12px;font-weight:600;color:#1a1a1a;text-align:right;white-space:nowrap}
+.emi-card.overdue  .emi-card-date-big{color:#A32D2D}
+.emi-card.upcoming .emi-card-date-big{color:#0F6E56}
+
+/* ── THREE-COLUMN LAYOUT ─────────────────────────────────────────────── */
+.emi-three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem;margin-bottom:0.75rem}
+@media(max-width:700px){.emi-three-col{grid-template-columns:1fr}}
+.running-hd{background:#E8F0FE;color:#1a56db}
