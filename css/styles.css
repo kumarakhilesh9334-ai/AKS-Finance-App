@@ -404,3 +404,20 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
   .emi-two-col .emi-col-wrap { display: flex !important; }
   .emi-three-col .emi-col-wrap { display: flex !important; }
 }
+
+/* ── APPROVALS TWO-COLUMN ─────────────────────────────────────────────── */
+.approvals-two-col{display:grid;grid-template-columns:1fr 1fr;gap:0.85rem;align-items:start}
+@media(max-width:600px){.approvals-two-col{grid-template-columns:1fr}}
+.appr-col-wrap{background:#fff;border:0.5px solid #ddd;border-radius:12px;overflow:hidden}
+.appr-col-hd{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;font-size:12px;font-weight:600}
+.loan-appr-hd{background:#EEEDFE;color:#3C3489}
+.emi-appr-hd{background:#E1F5EE;color:#085041}
+.appr-col-body{padding:8px;display:flex;flex-direction:column;gap:0}
+
+/* ── APPROVALS TWO-COLUMN ────────────────────────────────────────────── */
+.approvals-two-col{display:grid;grid-template-columns:1fr 1fr;gap:0.75rem}
+@media(max-width:600px){.approvals-two-col{grid-template-columns:1fr}}
+.appr-col{display:flex;flex-direction:column;gap:0.5rem}
+.appr-col-hd{font-size:12px;font-weight:600;padding:8px 12px;border-radius:8px;margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.loan-hd{background:#EEEDFE;color:#3C3489}
+.emi-hd{background:#E1F5EE;color:#085041}

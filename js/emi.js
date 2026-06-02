@@ -266,17 +266,37 @@ function submitEmi() {
   const expected = Math.max(0, (sheetLoan ? sheetLoan.monthlyEmi : inAppLoan.data.monthlyEmi) - extraRcv);
   if (Math.abs(amt - expected) > 1 && !v('emi-reason')) { showAlert('Please select a reason for the amount difference.', 'e'); return; }
   const numReceived = sheetLoan ? sheetLoan.numReceivedEmi : inAppLoan.emis.length;
+  // Compute scheduled due date for this EMI number
+  const emiNum       = numReceived + 1;
+  const emiStartDate = sheetLoan ? sheetLoan.emiStartDate : (inAppLoan ? inAppLoan.data.emiStart : '');
+  let scheduledDate  = '';
+  if (emiStartDate) {
+    // Parse start date and add (emiNum-1) months
+    const parts = String(emiStartDate).match(/(\d{1,2})[\-\/](\w{3})[\-\/](\d{2,4})/);
+    if (parts) {
+      const months = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+      const mon = months[parts[2].toLowerCase()];
+      let yr = parseInt(parts[3]); if (yr<100) yr += yr<50?2000:1900;
+      const sd = new Date(yr, mon, parseInt(parts[1]));
+      sd.setMonth(sd.getMonth() + (emiNum - 1));
+      scheduledDate = sd.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}).replace(/ /g,'-');
+    }
+  }
+
   const d = {
     loanId,
     customerName:   sheetLoan ? sheetLoan.customerName : inAppLoan.data.customerName,
     model:          sheetLoan ? sheetLoan.model        : inAppLoan.data.model,
-    emiNum:         numReceived + 1,
+    emiNum,
     amount:         amt, expectedAmount: expected, misc: amt - expected,
-    date, mode: v('emi-mode'), reason: v('emi-reason'), notes: v('emi-notes'),
+    date, scheduledDate, emiStartDate,
+    mode: v('emi-mode'), reason: v('emi-reason'), notes: v('emi-notes'),
     akShare:  sheetLoan ? Math.round(sheetLoan.akShare  * 100) : inAppLoan.data.akShare,
     aksShare: sheetLoan ? Math.round(sheetLoan.aksShare * 100) : inAppLoan.data.aksShare,
   };
-  S.pending.push({ id: nextPid(), type: 'emi', data: d, submittedBy: S.cu.id, submittedAt: new Date().toISOString(), status: 'pending', note: '' });
+  const emiItem = { id: nextPid(), type: 'emi', data: d, submittedBy: S.cu.id, submittedAt: new Date().toISOString(), status: 'pending', note: '' };
+  S.pending.push(emiItem);
+  savePendingToSheets(emiItem); // persist across devices
   showAlert('EMI payment submitted for approval.');
   $('emi-detail').style.display = 'none';
   S.selectedEmiLoanId = null;
