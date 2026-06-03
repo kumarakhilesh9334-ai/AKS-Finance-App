@@ -3,12 +3,17 @@
 // Closed & Defaulted are on their own admin-only tab.
 
 // ── Fetch loans from Sheets on login ─────────────────────────────────────
-async function fetchLoansFromSheets() {
+async function fetchLoansFromSheets(force) {
   if (!S.sheetsUrl) return;
+  // Use cached data if available and not forced — renders instantly on tab switch
+  if (!force && S.sheetLoans && S.sheetLoans.length > 0) {
+    rerenderActiveTab();
+    return;
+  }
   const statusEl = $('emi-fetch-status');
   if (statusEl) { statusEl.textContent = 'Loading loans…'; statusEl.className = 'emi-fetch-status loading'; }
   try {
-    const res  = await fetch(S.sheetsUrl + '?action=readLoans');
+    const res  = await fetch(S.sheetsUrl + '?action=readLoansSlim');
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'Unknown error');
     S.sheetLoans = data.loans || [];
@@ -17,14 +22,16 @@ async function fetchLoansFromSheets() {
       statusEl.className = 'emi-fetch-status ok';
       setTimeout(() => { if ($('emi-fetch-status')) $('emi-fetch-status').textContent = ''; }, 3000);
     }
-    // Re-render whichever tab is currently visible so data shows immediately
-    if (S.page === 'emi')              renderEmiColumns($('emi-search') ? $('emi-search').value : '');
-    if (S.page === 'closed-defaulted') renderClosedDefaulted($('cd-search') ? $('cd-search').value : '');
-    if (S.page === 'loans')            renderLoans();
+    rerenderActiveTab();
   } catch (err) {
     if (statusEl) { statusEl.textContent = '⚠ Could not load: ' + err.message; statusEl.className = 'emi-fetch-status warn'; }
     S.sheetLoans = [];
   }
+}
+
+function rerenderActiveTab() {
+  if (S.page === 'emi')        renderEmiColumns($('emi-search') ? $('emi-search').value : '');
+  if (S.page === 'all-loans')  renderClosedDefaulted($('cd-search') ? $('cd-search').value : '');
 }
 
 // ── Page init ─────────────────────────────────────────────────────────────
@@ -146,14 +153,31 @@ document.addEventListener('click', function(e) {
   }
 });
 
-function selectEmiLoan(loanId) {
+async function selectEmiLoan(loanId) {
   document.querySelectorAll('.emi-card').forEach(r => r.classList.remove('selected'));
   document.querySelectorAll(`.emi-card[data-loanid="${loanId}"]`).forEach(r => r.classList.add('selected'));
   S.selectedEmiLoanId = loanId;
 
-  const loan = (S.sheetLoans && S.sheetLoans.find(l => l.loanId === loanId))
+  let loan = (S.sheetLoans && S.sheetLoans.find(l => l.loanId === loanId))
     || (() => { const l = S.loans.find(l => l.loanId === loanId); return l ? { ...l.data, status:'Active', slots:[], numReceivedEmi: l.emis.length } : null; })();
   if (!loan) return;
+
+  // If we only have slim data, fetch full detail first
+  if (loan._slim) {
+    $('emi-detail').style.display = 'block';
+    $('emi-kv').innerHTML = '<div style="color:#888;font-size:12px;padding:8px 0">Loading details…</div>';
+    $('emi-slots-wrap').style.display = 'none';
+    try {
+      const res  = await fetch(S.sheetsUrl + '?action=readLoanDetail&loanId=' + encodeURIComponent(loanId));
+      const data = await res.json();
+      if (data.ok && data.loan) {
+        // Update cache with full data
+        const idx = S.sheetLoans.findIndex(l => l.loanId === loanId);
+        if (idx !== -1) S.sheetLoans[idx] = data.loan;
+        loan = data.loan;
+      }
+    } catch(e) { console.warn('Could not load detail:', e.message); }
+  }
 
   const detail = $('emi-detail');
   detail.style.display = 'block';
@@ -355,13 +379,31 @@ function cdCard(l, type) {
 
 function cdFmt(n) { return (n==null||n===''||n===0) ? '—' : '₹'+Number(n).toLocaleString('en-IN'); }
 
-function openCdDetail(loanId) {
+async function openCdDetail(loanId) {
   // Highlight selected card
   document.querySelectorAll('#page-closed-defaulted .emi-card').forEach(c => c.classList.remove('selected'));
   document.querySelectorAll(`#page-closed-defaulted .emi-card[data-loanid="${loanId}"]`).forEach(c => c.classList.add('selected'));
 
-  const l = S.sheetLoans && S.sheetLoans.find(x => x.loanId === loanId);
+  let l = S.sheetLoans && S.sheetLoans.find(x => x.loanId === loanId);
   if (!l) return;
+
+  // If slim, show panel immediately with loading state then fetch full
+  if (l._slim) {
+    $('cd-detail-panel').style.display = 'block';
+    $('cd-detail-loanid').textContent = loanId;
+    $('cd-detail-sub').textContent    = l.customerName;
+    $('cd-detail-kv').innerHTML = '<div style="color:#888;font-size:12px;padding:8px 0">Loading full details…</div>';
+    $('cd-detail-panel').scrollIntoView({ behavior:'smooth', block:'nearest' });
+    try {
+      const res  = await fetch(S.sheetsUrl + '?action=readLoanDetail&loanId=' + encodeURIComponent(loanId));
+      const data = await res.json();
+      if (data.ok && data.loan) {
+        const idx = S.sheetLoans.findIndex(x => x.loanId === loanId);
+        if (idx !== -1) S.sheetLoans[idx] = data.loan;
+        l = data.loan;
+      }
+    } catch(e) { console.warn('Could not load detail:', e.message); }
+  }
 
   const akPct  = l.akShare  != null ? Math.round((l.akShare  <= 1 ? l.akShare  * 100 : l.akShare))  : 0;
   const aksPct = l.aksShare != null ? Math.round((l.aksShare <= 1 ? l.aksShare * 100 : l.aksShare)) : 0;
