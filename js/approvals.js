@@ -24,12 +24,17 @@ async function fetchPendingFromSheets() {
 async function savePendingToSheets(item) {
   if (!S.sheetsUrl) return;
   try {
-    await fetch(S.sheetsUrl, {
-      method:'POST', mode:'no-cors',
-      headers:{'Content-Type':'text/plain'},
-      body: JSON.stringify({action:'savePending', item}),
-    });
+    await gasPost({action:'savePending', item});
   } catch(err) { console.warn('savePending error:', err.message); }
+}
+
+// Google Apps Script POST helper — uses a form submission trick to
+// bypass CORS while still sending a parseable body.
+// Apps Script receives the JSON in e.parameter.payload
+async function gasPost(payload) {
+  const form = new FormData();
+  form.append('payload', JSON.stringify(payload));
+  await fetch(S.sheetsUrl, { method:'POST', body: form });
 }
 
 // ── My Submissions ────────────────────────────────────────────────────────
@@ -68,8 +73,7 @@ async function approve(id) {
   try {
     const res  = await fetch(S.sheetsUrl, {
       method:'POST', mode:'no-cors',
-      headers:{'Content-Type':'text/plain'},
-      body: JSON.stringify({action:'approvePending', id, type:item.type, data:item.data}),
+      body: form,
     });
     showAlert('Approved and saved to Sheets ✓');
   } catch(err) {
@@ -89,8 +93,7 @@ async function reject(id) {
   try {
     await fetch(S.sheetsUrl, {
       method:'POST', mode:'no-cors',
-      headers:{'Content-Type':'text/plain'},
-      body: JSON.stringify({action:'rejectPending', id, type:item.type, note}),
+      body: form,
     });
     showAlert('Entry rejected.', 'e');
   } catch(err) {
@@ -194,8 +197,7 @@ function saveEdit() {
   if (S.sheetsUrl) {
     fetch(S.sheetsUrl, {
       method:'POST', mode:'no-cors',
-      headers:{'Content-Type':'text/plain'},
-      body: JSON.stringify({action:'updatePending', id, type:item.type, data:d}),
+      body: form,
     }).catch(err => console.warn('updatePending error:', err.message));
   }
 }
