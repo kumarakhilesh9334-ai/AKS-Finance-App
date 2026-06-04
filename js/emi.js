@@ -320,7 +320,7 @@ function submitEmi() {
   };
   const emiItem = { id: nextPid(), type: 'emi', data: d, submittedBy: S.cu.id, submittedAt: new Date().toISOString(), status: 'pending', note: '' };
   S.pending.push(emiItem);
-  savePendingToSheets(emiItem); // persist across devices
+  gasPost({action:'saveEmi', item:emiItem}); // persist to Unapproved_EMI sheet
   showAlert('EMI payment submitted for approval.');
   $('emi-detail').style.display = 'none';
   S.selectedEmiLoanId = null;
