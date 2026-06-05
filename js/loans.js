@@ -31,42 +31,7 @@ function initNewLoanPage() {
   $('customer-loans-panel').style.display = 'none';
   $('idnum-dropdown').style.display       = 'none';
   $('emistart-err').style.display         = 'none';
-  setTimeout(validateLoanForm, 0);
 }
-
-function validateLoanForm() {
-  const requiredFields = ['f-idnum', 'f-cname', 'f-phone', 'f-billdate', 'f-model', 'f-dtype', 'f-price', 
-  'f-down', 'f-pfee', 'f-applock', 'f-tenure', 'f-monthly-emi', 'f-emistart', 'f-akshare'];
-
-  let valid = true;
-
-  requiredFields.forEach(id => {
-    const el = $(id);
-
-    if (!el || String(el.value).trim() === '') {
-      valid = false;
-    }
-  });
-
-  // Custom AK share must be filled if selected
-  if (v('f-akshare') === 'custom') {
-    const customVal = num('f-akcustom');
-    if (customVal < 0 || customVal > 100) valid = false;
-  }
-
-  const btn = $('loan-submit-btn');
-
-  if (valid) {
-    btn.disabled = false;
-    btn.style.opacity = '1';
-    btn.style.cursor = 'pointer';
-  } else {
-    btn.disabled = true;
-    btn.style.opacity = '0.5';
-    btn.style.cursor = 'not-allowed';
-  }
-}
-
 
 // ── Aadhaar/PAN autocomplete ──────────────────────────────────────────────
 function onIdNumInput() {
@@ -232,28 +197,9 @@ function submitLoan() {
   const cname      = v('f-cname'), idnum = v('f-idnum'), phone = v('f-phone');
   const model      = v('f-model');
   const tenure     = num('f-tenure'), price = num('f-price'), monthlyEmi = num('f-monthly-emi');
-  // if (!cname||!idnum||!phone||!model||!tenure||!price||!monthlyEmi) {
-  //  showAlert('Please fill in all required fields including Monthly EMI.','e'); return;}
-  if (
-  !v('f-idnum') ||
-  !v('f-cname') ||
-  !v('f-phone') ||
-  !v('f-billdate') ||
-  !v('f-model') ||
-  !v('f-dtype') ||
-  !num('f-price') ||
-  num('f-down') === null ||
-  !num('f-pfee') ||
-  !num('f-applock') &&
-  num('f-applock') !== 0 ||
-  !num('f-tenure') ||
-  !num('f-monthly-emi') ||
-  !v('f-emistart') ||
-  !v('f-akshare')
-) {
-  showAlert('Please complete all mandatory fields.','e');
-  return;
-}
+  if (!cname||!idnum||!phone||!model||!tenure||!price||!monthlyEmi) {
+    showAlert('Please fill in all required fields including Monthly EMI.','e'); return;
+  }
   const emiStartVal = v('f-emistart');
   if (emiStartVal && ![5,10,15,20,25].includes(parseInt(emiStartVal.split('-')[2]))) {
     showAlert('EMI start date must be on 5, 10, 15, 20 or 25.','e'); return;
@@ -305,21 +251,3 @@ function resetLoanForm() {
 // ── Helpers ───────────────────────────────────────────────────────────────
 function lFmt(n)   { return (n==null||n==='') ? '—' : '₹'+Number(n).toLocaleString('en-IN'); }
 function fmtD2(d)  { if(!d) return '—'; const dt=new Date(d); return isNaN(dt)?String(d):dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
-
-document.addEventListener('input', e => {
-  if (
-    e.target.id &&
-    e.target.id.startsWith('f-')
-  ) {
-    validateLoanForm();
-  }
-});
-
-document.addEventListener('change', e => {
-  if (
-    e.target.id &&
-    e.target.id.startsWith('f-')
-  ) {
-    validateLoanForm();
-  }
-});

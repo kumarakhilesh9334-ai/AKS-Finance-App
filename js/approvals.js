@@ -52,7 +52,7 @@ function renderMySubs() {
 
 // ── Approvals: two-column layout ──────────────────────────────────────────
 function renderApprovals() {
-  const el1 = $('approvals-loans'), el2 = $('approvals-emis');
+  const el1 = $('approvals-loans-list'), el2 = $('approvals-emis-list');
   if (!el1 || !el2) return; // page not active yet
   const loans = S.pending.filter(p => p.status === 'pending' && p.type === 'loan').reverse();
   const emis  = S.pending.filter(p => p.status === 'pending' && p.type === 'emi').reverse();
