@@ -40,10 +40,22 @@ function nextPid() {
 }
 
 function showLoader() {
-  const el = $('loader-overlay');
-  if (el) el.style.display = 'flex';
+  const existing = document.getElementById('loader-overlay');
+  if (existing) existing.remove();
+  const div = document.createElement('div');
+  div.id = 'loader-overlay';
+  div.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(255,255,255,0.85);display:flex;align-items:center;justify-content:center;z-index:99999';
+  div.innerHTML = '<div style="width:40px;height:40px;border:4px solid #e5e5e5;border-top-color:#534AB7;border-radius:50%;animation:spin .8s linear infinite">';
+  // inject keyframes
+  if (!document.getElementById('loader-style')) {
+    const style = document.createElement('style');
+    style.id = 'loader-style';
+    style.textContent = '@keyframes spin{to{transform:rotate(360deg)}}';
+    document.head.appendChild(style);
+  }
+  document.body.appendChild(div);
 }
 function hideLoader() {
-  const el = $('loader-overlay');
-  if (el) el.style.display = 'none';
+  const el = document.getElementById('loader-overlay');
+  if (el) el.remove();
 }
