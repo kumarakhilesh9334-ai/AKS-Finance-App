@@ -146,30 +146,32 @@ function doPost(e) {
     // ── Save new EMI submission ───────────────────────────────────────
     if (payload.action === 'saveEmi') {
       const p = payload.item, d = p.data;
+      // Exact columns: EMI_ID, EMI_Date_ID, Loan_ID, EMI_Start_Date, EMI_Number,
+      // EMI_Date, Row Number, Received, Received_date, MISC, Cashflow, MISC Type
       const headers = [
         'ID','Status','SubmittedBy','SubmittedAt','Note',
         'EMI_ID','EMI_Date_ID','Loan_ID','EMI_Start_Date','EMI_Number',
-        'EMI_Date','Row Number','Received','Received_date','MISC','Cashflow','MISC Type',
-        'AK Share %','AKS Share %','Customer Name','Amount','Expected Amount','Reason','Notes'
+        'EMI_Date','Row Number','Received','Received_date','MISC','Cashflow','MISC Type'
       ];
       const sheet = ensureSheet(ss, UNAPP_EMI_SHEET, headers);
 
-      // EMI_ID = LoanID_EMINumber
+      // EMI_ID = LoanID_EMINumber  e.g. Roshan0070/1_5
       const emiId = (d.loanId||'') + '_' + (d.emiNum||'');
 
-      // EMI_Date_ID = Sheets serial number of scheduledDate + "_" + emiNum
-      const schedDateStr = d.scheduledDate || d.date || '';
-      let sheetsSerial = '';
-      if (schedDateStr) {
-        // Parse the date string (handles DD-Mon-YY format)
-        const parsed = parseFlexDate(schedDateStr);
+      // EMI_Date_ID = Sheets serial of EMI START DATE + "_" + emiNum  e.g. 45061_6
+      // (uses the first EMI date / start date, not the scheduled due date)
+      const startDateStr = d.emiStartDate || '';
+      let startSerial = '';
+      if (startDateStr) {
+        const parsed = parseFlexDate(startDateStr);
         if (parsed) {
-          // Google Sheets serial: days since Dec 30, 1899
           const epoch = new Date(1899, 11, 30);
-          sheetsSerial = Math.round((parsed - epoch) / 86400000);
+          startSerial = Math.round((parsed - epoch) / 86400000);
         }
       }
-      const emiDateId = sheetsSerial ? sheetsSerial + '_' + (d.emiNum||'') : emiId;
+      const emiDateId = startSerial
+        ? startSerial + '_' + (d.emiNum||'')
+        : emiId;
 
       // Find row number of loan in master Data sheet
       let rowNumber = '';
@@ -181,15 +183,18 @@ function doPost(e) {
         }
       }
 
+      // Format dates as DD-Mon-YY
+      const receivedDateFmt = fmtDateFromYMD(d.date||'');
+      const emiDateFmt      = fmtDate(parseFlexDate(d.scheduledDate||d.date||''));
+
       const misc     = (d.amount||0) - (d.expectedAmount||0);
+      const received = d.received !== false; // default TRUE
       const miscType = d.reason || '';
 
       sheet.appendRow([
         p.id, p.status, p.submittedBy, p.submittedAt, '',
         emiId, emiDateId, d.loanId||'', d.emiStartDate||'', d.emiNum||'',
-        schedDateStr, rowNumber, false, d.date||'', misc, d.amount||0, miscType,
-        d.akShare||0, d.aksShare||0, d.customerName||'', d.amount||0, d.expectedAmount||0,
-        d.reason||'', d.notes||''
+        emiDateFmt, rowNumber, received, receivedDateFmt, misc, d.amount||0, miscType
       ]);
       return jsonResponse({ok:true, id:p.id});
     }
@@ -398,6 +403,16 @@ function deleteFromSheet(ss, sheetName, id) {
   for (let i=vals.length-1;i>=1;i--){
     if (String(vals[i][0])===String(id)){ sheet.deleteRow(i+1); return; }
   }
+}
+
+// Convert YYYY-MM-DD string (from HTML date input) to DD-Mon-YY
+function fmtDateFromYMD(str) {
+  if (!str) return '';
+  const m = String(str).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return fmtDate(parseFlexDate(str)); // fallback
+  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const yr = String(parseInt(m[1])).slice(-2);
+  return parseInt(m[3]) + '-' + M[parseInt(m[2])-1] + '-' + yr;
 }
 
 // Parse flexible date strings (DD-Mon-YY, YYYY-MM-DD, etc.) → JS Date

@@ -315,6 +315,7 @@ function submitEmi() {
     }
   }
 
+  const receivedVal = $('emi-received') ? $('emi-received').value !== 'false' : true;
   const d = {
     loanId,
     customerName:   sheetLoan ? sheetLoan.customerName : inAppLoan.data.customerName,
@@ -322,6 +323,7 @@ function submitEmi() {
     emiNum,
     amount:         amt, expectedAmount: expected, misc: amt - expected,
     date, scheduledDate, emiStartDate,
+    received: receivedVal,
     mode: v('emi-mode'), reason: v('emi-reason'), notes: v('emi-notes'),
     akShare:  sheetLoan ? Math.round(sheetLoan.akShare  * 100) : inAppLoan.data.akShare,
     aksShare: sheetLoan ? Math.round(sheetLoan.aksShare * 100) : inAppLoan.data.aksShare,
@@ -333,6 +335,7 @@ function submitEmi() {
   $('emi-detail').style.display = 'none';
   S.selectedEmiLoanId = null;
   document.querySelectorAll('.emi-card').forEach(r => r.classList.remove('selected'));
+  if ($('emi-received')) $('emi-received').value = 'true';
   refreshNav();
 }
 
