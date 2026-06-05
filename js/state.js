@@ -41,7 +41,9 @@ function nextPid() {
 
 function showLoader() {
   const el = $('loader-overlay');
-  el.classList.add('active');
-  void el.offsetHeight;
+  if (el) el.style.display = 'flex';
 }
-function hideLoader() { $('loader-overlay').classList.remove('active'); }
+function hideLoader() {
+  const el = $('loader-overlay');
+  if (el) el.style.display = 'none';
+}
