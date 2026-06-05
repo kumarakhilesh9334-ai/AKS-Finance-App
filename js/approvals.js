@@ -10,14 +10,19 @@ async function fetchPendingFromSheets() {
     const res  = await fetch(S.sheetsUrl + '?action=readPending');
     const data = await res.json();
     if (!data.ok) throw new Error(data.error);
-    // Merge with any locally submitted items not yet in Sheets
+    // Merge: keep locally-submitted items not yet synced to Sheets
     const sheetsIds = new Set(data.pending.map(p => p.id));
     const localOnly = S.pending.filter(p => !sheetsIds.has(p.id));
     S.pending = [...data.pending, ...localOnly];
     refreshNav();
-    if (S.page === 'approvals') renderApprovals();
-    if (S.page === 'my-subs')   renderMySubs();
-  } catch(err) { console.warn('fetchPending error:', err.message); }
+    // Always re-render these pages when data arrives — regardless of current page
+    renderApprovals();
+    renderMySubs();
+  } catch(err) {
+    console.warn('fetchPending error:', err.message);
+    // Still re-render with whatever is in S.pending (may be empty)
+    renderApprovals();
+  }
 }
 
 // ── Save new submission to Sheets ─────────────────────────────────────────
@@ -47,16 +52,19 @@ function renderMySubs() {
 
 // ── Approvals: two-column layout ──────────────────────────────────────────
 function renderApprovals() {
+  const el1 = $('approvals-loans'), el2 = $('approvals-emis');
+  if (!el1 || !el2) return; // page not active yet
   const loans = S.pending.filter(p => p.status === 'pending' && p.type === 'loan').reverse();
   const emis  = S.pending.filter(p => p.status === 'pending' && p.type === 'emi').reverse();
-  $('approvals-loans').innerHTML = loans.length
+  el1.innerHTML = loans.length
     ? loans.map(p => subCard(p, true)).join('')
     : '<div class="empty">No pending loans 🎉</div>';
-  $('approvals-emis').innerHTML  = emis.length
+  el2.innerHTML  = emis.length
     ? emis.map(p  => subCard(p, true)).join('')
     : '<div class="empty">No pending EMIs 🎉</div>';
-  $('appr-loan-count').textContent = loans.length;
-  $('appr-emi-count').textContent  = emis.length;
+  const c1 = $('appr-loan-count'), c2 = $('appr-emi-count');
+  if (c1) c1.textContent = loans.length;
+  if (c2) c2.textContent = emis.length;
 }
 
 // ── Approve ───────────────────────────────────────────────────────────────

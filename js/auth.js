@@ -1,5 +1,4 @@
 // ── AUTH ──────────────────────────────────────────────────────────────────
-// Handles login, logout, and session display.
 
 function doLogin() {
   const u = v('l-user'), p = v('l-pin');
@@ -15,16 +14,23 @@ function doLogin() {
   $('app').style.display = 'block';
   $('hdr-name').textContent = user.name;
   $('hdr-badge').innerHTML = `<span class="badge b-${user.role}">${user.role}</span>`;
-  S.sheetLoans = []; // reset on each login
+  S.sheetLoans = [];
   S.selectedEmiLoanId = null;
+  S.pending = [];
   buildNav();
   goTo(S.page || defPage());
-  // Fetch loans from Sheets in background after login
-  if (S.sheetsUrl) fetchLoansFromSheets();
+
+  if (S.sheetsUrl) {
+    // Fetch both in parallel — whichever finishes first re-renders its tab
+    fetchLoansFromSheets(true);   // force=true: always fetch fresh on login
+    fetchPendingFromSheets();
+  }
 }
 
 function doLogout() {
   S.cu = null;
+  S.sheetLoans = [];
+  S.pending = [];
   $('auth-screen').style.display = 'flex';
   $('app').style.display = 'none';
   $('l-user').value = '';
@@ -35,7 +41,6 @@ function defPage() {
   return S.cu.role === 'admin' ? 'approvals' : (S.cu.perms.loan ? 'new-loan' : 'emi');
 }
 
-// Allow Enter key on PIN field to trigger login
 document.addEventListener('DOMContentLoaded', () => {
   $('l-pin').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 });

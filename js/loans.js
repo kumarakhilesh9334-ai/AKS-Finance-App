@@ -230,10 +230,13 @@ function submitLoan() {
     akAmount:Math.round(financeAmount*akPct/100),
     aksAmount:Math.round(financeAmount*aksPct/100), emis:[],
   };
-  S.pending.push({id:nextPid(),type:'loan',data:d,submittedBy:S.cu.id,submittedAt:new Date().toISOString(),status:'pending',note:''});
+  const loanItem = {id:nextPid(),type:'loan',data:d,submittedBy:S.cu.id,submittedAt:new Date().toISOString(),status:'pending',note:''};
+  S.pending.push(loanItem);
   resetLoanForm();
   showAlert('Loan submitted for approval.');
   refreshNav();
+  // Persist to Unapproved_Loan sheet
+  if (S.sheetsUrl) gasPost({action:'saveLoan', item:loanItem});
 }
 
 // ── Reset ─────────────────────────────────────────────────────────────────

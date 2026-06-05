@@ -37,9 +37,17 @@ function rerenderActiveTab() {
 // ── Page init ─────────────────────────────────────────────────────────────
 function populateEmiSelect() {
   $('emi-search').value = '';
-  renderEmiColumns('');
   $('emi-detail').style.display = 'none';
   S.selectedEmiLoanId = null;
+  // Show loading state immediately; fetchLoansFromSheets will re-render when done
+  if (!S.sheetLoans || !S.sheetLoans.length) {
+    $('col-upcoming-list').innerHTML = '<div class="emi-col-empty" style="color:#534AB7">Loading loans…</div>';
+    $('col-overdue-list').innerHTML  = '<div class="emi-col-empty" style="color:#534AB7">Loading loans…</div>';
+    $('col-upcoming-count').textContent = '…';
+    $('col-overdue-count').textContent  = '…';
+  } else {
+    renderEmiColumns('');
+  }
 }
 
 // ── Two-column renderer ───────────────────────────────────────────────────
@@ -351,10 +359,11 @@ function renderClosedDefaulted(query) {
   $('cd-closed-count').textContent    = fClosed.length;
   $('cd-defaulted-count').textContent = fDefaulted.length;
 
-  const cdNoData = (!S.sheetLoans || !S.sheetLoans.length) ? '<div class="emi-col-empty">Fetching from Sheets…</div>' : '';
-  $('cd-running-list').innerHTML   = fRunning.length   ? fRunning.map(l   => cdCard(l, 'running')).join('')   : (cdNoData || '<div class="emi-col-empty">No running loans</div>');
-  $('cd-closed-list').innerHTML    = fClosed.length    ? fClosed.map(l    => cdCard(l, 'closed')).join('')    : (cdNoData || '<div class="emi-col-empty">No closed loans</div>');
-  $('cd-defaulted-list').innerHTML = fDefaulted.length ? fDefaulted.map(l => cdCard(l, 'defaulted')).join('') : (cdNoData || '<div class="emi-col-empty">No defaulted loans</div>');
+  const loading = '<div class="emi-col-empty" style="color:#534AB7">Loading…</div>';
+  const cdNoData = (!S.sheetLoans || !S.sheetLoans.length);
+  $('cd-running-list').innerHTML   = fRunning.length   ? fRunning.map(l   => cdCard(l, 'running')).join('')   : (cdNoData ? loading : '<div class="emi-col-empty">No running loans</div>');
+  $('cd-closed-list').innerHTML    = fClosed.length    ? fClosed.map(l    => cdCard(l, 'closed')).join('')    : (cdNoData ? loading : '<div class="emi-col-empty">No closed loans</div>');
+  $('cd-defaulted-list').innerHTML = fDefaulted.length ? fDefaulted.map(l => cdCard(l, 'defaulted')).join('') : (cdNoData ? loading : '<div class="emi-col-empty">No defaulted loans</div>');
 }
 
 function cdCard(l, type) {
