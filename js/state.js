@@ -39,5 +39,9 @@ function nextPid() {
   return 'P' + (++pid);
 }
 
-function showLoader() { $('loader-overlay').classList.add('active'); }
+function showLoader() {
+  const el = $('loader-overlay');
+  el.classList.add('active');
+  void el.offsetHeight;
+}
 function hideLoader() { $('loader-overlay').classList.remove('active'); }
