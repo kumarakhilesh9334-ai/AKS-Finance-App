@@ -7,25 +7,19 @@ const TAB_ICONS = {
   'my-subs':         { icon: '📋', label: 'My Subs' },
   'approvals':       { icon: '✅', label: 'Approvals' },
   'all-loans':       { icon: '📊', label: 'All Loans' },
-  'emi-hist':        { icon: '🕐', label: 'History' },
   'users':           { icon: '👥', label: 'Users' },
-  'export':          { icon: '⬆', label: 'Export' },
 };
 
 function buildNav() {
   const u  = S.cu;
   const pc = S.pending.filter(x => x.status === 'pending').length;
   let tabs = [];
-  if (u.perms.loan) tabs.push({ id: 'new-loan',   label: 'New loan' });
-  if (u.perms.emi)  tabs.push({ id: 'emi',         label: 'Log EMI' });
+  if (u.perms.loan)      tabs.push({ id: 'new-loan',   label: 'New loan' });
+  if (u.perms.emi)       tabs.push({ id: 'emi',         label: 'Log EMI' });
   if (u.role === 'agent') tabs.push({ id: 'my-subs', label: 'My submissions' });
-  if (u.role === 'admin') {
-    tabs.push({ id: 'approvals', label: 'Approvals', badge: pc });
-    tabs.push({ id: 'all-loans', label: 'All Loans' });
-    tabs.push({ id: 'emi-hist',  label: 'EMI history' });
-    tabs.push({ id: 'users',     label: 'Users' });
-    tabs.push({ id: 'export',    label: '⬆ Export' });
-  }
+  if (u.role === 'admin' || u.perms.approvals) tabs.push({ id: 'approvals', label: 'Approvals', badge: pc });
+  if (u.role === 'admin' || u.perms.allLoans)  tabs.push({ id: 'all-loans', label: 'All Loans' });
+  if (u.role === 'admin') tabs.push({ id: 'users', label: 'Users' });
 
   // Desktop top nav
   $('nav').innerHTML = tabs.map(t =>
@@ -59,11 +53,9 @@ function goTo(pg) {
   if (pg === 'new-loan')  initNewLoanPage();
   if (pg === 'emi')       { populateEmiSelect(); mobSwitchEmiCol('upcoming'); }
   if (pg === 'my-subs')   renderMySubs();
-  if (pg === 'approvals') renderApprovals();
+  if (pg === 'approvals') { renderApprovals(); mobSwitchApprCol('loan'); }
   if (pg === 'all-loans') { renderClosedDefaulted(''); mobSwitchCdCol('running'); }
-  if (pg === 'emi-hist')  renderEmiHist();
   if (pg === 'users')     renderUsers();
-  if (pg === 'export')    renderExportPage();
 }
 
 function refreshNav() { buildNav(); }
@@ -95,4 +87,20 @@ function mobSwitchCdCol(col) {
     wrap.classList.toggle('mob-active', active);
     tab.classList.toggle('active', active);
   });
+}
+
+function mobSwitchApprCol(col) {
+  ['loan','emi'].forEach(c => {
+    const wrap = $('appr-col-' + c);
+    const tab  = $('mob-tab-' + c);
+    if (!wrap || !tab) return;
+    const active = c === col;
+    wrap.classList.toggle('mob-active', active);
+    tab.classList.toggle('active', active);
+  });
+  // Sync counts
+  const lc = $('appr-loan-count'), ec = $('appr-emi-count');
+  const mlc = $('mob-appr-loan-count'), mec = $('mob-appr-emi-count');
+  if (lc && mlc) mlc.textContent = lc.textContent;
+  if (ec && mec) mec.textContent = ec.textContent;
 }

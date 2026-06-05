@@ -172,6 +172,9 @@ async function selectEmiLoan(loanId) {
       || (() => { const l = S.loans.find(l => l.loanId === loanId); return l ? { ...l.data, status:'Active', slots:[], numReceivedEmi: l.emis.length } : null; })();
     if (!loan) return;
 
+    $('emi-detail-loanid').textContent = loanId;
+    $('emi-detail-sub').textContent    = loan.customerName || '';
+
     // If we only have slim data, fetch full detail first
     if (loan._slim) {
       $('emi-detail').style.display = 'block';
@@ -268,6 +271,12 @@ async function selectEmiLoan(loanId) {
 }
 
 // ── Diff check ────────────────────────────────────────────────────────────
+function closeEmiDetail() {
+  $('emi-detail').style.display = 'none';
+  S.selectedEmiLoanId = null;
+  document.querySelectorAll('.emi-card').forEach(r => r.classList.remove('selected'));
+}
+
 function checkEmiDiff() {
   const loanId = S.selectedEmiLoanId; if (!loanId) return;
   const loan = (S.sheetLoans && S.sheetLoans.find(l => l.loanId === loanId)) || S.loans.find(l => l.loanId === loanId);

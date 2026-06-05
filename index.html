@@ -149,6 +149,14 @@
         </div>
       </div>
       <div class="card" id="emi-detail" style="display:none;margin-top:0.75rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
+          <div>
+            <div style="font-size:14px;font-weight:600;color:#534AB7" id="emi-detail-loanid"></div>
+            <div style="font-size:12px;color:#888;margin-top:2px" id="emi-detail-sub"></div>
+          </div>
+          <button class="btn btn-sm" onclick="closeEmiDetail()">✕ Close</button>
+        </div>
+        <div class="divider" style="margin-bottom:0.75rem"></div>
         <div class="kv" id="emi-kv" style="margin-bottom:0.75rem"></div>
         <div id="emi-slots-wrap">
           <div class="divider"></div>
@@ -180,7 +188,7 @@
           <div class="full"><label>Notes</label><textarea id="emi-notes" placeholder="Any additional remarks..."></textarea></div>
         </div>
         <div class="submit-row">
-          <button class="btn" onclick="$('emi-detail').style.display='none';S.selectedEmiLoanId=null;document.querySelectorAll('.emi-card').forEach(r=>r.classList.remove('selected'))">Cancel</button>
+          <button class="btn" onclick="closeEmiDetail()">Cancel</button>
           <button class="btn btn-primary" onclick="submitEmi()">Submit for approval</button>
         </div>
       </div>
@@ -243,9 +251,14 @@
         <span style="font-size:15px;font-weight:500">Pending approvals</span>
         <button class="btn btn-sm" onclick="fetchPendingFromSheets()">↻ Refresh</button>
       </div>
+      <!-- Mobile tab switcher -->
+      <div class="mob-two-tabs" id="appr-mob-tabs">
+        <button class="mob-two-tab active" id="mob-tab-loan" onclick="mobSwitchApprCol('loan')">📋 New Loans <span class="emi-section-count" id="mob-appr-loan-count">0</span></button>
+        <button class="mob-two-tab"        id="mob-tab-emi"  onclick="mobSwitchApprCol('emi')">💰 Logged EMIs <span class="emi-section-count" id="mob-appr-emi-count">0</span></button>
+      </div>
       <div class="approvals-two-col">
         <!-- New Loans -->
-        <div class="appr-col-wrap">
+        <div class="appr-col-wrap" id="appr-col-loan">
           <div class="appr-col-hd loan-appr-hd">
             <span>📋 New Loans</span>
             <span class="emi-section-count" id="appr-loan-count">0</span>
@@ -255,7 +268,7 @@
           </div>
         </div>
         <!-- Logged EMIs -->
-        <div class="appr-col-wrap">
+        <div class="appr-col-wrap" id="appr-col-emi">
           <div class="appr-col-hd emi-appr-hd">
             <span>💰 Logged EMIs</span>
             <span class="emi-section-count" id="appr-emi-count">0</span>
@@ -282,12 +295,6 @@
       </div>
     </div>
 
-    <!-- ── EMI HISTORY (admin) ───────────────────────────────────────── -->
-    <div class="page" id="page-emi-hist">
-      <div style="font-size:15px;font-weight:500;margin-bottom:1rem">EMI history</div>
-      <div id="emi-hist-list"></div>
-    </div>
-
     <!-- ── USERS (admin) ─────────────────────────────────────────────── -->
     <div class="page" id="page-users">
       <div style="font-size:15px;font-weight:500;margin-bottom:1rem">User management</div>
@@ -300,30 +307,14 @@
           <div><label>PIN</label><input id="nu-pin" type="password" placeholder="4–6 digit PIN"></div>
           <div><label>Role</label><select id="nu-role"><option value="agent">Agent</option><option value="admin">Admin</option></select></div>
           <div class="full">
-            <label style="margin-bottom:6px">Permissions</label>
-            <label style="display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:13px"><input type="checkbox" id="p-loan" checked> Can submit new loans</label>
-            <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="p-emi" checked> Can log EMI payments</label>
+            <label style="margin-bottom:6px">Tab access</label>
+            <label style="display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:13px"><input type="checkbox" id="p-loan" checked> New Loan</label>
+            <label style="display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:13px"><input type="checkbox" id="p-emi" checked> Log EMI</label>
+            <label style="display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:13px"><input type="checkbox" id="p-allLoans" checked> All Loans</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="p-approvals" checked> Approvals</label>
           </div>
         </div>
         <div class="submit-row"><button class="btn btn-primary" onclick="addUser()">Add user</button></div>
-      </div>
-    </div>
-
-    <!-- ── EXPORT (admin) ────────────────────────────────────────────── -->
-    <div class="page" id="page-export">
-      <div style="font-size:15px;font-weight:500;margin-bottom:1rem">Export to Google Sheets</div>
-      <div class="export-status" id="export-status"></div>
-      <div class="card">
-        <div class="card-title" style="margin-bottom:0.5rem">Export data</div>
-        <div class="card-sub" style="margin-bottom:1rem">Each button exports to a separate tab, overwriting previous data.</div>
-        <div class="export-btns">
-          <button class="btn btn-export" onclick="exportToSheets('Loans')">⬆ Loans</button>
-          <button class="btn btn-export" onclick="exportToSheets('EMI History')">⬆ EMI History</button>
-          <button class="btn btn-export" onclick="exportToSheets('Pending Approvals')">⬆ Pending Approvals</button>
-        </div>
-        <div style="margin-top:1rem;padding-top:0.75rem;border-top:0.5px solid #eee">
-          <button class="btn btn-primary" onclick="exportAll()">⬆ Export All</button>
-        </div>
       </div>
     </div>
 
@@ -339,6 +330,5 @@
 <script src="js/approvals.js"></script>
 <script src="js/records.js"></script>
 <script src="js/users.js"></script>
-<script src="js/export.js"></script>
 </body>
 </html>

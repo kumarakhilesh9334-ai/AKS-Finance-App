@@ -9,6 +9,11 @@ function doLogin() {
     setTimeout(() => $('l-err').style.display = 'none', 3000);
     return;
   }
+  localStorage.setItem('aks_user', user.username);
+  completeLogin(user);
+}
+
+function completeLogin(user) {
   S.cu = user;
   $('auth-screen').style.display = 'none';
   $('app').style.display = 'block';
@@ -21,13 +26,13 @@ function doLogin() {
   goTo(S.page || defPage());
 
   if (S.sheetsUrl) {
-    // Fetch both in parallel — whichever finishes first re-renders its tab
-    fetchLoansFromSheets(true);   // force=true: always fetch fresh on login
+    fetchLoansFromSheets(true);
     fetchPendingFromSheets();
   }
 }
 
 function doLogout() {
+  localStorage.removeItem('aks_user');
   S.cu = null;
   S.sheetLoans = [];
   S.pending = [];
@@ -38,9 +43,18 @@ function doLogout() {
 }
 
 function defPage() {
-  return S.cu.perms.loan ? 'new-loan' : 'emi';
+  if (S.cu.perms.loan)      return 'new-loan';
+  if (S.cu.perms.emi)       return 'emi';
+  if (S.cu.perms.allLoans)  return 'all-loans';
+  if (S.cu.perms.approvals) return 'approvals';
+  return 'my-subs';
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   $('l-pin').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  const saved = localStorage.getItem('aks_user');
+  if (saved) {
+    const user = S.users.find(x => x.username === saved);
+    if (user) completeLogin(user);
+  }
 });

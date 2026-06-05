@@ -9,8 +9,8 @@ const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbzFE_aDkwxYUsB47VPWJ
 
 const S = {
   users: [
-    { id: 'u1', username: 'AKS', pin: '0000', name: 'AKS (You)', role: 'admin', perms: { loan: true, emi: true } },
-    { id: 'u2', username: 'agent1', pin: '1111', name: 'Agent One', role: 'agent', perms: { loan: true, emi: true } },
+    { id: 'u1', username: 'AKS', pin: '0000', name: 'AKS (You)', role: 'admin', perms: { loan: true, emi: true, allLoans: true, approvals: true } },
+    { id: 'u2', username: 'agent1', pin: '1111', name: 'Agent One', role: 'agent', perms: { loan: true, emi: true, allLoans: false, approvals: false } },
   ],
   loans: [],    // approved loan records
   emis: [],     // approved EMI records
@@ -42,18 +42,11 @@ function nextPid() {
 function showLoader() {
   const existing = document.getElementById('loader-overlay');
   if (existing) existing.remove();
-  const div = document.createElement('div');
-  div.id = 'loader-overlay';
-  div.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(255,255,255,0.85);display:flex;align-items:center;justify-content:center;z-index:99999';
-  div.innerHTML = '<div style="width:40px;height:40px;border:4px solid #e5e5e5;border-top-color:#534AB7;border-radius:50%;animation:spin .8s linear infinite">';
-  // inject keyframes
-  if (!document.getElementById('loader-style')) {
-    const style = document.createElement('style');
-    style.id = 'loader-style';
-    style.textContent = '@keyframes spin{to{transform:rotate(360deg)}}';
-    document.head.appendChild(style);
-  }
-  document.body.appendChild(div);
+  const el = document.createElement('div');
+  el.id = 'loader-overlay';
+  el.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(83,74,183,0.2);display:flex;align-items:center;justify-content:center;z-index:99999';
+  el.innerHTML = '<div style="background:#534AB7;color:#fff;padding:16px 24px;border-radius:12px;font-size:16px;font-weight:600;box-shadow:0 4px 20px rgba(0,0,0,0.2)">⏳ Loading…</div>';
+  document.body.appendChild(el);
 }
 function hideLoader() {
   const el = document.getElementById('loader-overlay');

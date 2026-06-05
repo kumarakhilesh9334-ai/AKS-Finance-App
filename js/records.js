@@ -112,26 +112,3 @@ function loanSort(today, a, b) {
   return a.loanId.localeCompare(b.loanId);
 }
 
-
-// ── EMI HISTORY ───────────────────────────────────────────────────────────
-function renderEmiHist() {
-  if (!S.emis.length) { $('emi-hist-list').innerHTML = '<div class="empty">No EMI payments recorded yet.</div>'; return; }
-  $('emi-hist-list').innerHTML = [...S.emis].reverse().map(e => {
-    const diff = e.amount - e.expectedAmount;
-    return `<div class="card">
-      <div class="card-hd">
-        <div><div class="card-title" style="color:#534AB7">${e.loanId}</div>
-        <div class="card-sub">${e.customerName} · ${e.model||''} · EMI ${e.emiNum}</div></div>
-        <span class="badge b-approved">Received</span>
-      </div>
-      <div class="kv">
-        <span class="kv-l">Expected</span><span class="kv-v">${fmtM(e.expectedAmount)}</span>
-        <span class="kv-l">Received</span><span class="kv-v" style="${Math.abs(diff)>1?'color:#BA7517':''}">${fmtM(e.amount)}${Math.abs(diff)>1?` (${diff>0?'+':''}${fmtM(Math.abs(diff))})`:''}</span>
-        ${e.reason?`<span class="kv-l">Reason</span><span class="kv-v">${e.reason}</span>`:''}
-        <span class="kv-l">Date</span><span class="kv-v">${e.date}</span>
-        <span class="kv-l">Mode</span><span class="kv-v">${e.mode}</span>
-        ${e.notes?`<span class="kv-l">Notes</span><span class="kv-v">${e.notes}</span>`:''}
-      </div>
-    </div>`;
-  }).join('');
-}
