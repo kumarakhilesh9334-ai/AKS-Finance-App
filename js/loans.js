@@ -116,11 +116,8 @@ function onEmiStartChange() {
   const day = parseInt(d);
   const allowed = [5,10,15,20,25];
   if (!allowed.includes(day)) {
-    const nearest = allowed.reduce((p,c) => Math.abs(c-day)<Math.abs(p-day)?c:p);
-    $('f-emistart').value = `${y}-${m}-${String(nearest).padStart(2,'0')}`;
-    $('emistart-err').textContent = `Adjusted to ${nearest} — only 5, 10, 15, 20, 25 allowed.`;
-    $('emistart-err').style.display = 'block';
-    setTimeout(() => $('emistart-err').style.display = 'none', 3000);
+    $('f-emistart').value = '';
+    showAlert('EMI start date must be on 5, 10, 15, 20 or 25.','e');
   } else {
     $('emistart-err').style.display = 'none';
   }
@@ -182,26 +179,39 @@ function calcLoan() {
     $('cp-finance').textContent  = lFmt(financeAmount);
     $('cp-total').textContent    = lFmt(totalAmount);
     $('cp-emi').textContent      = monthlyEmi ? lFmt(monthlyEmi) : '—';
-    $('cp-interest').textContent = interest   ? lFmt(Math.round(interest)) : '—';
-    $('cp-roi').textContent      = roi > 0    ? roi.toFixed(2) + '% p.a.' : '—';
-    $('cp-ak').textContent       = lFmt(akAmt)  + ` (${akPct}%)`;
-    $('cp-aks').textContent      = lFmt(aksAmt) + ` (${aksPct}%)`;
   } else {
     $('calc-preview').style.display = 'none';
   }
-  genLoanId();
 }
 
 // ── Submit ────────────────────────────────────────────────────────────────
-function submitLoan() {
+async function submitLoan() {
   const cname      = v('f-cname'), idnum = v('f-idnum'), phone = v('f-phone');
   const model      = v('f-model');
+  const billDate   = v('f-billdate'), guar = v('f-guar');
+  const dtype      = v('f-dtype');
+  const down       = num('f-down'), pfee = num('f-pfee'), applock = num('f-applock');
   const tenure     = num('f-tenure'), price = num('f-price'), monthlyEmi = num('f-monthly-emi');
-  if (!cname||!idnum||!phone||!model||!tenure||!price||!monthlyEmi) {
-    showAlert('Please fill in all required fields including Monthly EMI.','e'); return;
+  const emiStart   = v('f-emistart'), akshare = v('f-akshare');
+  if (!cname||!idnum||!phone||!billDate||!model||!dtype||!price||!tenure||!monthlyEmi) {
+    showAlert('Please fill in all required fields.','e'); return;
   }
-  const emiStartVal = v('f-emistart');
-  if (emiStartVal && ![5,10,15,20,25].includes(parseInt(emiStartVal.split('-')[2]))) {
+  if (akshare === 'custom' && !num('f-akcustom')) {
+    showAlert('Please enter the custom AK share percentage.','e'); return;
+  }
+  if (!down && down !== 0) {
+    showAlert('Please fill in Down payment.','e'); return;
+  }
+  if (!pfee && pfee !== 0) {
+    showAlert('Please fill in Processing fee.','e'); return;
+  }
+  if (!applock && applock !== 0) {
+    showAlert('Please fill in App lock charge.','e'); return;
+  }
+  if (!emiStart) {
+    showAlert('Please select an EMI start date.','e'); return;
+  }
+  if (emiStart && ![5,10,15,20,25].includes(parseInt(emiStart.split('-')[2]))) {
     showAlert('EMI start date must be on 5, 10, 15, 20 or 25.','e'); return;
   }
   const last4 = idnum.replace(/\s/g,'').slice(-4);
@@ -211,38 +221,44 @@ function submitLoan() {
     S.pending.filter(p=>p.type==='loan'&&p.status!=='rejected'&&p.data.loanId&&p.data.loanId.startsWith(base)).length;
   const loanId = base + '/' + (existing + 1);
 
-  const akSel  = v('f-akshare');
-  const akPct  = akSel==='custom'?num('f-akcustom'):(akSel==='0'?0:akSel==='100'?100:akSel==='50'?50:0);
+  const akPct  = akshare==='custom'?num('f-akcustom'):(akshare==='0'?0:akshare==='100'?100:akshare==='50'?50:0);
   const aksPct = 100 - akPct;
-  const down   = num('f-down'), pfee = num('f-pfee'), applock = num('f-applock');
   const interest     = Math.max(0, monthlyEmi*tenure - (price-down) - pfee);
   const financeAmount= price - down + applock;
   const totalAmount  = financeAmount + pfee + interest;
   const roi          = financeAmount>0 ? computeRATE(tenure,monthlyEmi,-financeAmount)*12*100 : 0;
 
   const d = {
-    loanId, billDate:v('f-billdate'), customerName:cname, phone, idNum:idnum,
-    model:v('f-model'), deviceType:v('f-dtype'), price, downPayment:down,
+    loanId, billDate, customerName:cname, phone, idNum:idnum,
+    model, deviceType:dtype, price, downPayment:down,
     processingFee:pfee, appLockCharge:applock, interest:Math.round(interest),
-    rateOfInterest:parseFloat(roi.toFixed(2)), tenure, emiStart:emiStartVal,
-    guarantor:v('f-guar'), akShare:akPct, aksShare:aksPct,
+    rateOfInterest:parseFloat(roi.toFixed(2)), tenure, emiStart,
+    guarantor:guar, akShare:akPct, aksShare:aksPct,
     financeAmount, totalAmount, monthlyEmi,
     akAmount:Math.round(financeAmount*akPct/100),
     aksAmount:Math.round(financeAmount*aksPct/100), emis:[],
   };
   const loanItem = {id:nextPid(),type:'loan',data:d,submittedBy:S.cu.id,submittedAt:new Date().toISOString(),status:'pending',note:''};
-  S.pending.push(loanItem);
   resetLoanForm();
-  showAlert('Loan submitted for approval.');
-  refreshNav();
-  // Persist to Unapproved_Loan sheet
-  if (S.sheetsUrl) gasPost({action:'saveLoan', item:loanItem});
+  showAlert('Submitting…', 'w');
+  showLoader();
+  try {
+    if (S.sheetsUrl) {
+      const res = await gasPost({action:'saveLoan', item:loanItem});
+      if (res.ok && res.pending) S.pending = res.pending;
+      else await fetchPendingFromSheets();
+    }
+    refreshNav();
+    renderApprovals();
+    renderMySubs();
+    showAlert('Loan submitted for approval.');
+  } finally { hideLoader(); }
 }
 
 // ── Reset ─────────────────────────────────────────────────────────────────
 function resetLoanForm() {
   ['f-cname','f-phone','f-idnum','f-guar','f-model','f-price','f-down',
-   'f-tenure','f-akcustom','f-monthly-emi','f-int']
+   'f-tenure','f-akcustom','f-monthly-emi','f-int','f-emistart']
     .forEach(id => { const el=$(id); if(el) el.value=''; });
   $('f-dtype').selectedIndex = 0;
   initNewLoanPage();

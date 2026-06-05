@@ -38,7 +38,7 @@ function doLogout() {
 }
 
 function defPage() {
-  return S.cu.role === 'admin' ? 'approvals' : (S.cu.perms.loan ? 'new-loan' : 'emi');
+  return S.cu.perms.loan ? 'new-loan' : 'emi';
 }
 
 document.addEventListener('DOMContentLoaded', () => {

@@ -162,34 +162,36 @@ document.addEventListener('click', function(e) {
 });
 
 async function selectEmiLoan(loanId) {
-  document.querySelectorAll('.emi-card').forEach(r => r.classList.remove('selected'));
-  document.querySelectorAll(`.emi-card[data-loanid="${loanId}"]`).forEach(r => r.classList.add('selected'));
-  S.selectedEmiLoanId = loanId;
+  showLoader();
+  try {
+    document.querySelectorAll('.emi-card').forEach(r => r.classList.remove('selected'));
+    document.querySelectorAll(`.emi-card[data-loanid="${loanId}"]`).forEach(r => r.classList.add('selected'));
+    S.selectedEmiLoanId = loanId;
 
-  let loan = (S.sheetLoans && S.sheetLoans.find(l => l.loanId === loanId))
-    || (() => { const l = S.loans.find(l => l.loanId === loanId); return l ? { ...l.data, status:'Active', slots:[], numReceivedEmi: l.emis.length } : null; })();
-  if (!loan) return;
+    let loan = (S.sheetLoans && S.sheetLoans.find(l => l.loanId === loanId))
+      || (() => { const l = S.loans.find(l => l.loanId === loanId); return l ? { ...l.data, status:'Active', slots:[], numReceivedEmi: l.emis.length } : null; })();
+    if (!loan) return;
 
-  // If we only have slim data, fetch full detail first
-  if (loan._slim) {
-    $('emi-detail').style.display = 'block';
-    $('emi-kv').innerHTML = '<div style="color:#888;font-size:12px;padding:8px 0">Loading details…</div>';
-    $('emi-slots-wrap').style.display = 'none';
-    try {
-      const res  = await fetch(S.sheetsUrl + '?action=readLoanDetail&loanId=' + encodeURIComponent(loanId));
-      const data = await res.json();
-      if (data.ok && data.loan) {
-        // Update cache with full data
-        const idx = S.sheetLoans.findIndex(l => l.loanId === loanId);
-        if (idx !== -1) S.sheetLoans[idx] = data.loan;
-        loan = data.loan;
-      }
-    } catch(e) { console.warn('Could not load detail:', e.message); }
-  }
+    // If we only have slim data, fetch full detail first
+    if (loan._slim) {
+      $('emi-detail').style.display = 'block';
+      $('emi-kv').innerHTML = '<div style="color:#888;font-size:12px;padding:8px 0">Loading details…</div>';
+      $('emi-slots-wrap').style.display = 'none';
+      try {
+        const res  = await fetch(S.sheetsUrl + '?action=readLoanDetail&loanId=' + encodeURIComponent(loanId));
+        const data = await res.json();
+        if (data.ok && data.loan) {
+          // Update cache with full data
+          const idx = S.sheetLoans.findIndex(l => l.loanId === loanId);
+          if (idx !== -1) S.sheetLoans[idx] = data.loan;
+          loan = data.loan;
+        }
+      } catch(e) { console.warn('Could not load detail:', e.message); }
+    }
 
-  const detail = $('emi-detail');
-  detail.style.display = 'block';
-  detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const detail = $('emi-detail');
+    detail.style.display = 'block';
+    detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
   const akPct  = Math.round((loan.akShare  || 0) * 100);
   const aksPct = Math.round((loan.aksShare || 0) * 100);
@@ -262,6 +264,7 @@ async function selectEmiLoan(loanId) {
   $('emi-reason').value = '';
   $('emi-reason-wrap').style.display = 'none';
   $('emi-diff-warn').style.display   = 'none';
+  } finally { hideLoader(); }
 }
 
 // ── Diff check ────────────────────────────────────────────────────────────
@@ -285,7 +288,7 @@ function checkEmiDiff() {
 }
 
 // ── Submit ────────────────────────────────────────────────────────────────
-function submitEmi() {
+async function submitEmi() {
   const loanId = S.selectedEmiLoanId;
   if (!loanId) { showAlert('Please select a loan first.', 'e'); return; }
   const sheetLoan = S.sheetLoans && S.sheetLoans.find(l => l.loanId === loanId);
@@ -329,14 +332,23 @@ function submitEmi() {
     aksShare: sheetLoan ? Math.round(sheetLoan.aksShare * 100) : inAppLoan.data.aksShare,
   };
   const emiItem = { id: nextPid(), type: 'emi', data: d, submittedBy: S.cu.id, submittedAt: new Date().toISOString(), status: 'pending', note: '' };
-  S.pending.push(emiItem);
-  gasPost({action:'saveEmi', item:emiItem}); // persist to Unapproved_EMI sheet
-  showAlert('EMI payment submitted for approval.');
+  showAlert('Submitting…', 'w');
+  showLoader();
+  try {
+    if (S.sheetsUrl) {
+      const res = await gasPost({action:'saveEmi', item:emiItem});
+      if (res.ok && res.pending) S.pending = res.pending;
+      else await fetchPendingFromSheets();
+    }
+    refreshNav();
+    renderApprovals();
+    renderMySubs();
+    showAlert('EMI payment submitted for approval.');
+  } finally { hideLoader(); }
   $('emi-detail').style.display = 'none';
   S.selectedEmiLoanId = null;
   document.querySelectorAll('.emi-card').forEach(r => r.classList.remove('selected'));
   if ($('emi-received')) $('emi-received').value = 'true';
-  refreshNav();
 }
 
 // ── Closed & Defaulted tab (admin only) ───────────────────────────────────
@@ -392,12 +404,14 @@ function cdCard(l, type) {
 function cdFmt(n) { return (n==null||n===''||n===0) ? '—' : '₹'+Number(n).toLocaleString('en-IN'); }
 
 async function openCdDetail(loanId) {
-  // Highlight selected card
-  document.querySelectorAll('#page-closed-defaulted .emi-card').forEach(c => c.classList.remove('selected'));
-  document.querySelectorAll(`#page-closed-defaulted .emi-card[data-loanid="${loanId}"]`).forEach(c => c.classList.add('selected'));
+  showLoader();
+  try {
+    // Highlight selected card
+    document.querySelectorAll('#page-closed-defaulted .emi-card').forEach(c => c.classList.remove('selected'));
+    document.querySelectorAll(`#page-closed-defaulted .emi-card[data-loanid="${loanId}"]`).forEach(c => c.classList.add('selected'));
 
-  let l = S.sheetLoans && S.sheetLoans.find(x => x.loanId === loanId);
-  if (!l) return;
+    let l = S.sheetLoans && S.sheetLoans.find(x => x.loanId === loanId);
+    if (!l) return;
 
   // If slim, show panel immediately with loading state then fetch full
   if (l._slim) {
@@ -500,6 +514,7 @@ async function openCdDetail(loanId) {
   const panel = $('cd-detail-panel');
   panel.style.display = 'block';
   panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } finally { hideLoader(); }
 }
 
 function closeCdDetail() {

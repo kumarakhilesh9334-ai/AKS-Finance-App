@@ -49,47 +49,47 @@
 
             <!-- Aadhaar/PAN with autocomplete — FIRST field -->
             <div class="full" id="idnum-wrap" style="position:relative">
-              <label>Aadhaar / PAN <span style="font-size:11px;color:#888">— type to search existing customers</span></label>
-              <input type="text" id="f-idnum" placeholder="Aadhaar or PAN" autocomplete="off" oninput="onIdNumInput();genLoanId()">
+              <label>Aadhaar / PAN <span style="color:#A32D2D">*</span> <span style="font-size:11px;color:#888">— type to search existing customers</span></label>
+              <input type="text" id="f-idnum" placeholder="Aadhaar or PAN" autocomplete="off" oninput="onIdNumInput();genLoanId()" required>
               <div id="idnum-dropdown" class="idnum-dd" style="display:none"></div>
             </div>
-            <div><label>Customer name</label><input type="text" id="f-cname" placeholder="Full name" oninput="genLoanId()"></div>
-            <div><label>Mobile number</label><input type="text" id="f-phone" placeholder="10-digit" maxlength="10"></div>
-            <div><label>Bill date</label><input type="date" id="f-billdate"></div>
+            <div><label>Customer name <span style="color:#A32D2D">*</span></label><input type="text" id="f-cname" placeholder="Full name" oninput="genLoanId()" required></div>
+            <div><label>Mobile number <span style="color:#A32D2D">*</span></label><input type="text" id="f-phone" placeholder="10-digit" maxlength="10" required></div>
+            <div><label>Bill date <span style="color:#A32D2D">*</span></label><input type="date" id="f-billdate" required></div>
             <div class="full"><label>Guarantor / Alternate no / Comments</label><textarea id="f-guar" placeholder="Guarantor name, alternate number, or any comments"></textarea></div>
 
             <div class="form-section">Device details</div>
-            <div><label>Mobile model</label><input type="text" id="f-model" placeholder="e.g. Samsung Galaxy A55"></div>
-            <div><label>Device type</label>
-              <select id="f-dtype" onchange="onDeviceTypeChange()">
+            <div><label>Mobile model <span style="color:#A32D2D">*</span></label><input type="text" id="f-model" placeholder="e.g. Samsung Galaxy A55" required></div>
+            <div><label>Device type <span style="color:#A32D2D">*</span></label>
+              <select id="f-dtype" onchange="onDeviceTypeChange()" required>
                 <option>Mobile</option><option>TV</option><option>Fridge</option><option>Sound Box</option><option>Loan</option><option>Other</option>
               </select>
             </div>
-            <div><label>Device amount (₹)</label><input type="number" id="f-price" placeholder="0" oninput="calcLoan()"></div>
-            <div><label>Down payment (₹)</label><input type="number" id="f-down" placeholder="0" oninput="calcLoan()"></div>
-            <div><label>Processing fee (₹)</label><input type="number" id="f-pfee" oninput="calcLoan()"></div>
-            <div><label>App lock charge (₹)</label><input type="number" id="f-applock" oninput="calcLoan()"></div>
+            <div><label>Device amount (₹) <span style="color:#A32D2D">*</span></label><input type="number" id="f-price" placeholder="0" oninput="calcLoan()" required></div>
+            <div><label>Down payment (₹) <span style="color:#A32D2D">*</span></label><input type="number" id="f-down" placeholder="0" oninput="calcLoan()" required></div>
+            <div><label>Processing fee (₹) <span style="color:#A32D2D">*</span></label><input type="number" id="f-pfee" oninput="calcLoan()" required></div>
+            <div><label>App lock charge (₹) <span style="color:#A32D2D">*</span></label><input type="number" id="f-applock" oninput="calcLoan()" required></div>
 
             <div class="form-section">Loan details</div>
             <div>
-              <label>EMI duration (months)</label>
-              <input type="number" id="f-tenure" placeholder="e.g. 6" oninput="calcLoan()">
+              <label>EMI duration (months) <span style="color:#A32D2D">*</span></label>
+              <input type="number" id="f-tenure" placeholder="e.g. 6" oninput="calcLoan()" required>
             </div>
             <div>
-              <label>Monthly EMI (₹)</label>
-              <input type="number" id="f-monthly-emi" placeholder="e.g. 2500" oninput="calcLoan()">
+              <label>Monthly EMI (₹) <span style="color:#A32D2D">*</span></label>
+              <input type="number" id="f-monthly-emi" placeholder="e.g. 2500" oninput="calcLoan()" required>
             </div>
             <div>
               <label>Interest (₹) <span style="font-size:11px;color:#aaa">— auto-computed</span></label>
               <input type="number" id="f-int" placeholder="auto" readonly style="background:#f5f5f3;color:#999;cursor:not-allowed">
             </div>
             <div>
-              <label>EMI start date <span style="font-size:11px;color:#888">(5, 10, 15, 20, 25 only)</span></label>
-              <input type="date" id="f-emistart" onchange="onEmiStartChange()">
+              <label>EMI start date <span style="color:#A32D2D">*</span> <span style="font-size:11px;color:#888">(5, 10, 15, 20, 25 only)</span></label>
+              <input type="date" id="f-emistart" onchange="onEmiStartChange()" required>
               <div id="emistart-err" style="display:none;font-size:11px;color:#BA7517;margin-top:3px"></div>
             </div>
-            <div><label>AK share (%)</label>
-              <select id="f-akshare" onchange="calcLoan()">
+            <div><label>AK share (%) <span style="color:#A32D2D">*</span></label>
+              <select id="f-akshare" onchange="calcLoan()" required>
                 <option value="0">0% (AKS only)</option>
                 <option value="50">50%</option>
                 <option value="100">100% (AK only)</option>
@@ -103,13 +103,8 @@
           <div class="calc-box" id="calc-preview" style="display:none;margin-top:0.75rem">
             <div style="font-size:11px;font-weight:500;color:#534AB7;margin-bottom:6px">Summary</div>
             <div class="calc-row"><span>Finance amount</span><span id="cp-finance">—</span></div>
-            <div class="calc-row"><span>Total amount</span><span id="cp-total">—</span></div>
+            <div class="calc-row"><span>Total EMI amount</span><span id="cp-total">—</span></div>
             <div class="calc-row total"><span>Monthly EMI</span><span id="cp-emi">—</span></div>
-            <div class="calc-row"><span>Interest</span><span id="cp-interest">—</span></div>
-            <div class="calc-row"><span>Rate of interest (p.a.)</span><span id="cp-roi" style="color:#BA7517;font-weight:500">—</span></div>
-            <div class="calc-row"><span>Loan ID</span><span id="cp-loanid" style="color:#534AB7;font-weight:500">—</span></div>
-            <div class="calc-row"><span>AK amount</span><span id="cp-ak">—</span></div>
-            <div class="calc-row"><span>AKS amount</span><span id="cp-aks">—</span></div>
           </div>
 
           <div class="submit-row">
@@ -334,6 +329,8 @@
 
   </div><!-- /main -->
 </div><!-- /app -->
+
+<div id="loader-overlay" class="loader-overlay"><div class="loader-spinner"></div></div>
 
 <!-- ── SCRIPTS (order matters) ────────────────────────────────────────── -->
 <script src="js/state.js"></script>

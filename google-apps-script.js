@@ -101,9 +101,7 @@ function doGet(e) {
   if (action === 'readPending') {
     try {
       const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
-      const loans = readUnapproved(ss, UNAPP_LOAN_SHEET, 'loan');
-      const emis  = readUnapproved(ss, UNAPP_EMI_SHEET,  'emi');
-      return jsonResponse({ok:true, pending:[...loans,...emis]});
+      return jsonResponse({ok:true, pending:readAllPending(ss)});
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
 
@@ -125,53 +123,37 @@ function doPost(e) {
       const p = payload.item, d = p.data;
       const headers = [
         'ID','Status','SubmittedBy','SubmittedAt','Note',
-        'Loan ID','Bill Date','Customer Name','Phone','Aadhaar/PAN',
-        'Model','Device Type','Price','Down Payment','Processing Fee',
-        'App Lock','Tenure','Monthly EMI','Interest','Finance Amount',
-        'Total Amount','Rate of Interest','EMI Start',
-        'AK Share %','AKS Share %','AK Amount','AKS Amount','Guarantor'
+        'Bill Date','Customer Name','Customer mobile no','Customer AADHAR / PAN',
+        'Mobile model','Device Type','Mobile amount','Down payment','Processing Fee',
+        'Interest','EMI Duration','EMI Start Date',
+        'Guarantor/ Alternate no/ Comments','App Lock Charge','AK Share','Rate of Interest'
       ];
       const sheet = ensureSheet(ss, UNAPP_LOAN_SHEET, headers);
       sheet.appendRow([
         p.id, p.status, p.submittedBy, p.submittedAt, '',
-        d.loanId||'', d.billDate||'', d.customerName||'', d.phone||'', d.idNum||'',
+        fmtDateFromYMD(d.billDate), d.customerName||'', d.phone||'', d.idNum||'',
         d.model||'', d.deviceType||'', d.price||0, d.downPayment||0, d.processingFee||0,
-        d.appLockCharge||0, d.tenure||0, d.monthlyEmi||0, d.interest||0, d.financeAmount||0,
-        d.totalAmount||0, d.rateOfInterest||0, d.emiStart||'',
-        d.akShare||0, d.aksShare||0, d.akAmount||0, d.aksAmount||0, d.guarantor||''
+        d.interest||0, d.tenure||0, fmtDateFromYMD(d.emiStart),
+        d.guarantor||'', d.appLockCharge||0, (d.akShare||0)/100,
+        (d.rateOfInterest||0)/100
       ]);
-      return jsonResponse({ok:true, id:p.id});
+      return jsonResponse({ok:true, pending:readAllPending(ss)});
     }
 
     // ── Save new EMI submission ───────────────────────────────────────
     if (payload.action === 'saveEmi') {
       const p = payload.item, d = p.data;
-      // Exact columns: EMI_ID, EMI_Date_ID, Loan_ID, EMI_Start_Date, EMI_Number,
+      // Columns: EMI_ID, Customer Name, Mobile Model, EMI_Start_Date, EMI_Number,
       // EMI_Date, Row Number, Received, Received_date, MISC, Cashflow, MISC Type
       const headers = [
         'ID','Status','SubmittedBy','SubmittedAt','Note',
-        'EMI_ID','EMI_Date_ID','Loan_ID','EMI_Start_Date','EMI_Number',
+        'EMI_ID','Customer Name','Mobile Model','EMI_Start_Date','EMI_Number',
         'EMI_Date','Row Number','Received','Received_date','MISC','Cashflow','MISC Type'
       ];
       const sheet = ensureSheet(ss, UNAPP_EMI_SHEET, headers);
 
       // EMI_ID = LoanID_EMINumber  e.g. Roshan0070/1_5
       const emiId = (d.loanId||'') + '_' + (d.emiNum||'');
-
-      // EMI_Date_ID = Sheets serial of EMI START DATE + "_" + emiNum  e.g. 45061_6
-      // (uses the first EMI date / start date, not the scheduled due date)
-      const startDateStr = d.emiStartDate || '';
-      let startSerial = '';
-      if (startDateStr) {
-        const parsed = parseFlexDate(startDateStr);
-        if (parsed) {
-          const epoch = new Date(1899, 11, 30);
-          startSerial = Math.round((parsed - epoch) / 86400000);
-        }
-      }
-      const emiDateId = startSerial
-        ? startSerial + '_' + (d.emiNum||'')
-        : emiId;
 
       // Find row number of loan in master Data sheet
       let rowNumber = '';
@@ -193,10 +175,10 @@ function doPost(e) {
 
       sheet.appendRow([
         p.id, p.status, p.submittedBy, p.submittedAt, '',
-        emiId, emiDateId, d.loanId||'', d.emiStartDate||'', d.emiNum||'',
+        emiId, d.customerName||'', d.model||'', d.emiStartDate||'', d.emiNum||'',
         emiDateFmt, rowNumber, received, receivedDateFmt, misc, d.amount||0, miscType
       ]);
-      return jsonResponse({ok:true, id:p.id});
+      return jsonResponse({ok:true, pending:readAllPending(ss)});
     }
 
     // ── Update (edit) a row ───────────────────────────────────────────
@@ -210,10 +192,10 @@ function doPost(e) {
         if (String(rows[i][0])===String(id)){
           if (type==='loan'){
             sheet.getRange(i+1,6,1,23).setValues([[
-              d.loanId||'',d.billDate||'',d.customerName||'',d.phone||'',d.idNum||'',
+              d.loanId||'',fmtDateFromYMD(d.billDate),d.customerName||'',d.phone||'',d.idNum||'',
               d.model||'',d.deviceType||'',d.price||0,d.downPayment||0,d.processingFee||0,
               d.appLockCharge||0,d.tenure||0,d.monthlyEmi||0,d.interest||0,d.financeAmount||0,
-              d.totalAmount||0,d.rateOfInterest||0,d.emiStart||'',
+              d.totalAmount||0,(d.rateOfInterest||0)/100,fmtDateFromYMD(d.emiStart),
               d.akShare||0,d.aksShare||0,d.akAmount||0,d.aksAmount||0,d.guarantor||''
             ]]);
           } else {
@@ -224,7 +206,7 @@ function doPost(e) {
               d.emiStartDate||'',d.scheduledDate||'',d.akShare||0,d.aksShare||0
             ]]);
           }
-          return jsonResponse({ok:true});
+          return jsonResponse({ok:true, pending:readAllPending(ss)});
         }
       }
       return jsonResponse({ok:false,error:'ID not found'});
@@ -232,11 +214,14 @@ function doPost(e) {
 
     // ── Approve ───────────────────────────────────────────────────────
     if (payload.action === 'approvePending') {
-      const { id, type, data } = payload;
-      if (type==='loan') appendToInput(ss, data);
-      else               appendToLoggedEmi(ss, data);
-      deleteFromSheet(ss, type==='loan' ? UNAPP_LOAN_SHEET : UNAPP_EMI_SHEET, id);
-      return jsonResponse({ok:true});
+      const { id, type } = payload;
+      const sheetName = type==='loan' ? UNAPP_LOAN_SHEET : UNAPP_EMI_SHEET;
+      const row = readRowById(ss, sheetName, id);
+      if (!row) return jsonResponse({ok:false, error:'Row not found'});
+      if (type==='loan') appendToInput(ss, row);
+      else               appendToLoggedEmi(ss, row);
+      deleteFromSheet(ss, sheetName, id);
+      return jsonResponse({ok:true, pending:readAllPending(ss)});
     }
 
     // ── Reject ────────────────────────────────────────────────────────
@@ -249,7 +234,7 @@ function doPost(e) {
         if (String(rows[i][0])===String(id)){
           sheet.getRange(i+1,2).setValue('rejected');
           sheet.getRange(i+1,5).setValue(note||'');
-          return jsonResponse({ok:true});
+          return jsonResponse({ok:true, pending:readAllPending(ss)});
         }
       }
       return jsonResponse({ok:false,error:'ID not found'});
@@ -257,6 +242,14 @@ function doPost(e) {
 
     return jsonResponse({ok:false, error:'Unknown action: '+payload.action});
   } catch(err){ return jsonResponse({ok:false, error:err.message}); }
+}
+
+// ── Read both unapproved sheets and return combined pending list ──────────
+function readAllPending(ss) {
+  return [
+    ...readUnapproved(ss, UNAPP_LOAN_SHEET, 'loan'),
+    ...readUnapproved(ss, UNAPP_EMI_SHEET,  'emi'),
+  ];
 }
 
 // ── Read unapproved sheet into pending items ───────────────────────────────
@@ -270,18 +263,34 @@ function readUnapproved(ss, sheetName, type) {
     .map(r => {
       let data = {};
       if (type === 'loan') {
+        // Cols: ID(0) Status(1) SubmittedBy(2) SubmittedAt(3) Note(4)
+        // Bill Date(5) CustomerName(6) Phone(7) Aadhaar(8) Model(9)
+        // DeviceType(10) Price(11) Down(12) PFee(13) Interest(14)
+        // Tenure(15) EmiStart(16) Guarantor(17) AppLock(18) AKShare(19) RateOfInterest(20)
         data = {
-          loanId:r[5],billDate:r[6],customerName:r[7],phone:r[8],idNum:r[9],
-          model:r[10],deviceType:r[11],price:r[12],downPayment:r[13],processingFee:r[14],
-          appLockCharge:r[15],tenure:r[16],monthlyEmi:r[17],interest:r[18],financeAmount:r[19],
-          totalAmount:r[20],rateOfInterest:r[21],emiStart:r[22],
-          akShare:r[23],aksShare:r[24],akAmount:r[25],aksAmount:r[26],guarantor:r[27],
+          billDate:fmtDate(r[5]), customerName:r[6], phone:r[7], idNum:r[8],
+          model:r[9], deviceType:r[10], price:r[11], downPayment:r[12],
+          processingFee:r[13], interest:r[14], tenure:r[15], emiStart:fmtDate(r[16]),
+          guarantor:r[17], appLockCharge:r[18], akShare:r[19]*100,
+          aksShare:100-(r[19]*100),
+          rateOfInterest: parseFloat(r[20])||0,
+          // Derived fields for display in approval card
+          loanId: (String(r[6]).split(' ')[0] || '') + String(r[8]).slice(-4) + '/1',
+          monthlyEmi: 0, financeAmount: 0, totalAmount: 0,
+          akAmount: 0, aksAmount: 0,
         };
       } else {
+        // Cols: ID(0) Status(1) SubmittedBy(2) SubmittedAt(3) Note(4)
+        // EMI_ID(5) CustomerName(6) Model(7) EMI_Start_Date(8) EMI_Number(9)
+        // EMI_Date(10) RowNumber(11) Received(12) Received_date(13) MISC(14) Cashflow(15) MISC_Type(16)
+        const cashflow = parseFloat(r[15])||0;
+        const misc = parseFloat(r[14])||0;
+        const emiIdRaw = String(r[5]||'');
         data = {
-          loanId:r[5],customerName:r[6],emiNum:r[7],amount:r[8],expectedAmount:r[9],
-          date:r[11],mode:r[12],reason:r[13],notes:r[14],
-          emiStartDate:r[15],scheduledDate:r[16],akShare:r[17],aksShare:r[18],
+          loanId: emiIdRaw.replace(/_\d+$/, ''), customerName:r[6], model:r[7], emiStartDate:fmtDate(r[8]), emiNum:r[9],
+          date:fmtDate(r[10]),rowNumber:r[11],received:r[12],
+          receivedDate:fmtDate(r[13]),misc:misc,miscType:r[16],
+          amount:cashflow,expectedAmount:cashflow - misc,
         };
       }
       return { id:String(r[0]), type, status:String(r[1]),
@@ -291,40 +300,38 @@ function readUnapproved(ss, sheetName, type) {
 }
 
 // ── Append approved loan to Input sheet ───────────────────────────────────
-function appendToInput(ss, d) {
+// row comes from Unapproved_Loan: ID(0) Status(1) SubmittedBy(2) SubmittedAt(3) Note(4)
+// Bill Date(5) CustomerName(6) Phone(7) Aadhaar(8) Model(9)
+// DeviceType(10) Price(11) Down(12) PFee(13) Interest(14)
+// Tenure(15) EmiStart(16) Guarantor(17) AppLock(18) AKShare(19) RateOfInterest(20)
+function appendToInput(ss, row) {
   const headers = ['Bill Date','Customer Name','Customer mobile no','Customer AADHAR / PAN',
     'Mobile model','Device Type','Mobile amount','Down payment','Processing Fee','Interest',
     'EMI Duration','EMI Start Date','Guarantor/ Alternate no/ Comments','App Lock Charge',
     'AK Share','AK paid to Kunal','AKS paid to Kunal','Revised Date'];
   const sheet = ensureSheet(ss, INPUT_SHEET, headers);
   sheet.appendRow([
-    d.billDate||'', d.customerName||'', d.phone||'', d.idNum||'',
-    d.model||'', d.deviceType||'', d.price||0, d.downPayment||0,
-    d.processingFee||0, d.interest||0, d.tenure||0, d.emiStart||'',
-    d.guarantor||'', d.appLockCharge||0,
-    (d.akShare||0)/100, '', '', '',
+    row[5], row[6], row[7], row[8],
+    row[9], row[10], row[11], row[12],
+    row[13], row[14], row[15], row[16],
+    row[17], row[18], row[19], '', '', '',
   ]);
+  const r = sheet.getLastRow();
+  sheet.getRange(r, 4).setNumberFormat('@');
+  sheet.getRange(r, 13).setNumberFormat('@');
 }
 
 // ── Append approved EMI to logged EMI sheet ───────────────────────────────
-function appendToLoggedEmi(ss, d) {
-  const headers = ['EMI_ID','EMI_Date_ID','Loan_ID','EMI_Start_Date','EMI_Number',
-    'EMI_Date','Row Number','Received','Received_date','MISC','Cashflow'];
+// row comes from Unapproved_EMI: ID(0) Status(1) SubmittedBy(2) SubmittedAt(3) Note(4)
+// EMI_ID(5) CustomerName(6) Model(7) EMI_Start_Date(8) EMI_Number(9)
+// EMI_Date(10) RowNumber(11) Received(12) Received_date(13) MISC(14) Cashflow(15) MISC_Type(16)
+function appendToLoggedEmi(ss, row) {
+  const headers = ['EMI_ID','Customer Name','Mobile Model','EMI_Start_Date','EMI_Number',
+    'EMI_Date','Row Number','Received','Received_date','MISC','Cashflow','MISC Type'];
   const sheet = ensureSheet(ss, LOGGED_EMI_SHEET, headers);
-  let rowNumber = '';
-  const ds = ss.getSheetByName(DATA_SHEET);
-  if (ds && ds.getLastRow() > 1) {
-    const ids = ds.getRange(2,C.loanId+1,ds.getLastRow()-1,1).getValues();
-    for (let i=0;i<ids.length;i++){
-      if (String(ids[i][0]).trim()===String(d.loanId).trim()){ rowNumber=i+2; break; }
-    }
-  }
-  const emiId     = d.loanId+'_'+d.emiNum;
-  const emiDateId = (d.scheduledDate||d.date||'')+'_'+d.emiNum;
-  const misc      = (d.amount||0)-(d.expectedAmount||0);
   sheet.appendRow([
-    emiId, emiDateId, d.loanId, d.emiStartDate||'', d.emiNum,
-    d.scheduledDate||d.date||'', rowNumber, true, d.date||'', misc, d.amount||0,
+    row[5], row[6], row[7], row[8], row[9],
+    row[10], row[11], row[12], row[13], row[14], row[15], row[16],
   ]);
 }
 
@@ -403,6 +410,17 @@ function deleteFromSheet(ss, sheetName, id) {
   for (let i=vals.length-1;i>=1;i--){
     if (String(vals[i][0])===String(id)){ sheet.deleteRow(i+1); return; }
   }
+}
+
+function readRowById(ss, sheetName, id) {
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet || sheet.getLastRow() < 2) return null;
+  const nCols = sheet.getLastColumn();
+  const rows  = sheet.getRange(2,1,sheet.getLastRow()-1,nCols).getValues();
+  for (let i=0;i<rows.length;i++){
+    if (String(rows[i][0])===String(id)) return rows[i];
+  }
+  return null;
 }
 
 // Convert YYYY-MM-DD string (from HTML date input) to DD-Mon-YY

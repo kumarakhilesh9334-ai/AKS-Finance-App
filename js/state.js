@@ -38,3 +38,6 @@ function showAlert(msg, type = 's') {
 function nextPid() {
   return 'P' + (++pid);
 }
+
+function showLoader() { $('loader-overlay').classList.add('active'); }
+function hideLoader() { $('loader-overlay').classList.remove('active'); }

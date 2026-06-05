@@ -10,10 +10,7 @@ async function fetchPendingFromSheets() {
     const res  = await fetch(S.sheetsUrl + '?action=readPending');
     const data = await res.json();
     if (!data.ok) throw new Error(data.error);
-    // Merge: keep locally-submitted items not yet synced to Sheets
-    const sheetsIds = new Set(data.pending.map(p => p.id));
-    const localOnly = S.pending.filter(p => !sheetsIds.has(p.id));
-    S.pending = [...data.pending, ...localOnly];
+    S.pending = data.pending;
     refreshNav();
     // Always re-render these pages when data arrives — regardless of current page
     renderApprovals();
@@ -39,7 +36,8 @@ async function savePendingToSheets(item) {
 async function gasPost(payload) {
   const form = new FormData();
   form.append('payload', JSON.stringify(payload));
-  await fetch(S.sheetsUrl, { method:'POST', body: form });
+  const res = await fetch(S.sheetsUrl, { method:'POST', body: form });
+  return res.json();
 }
 
 // ── My Submissions ────────────────────────────────────────────────────────
@@ -72,21 +70,21 @@ async function approve(id) {
   const item = S.pending.find(p => p.id === id);
   if (!item) return;
 
-  // Optimistically update UI
-  item.status = 'approved';
-  renderApprovals();
-  refreshNav();
   showAlert('Approving…', 'w');
-
+  showLoader();
   try {
-    const res  = await fetch(S.sheetsUrl, {
-      method:'POST', mode:'no-cors',
-      body: form,
-    });
-    showAlert('Approved and saved to Sheets ✓');
+    const fd = new FormData();
+    fd.append('payload', JSON.stringify({action:'approvePending', id, type:item.type, data:item.data}));
+    const res = await fetch(S.sheetsUrl, { method:'POST', body: fd }).then(r => r.json());
+    if (res.ok && res.pending) S.pending = res.pending;
+    else await fetchPendingFromSheets();
+    refreshNav();
+    renderApprovals();
+    renderMySubs();
+    showAlert('Approved ✓');
   } catch(err) {
-    showAlert('Approved locally but Sheets sync failed: ' + err.message, 'w');
-  }
+    showAlert('Sync failed: ' + err.message, 'w');
+  } finally { hideLoader(); }
 }
 
 // ── Reject ────────────────────────────────────────────────────────────────
@@ -94,19 +92,21 @@ async function reject(id) {
   const note = prompt('Reason for rejection (optional):') || '';
   const item = S.pending.find(p => p.id === id);
   if (!item) return;
-  item.status = 'rejected';
-  item.note   = note;
-  renderApprovals();
-  refreshNav();
+  showAlert('Rejecting…', 'w');
+  showLoader();
   try {
-    await fetch(S.sheetsUrl, {
-      method:'POST', mode:'no-cors',
-      body: form,
-    });
+    const fd = new FormData();
+    fd.append('payload', JSON.stringify({action:'rejectPending', id, type:item.type, note}));
+    const res = await fetch(S.sheetsUrl, { method:'POST', body: fd }).then(r => r.json());
+    if (res.ok && res.pending) S.pending = res.pending;
+    else await fetchPendingFromSheets();
+    refreshNav();
+    renderApprovals();
+    renderMySubs();
     showAlert('Entry rejected.', 'e');
   } catch(err) {
-    showAlert('Rejected locally but Sheets sync failed.', 'w');
-  }
+    showAlert('Sync failed: ' + err.message, 'w');
+  } finally { hideLoader(); }
 }
 
 // ── Edit ──────────────────────────────────────────────────────────────────
@@ -129,7 +129,7 @@ function populateEditModal(item) {
     html = editField('Customer name',    'ed-cname',    d.customerName)
          + editField('Phone',            'ed-phone',    d.phone)
          + editField('Aadhaar/PAN',      'ed-idnum',    d.idNum)
-         + editField('Bill date',        'ed-billdate', d.billDate, 'date')
+         + editField('Bill date',        'ed-billdate', ymdFromDD(d.billDate), 'date')
          + editField('Model',            'ed-model',    d.model)
          + editField('Device type',      'ed-dtype',    d.deviceType)
          + editField('Device amount ₹',  'ed-price',    d.price,    'number')
@@ -139,28 +139,32 @@ function populateEditModal(item) {
          + editField('EMI duration',     'ed-tenure',   d.tenure,   'number')
          + editField('Monthly EMI ₹',    'ed-emi',      d.monthlyEmi, 'number')
          + editField('Interest ₹',       'ed-int',      d.interest, 'number')
-         + editField('EMI start date',   'ed-emistart', d.emiStart, 'date')
+         + editField('EMI start date',   'ed-emistart', ymdFromDD(d.emiStart), 'date')
          + editField('AK share %',       'ed-akshare',  d.akShare,  'number')
          + editField('Guarantor',        'ed-guar',     d.guarantor);
   } else {
     html = editField('Loan ID',        'ed-loanid',   d.loanId)
+         + editField('Customer name',  'ed-cname',    d.customerName)
+         + editField('Mobile model',   'ed-model',    d.model)
          + editField('EMI number',     'ed-eminum',   d.emiNum,   'number')
-         + editField('Amount ₹',       'ed-amount',   d.amount,   'number')
-         + editField('Payment date',   'ed-date',     d.date,     'date')
-         + editField('Payment mode',   'ed-mode',     d.mode)
-         + editField('Notes',          'ed-notes',    d.notes);
+         + editField('EMI start date', 'ed-emistart', ymdFromDD(d.emiStartDate), 'date')
+         + editField('Expected ₹',     'ed-expamt',   d.expectedAmount, 'number')
+         + editField('Received ₹',     'ed-amount',   d.amount,   'number')
+         + editField('Payment date',   'ed-date',     ymdFromDD(d.date), 'date')
+         + editField('Reason',         'ed-misctype', d.miscType);
   }
-  $('edit-modal-fields').innerHTML = html;
+  $('edit-modal-body').innerHTML = html;
 }
 
 function editField(label, id, value, type='text') {
+  const val = value != null ? value : '';
   return `<div style="margin-bottom:0.6rem">
     <label style="font-size:12px;color:#666;display:block;margin-bottom:3px">${label}</label>
-    <input type="${type}" id="${id}" value="${value||''}" style="width:100%;padding:8px 10px;border:0.5px solid #ccc;border-radius:8px;font-size:13px">
+    <input type="${type}" id="${id}" value="${val}" style="width:100%;padding:8px 10px;border:0.5px solid #ccc;border-radius:8px;font-size:13px">
   </div>`;
 }
 
-function saveEdit() {
+async function saveEdit() {
   const id   = S.editingId;
   const item = S.pending.find(p => p.id === id);
   if (!item) return;
@@ -189,25 +193,32 @@ function saveEdit() {
     d.akAmount      = Math.round(d.financeAmount * d.akShare  / 100);
     d.aksAmount     = Math.round(d.financeAmount * d.aksShare / 100);
   } else {
-    d.loanId  = $('ed-loanid').value.trim();
-    d.emiNum  = parseInt($('ed-eminum').value)||d.emiNum;
-    d.amount  = parseFloat($('ed-amount').value)||0;
-    d.date    = $('ed-date').value;
-    d.mode    = $('ed-mode').value.trim();
-    d.notes   = $('ed-notes').value.trim();
+    d.loanId        = $('ed-loanid').value.trim();
+    d.customerName  = $('ed-cname').value.trim();
+    d.model         = $('ed-model').value.trim();
+    d.emiNum        = parseInt($('ed-eminum').value)||d.emiNum;
+    d.emiStartDate  = $('ed-emistart').value;
+    d.expectedAmount= parseFloat($('ed-expamt').value)||0;
+    d.amount        = parseFloat($('ed-amount').value)||0;
+    d.misc          = d.amount - d.expectedAmount;
+    d.date          = $('ed-date').value;
+    d.miscType      = $('ed-misctype').value.trim();
   }
 
   closeEditModal();
-  renderApprovals();
-  showAlert('Entry updated.');
-
-  // Sync edit to Sheets
-  if (S.sheetsUrl) {
-    fetch(S.sheetsUrl, {
-      method:'POST', mode:'no-cors',
-      body: form,
-    }).catch(err => console.warn('updatePending error:', err.message));
-  }
+  showAlert('Saving…', 'w');
+  showLoader();
+  try {
+    if (S.sheetsUrl) {
+      const res = await gasPost({action:'updatePending', id, type:item.type, data:d});
+      if (res.ok && res.pending) S.pending = res.pending;
+      else await fetchPendingFromSheets();
+    }
+    refreshNav();
+    renderApprovals();
+    renderMySubs();
+    showAlert('Entry updated.');
+  } finally { hideLoader(); }
 }
 
 function closeEditModal() {
@@ -225,22 +236,21 @@ function subCard(p, showActions) {
   if (p.type === 'loan') {
     const d = p.data;
     detail = `<div class="kv">
-      <span class="kv-l">Loan ID</span>      <span class="kv-v" style="color:#534AB7">${d.loanId}</span>
+      <span class="kv-l">Bill Date</span>    <span class="kv-v">${fmtDateDD(d.billDate)}</span>
       <span class="kv-l">Customer</span>     <span class="kv-v">${d.customerName}</span>
       <span class="kv-l">Phone</span>        <span class="kv-v">${d.phone}</span>
       <span class="kv-l">Aadhaar/PAN</span>  <span class="kv-v">${d.idNum}</span>
-      <span class="kv-l">Model</span>        <span class="kv-v">${d.model} (${d.deviceType})</span>
-      <span class="kv-l">Device price</span> <span class="kv-v">${fmt(d.price)}</span>
+      <span class="kv-l">Model</span>        <span class="kv-v">${d.model}</span>
+      <span class="kv-l">Device Type</span>  <span class="kv-v">${d.deviceType}</span>
+      <span class="kv-l">Device amount</span><span class="kv-v">${fmt(d.price)}</span>
       <span class="kv-l">Down payment</span> <span class="kv-v">${fmt(d.downPayment)}</span>
       <span class="kv-l">Processing fee</span><span class="kv-v">${fmt(d.processingFee)}</span>
-      <span class="kv-l">App lock</span>     <span class="kv-v">${fmt(d.appLockCharge)}</span>
-      <span class="kv-l">Finance amount</span><span class="kv-v">${fmt(d.financeAmount)}</span>
       <span class="kv-l">Interest</span>     <span class="kv-v">${fmt(d.interest)}</span>
-      <span class="kv-l">Monthly EMI</span>  <span class="kv-v">${fmt(d.monthlyEmi)}</span>
-      <span class="kv-l">Tenure</span>       <span class="kv-v">${d.tenure} months</span>
-      <span class="kv-l">EMI start</span>    <span class="kv-v">${d.emiStart||'—'}</span>
-      <span class="kv-l">Rate of interest</span><span class="kv-v" style="color:#BA7517">${d.rateOfInterest?d.rateOfInterest+'%':'—'}</span>
-      <span class="kv-l">AK / AKS</span>    <span class="kv-v">${d.akShare}% / ${d.aksShare}%</span>
+      <span class="kv-l">EMI duration</span> <span class="kv-v">${d.tenure} months</span>
+      <span class="kv-l">EMI start</span>    <span class="kv-v">${fmtDateDD(d.emiStart)}</span>
+      <span class="kv-l">App lock</span>     <span class="kv-v">${fmt(d.appLockCharge)}</span>
+      <span class="kv-l">AK share</span>     <span class="kv-v">${d.akShare}%</span>
+      <span class="kv-l">Rate of interest</span><span class="kv-v" style="color:#BA7517">${Math.round(d.rateOfInterest * 100)}%</span>
       ${d.guarantor?`<span class="kv-l">Guarantor</span><span class="kv-v">${d.guarantor}</span>`:''}
     </div>`;
   } else {
@@ -248,13 +258,13 @@ function subCard(p, showActions) {
     detail = `<div class="kv">
       <span class="kv-l">Loan ID</span>     <span class="kv-v" style="color:#534AB7">${d.loanId}</span>
       <span class="kv-l">Customer</span>    <span class="kv-v">${d.customerName}</span>
+      <span class="kv-l">Model</span>       <span class="kv-v">${d.model}</span>
       <span class="kv-l">EMI number</span>  <span class="kv-v">EMI ${d.emiNum}</span>
+      <span class="kv-l">EMI start</span>   <span class="kv-v">${fmtDateDD(d.emiStartDate)}</span>
       <span class="kv-l">Expected</span>    <span class="kv-v">${fmt(d.expectedAmount)}</span>
-      <span class="kv-l">Received</span>    <span class="kv-v" style="${Math.abs(diff)>1?'color:#BA7517':'color:#27500A'}">${fmt(d.amount)}${Math.abs(diff)>1?` (${diff>0?'+':''}${fmt(Math.abs(diff))})`:''}</span>
-      ${d.reason?`<span class="kv-l">Reason</span><span class="kv-v">${d.reason}</span>`:''}
-      <span class="kv-l">Payment date</span><span class="kv-v">${d.date}</span>
-      <span class="kv-l">Mode</span>        <span class="kv-v">${d.mode}</span>
-      ${d.notes?`<span class="kv-l">Notes</span><span class="kv-v">${d.notes}</span>`:''}
+      <span class="kv-l">Received</span>    <span class="kv-v">${fmt(d.amount)}${Math.abs(diff)>1?` (${diff>0?'+':''}${fmt(Math.abs(diff))})`:''}</span>
+      ${d.miscType?`<span class="kv-l">Reason</span><span class="kv-v">${d.miscType}</span>`:''}
+      <span class="kv-l">Payment date</span><span class="kv-v">${fmtDateDD(d.date)}</span>
     </div>`;
   }
 
@@ -277,4 +287,28 @@ function subCard(p, showActions) {
     </div>
     ${detail}${actions}
   </div>`;
+}
+
+// ── Date helpers ────────────────────────────────────────────────────────────
+function fmtDateDD(val) {
+  if (!val) return '—';
+  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  if (val instanceof Date && !isNaN(val))
+    return val.getDate() + '-' + M[val.getMonth()] + '-' + String(val.getFullYear()).slice(-2);
+  if (/^\d{1,2}-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{2}$/i.test(val)) return val;
+  const m = String(val).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return parseInt(m[3]) + '-' + M[parseInt(m[2])-1] + '-' + m[1].slice(-2);
+  return val;
+}
+function ymdFromDD(val) {
+  if (!val) return '';
+  const m = String(val).match(/^(\d{1,2})-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-(\d{2,4})$/i);
+  if (m) {
+    const months = {jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12'};
+    const mon = months[m[2].toLowerCase()];
+    let yr = m[3]; if (yr.length === 2) yr = '20' + yr;
+    return yr + '-' + mon + '-' + String(parseInt(m[1])).padStart(2,'0');
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+  return val;
 }
