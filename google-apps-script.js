@@ -347,8 +347,55 @@ function doPost(e) {
       return jsonResponse({ok:false,error:'ID not found'});
     }
 
+    // ── Deduplicate PIDs in both unapproved sheets ─────────────────────
+    if (payload.action === 'dedupPids') {
+      const fixed = {loan:0, emi:0};
+      [UNAPP_LOAN_SHEET, UNAPP_EMI_SHEET].forEach(sheetName => {
+        const sheet = ss.getSheetByName(sheetName);
+        if (!sheet || sheet.getLastRow() < 2) return;
+        const rows  = sheet.getDataRange().getValues();
+        const seen  = {};
+        for (let i=1; i<rows.length; i++) {
+          const id = String(rows[i][0]||'');
+          if (!id) continue;
+          if (seen[id] !== undefined) {
+            const newId = id + '_' + (++seen[id]);
+            sheet.getRange(i+1, 1).setValue(newId);
+            fixed[sheetName === UNAPP_LOAN_SHEET ? 'loan' : 'emi']++;
+          } else {
+            seen[id] = 0;
+          }
+        }
+      });
+      return jsonResponse({ok:true, fixed, pending:readAllPending(ss)});
+    }
+
     return jsonResponse({ok:false, error:'Unknown action: '+payload.action});
   } catch(err){ return jsonResponse({ok:false, error:err.message}); }
+}
+
+// ── Run this from GAS editor to fix existing duplicate PIDs ───────────────
+function fixDuplicatePids() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const result = {loan:0, emi:0};
+  [UNAPP_LOAN_SHEET, UNAPP_EMI_SHEET].forEach(sheetName => {
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet || sheet.getLastRow() < 2) return;
+    const rows  = sheet.getDataRange().getValues();
+    const seen  = {};
+    for (let i=1; i<rows.length; i++) {
+      const id = String(rows[i][0]||'');
+      if (!id) continue;
+      if (seen[id] !== undefined) {
+        const newId = id + '_' + (++seen[id]);
+        sheet.getRange(i+1, 1).setValue(newId);
+        result[sheetName === UNAPP_LOAN_SHEET ? 'loan' : 'emi']++;
+      } else {
+        seen[id] = 0;
+      }
+    }
+  });
+  SpreadsheetApp.getUi().alert('Fixed: ' + JSON.stringify(result));
 }
 
 // ── Read both unapproved sheets and return combined pending list ──────────
