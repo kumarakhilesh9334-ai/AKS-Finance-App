@@ -1,5 +1,5 @@
 // ── STATE ─────────────────────────────────────────────────────────────────
-// Central data store for AKS Financing app.
+// Central data store for AKS Finance app.
 // All modules read/write through this object.
 
 const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbzFE_aDkwxYUsB47VPWJGpDft4wvm_k2VqAz7oMRAdaNdNeTumb3VZ_vd50esW-vaEasQ/exec';

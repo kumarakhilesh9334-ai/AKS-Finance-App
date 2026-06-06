@@ -1,5 +1,5 @@
 /**
- * AKS Financing — Google Apps Script
+ * AKS Finance — Google Apps Script
  * Sheets: Data | Unapproved_Loan | Unapproved_EMI | Input | logged EMI
  */
 
@@ -114,7 +114,7 @@ function doGet(e) {
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
 
-  return jsonResponse({ok:true, message:'AKS Financing running.'});
+  return jsonResponse({ok:true, message:'AKS Finance running.'});
 }
 
 // ── POST ──────────────────────────────────────────────────────────────────
