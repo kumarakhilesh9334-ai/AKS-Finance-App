@@ -345,8 +345,7 @@ async function submitEmi() {
       else await fetchPendingFromSheets();
     }
     refreshNav();
-    renderApprovals();
-    renderMySubs();
+    renderApprovals($('appr-search') ? $('appr-search').value : '');
     showAlert('EMI payment submitted for approval.');
   } finally { hideLoader(); }
   $('emi-detail').style.display = 'none';
@@ -387,20 +386,36 @@ function renderClosedDefaulted(query) {
 
 function cdCard(l, type) {
   const lastDate = l.lastEmiDate ? fmtDisplayDate(l.lastEmiDate) : '—';
-  return `<div class="emi-card ${type}" data-loanid="${l.loanId}" data-type="${type}" onclick="openCdDetail('${l.loanId}')" style="cursor:pointer">
+  const today = new Date(); today.setHours(0,0,0,0);
+  let bg = '', border = '', tc = '#1a1a1a', sc = '#888', flag = '', bottomTxt = '';
+
+  if (type === 'running' && l.nextEmiDate) {
+    const due = new Date(l.nextEmiDate); due.setHours(0,0,0,0);
+    const days = Math.round((today - due) / 86400000);
+    const df = fmtDisplayDate(l.nextEmiDate);
+    bottomTxt = 'Due Date: ' + df;
+    if (days > 90)        { bg='#000';border='#000';tc='#fff';sc='rgba(255,255,255,0.75)';flag='90+ days overdue'; }
+    else if (days > 30)   { bg='#980000';border='#980000';tc='#fff';sc='rgba(255,255,255,0.75)';flag='30+ days overdue'; }
+    else if (days > 0)    { bg='#dd7e6b';border='#dd7e6b';tc='#fff';sc='rgba(255,255,255,0.75)';flag=days+'d overdue'; }
+    else if (due.getTime()===today.getTime()) { bg='#ff9900';border='#ff9900';tc='#fff';sc='rgba(255,255,255,0.75)';flag='Due today'; }
+  }
+
+  const cs = bg ? `background:${bg} !important;border-left-color:${border} !important;border-color:${border} !important` : '';
+  const ps = bg ? 'background:rgba(255,255,255,0.2);color:#fff' : '';
+
+  return `<div class="emi-card ${type}" data-loanid="${l.loanId}" data-type="${type}" onclick="openCdDetail('${l.loanId}')" style="cursor:pointer;${cs}">
     <div class="emi-card-top">
-      <span class="emi-card-id">${l.loanId}</span>
-      <span class="badge ${type === 'running' ? 'b-active' : type === 'closed' ? 'b-closed' : 'b-defaulted'}">${type}</span>
+      <span class="emi-card-id" style="color:${tc}">${l.loanId}</span>
+      <span class="badge ${type==='running'?'b-active':type==='closed'?'b-closed':'b-defaulted'}">${type}</span>
     </div>
-    <div class="emi-card-name">${l.customerName}</div>
+    <div class="emi-card-name" style="color:${tc}">${l.customerName}</div>
     <div class="emi-card-meta">
-      <span class="emi-amt-pill">${fmtAmt(l.monthlyEmi)}/mo</span>
-      ${l.model ? `<span class="emi-model-pill">${l.model}</span>` : ''}
+      <span class="emi-amt-pill" style="${ps}">${fmtAmt(l.monthlyEmi)}/mo</span>
+      ${l.model?`<span class="emi-model-pill" style="${ps}">${l.model}</span>`:''}
     </div>
-    <div class="emi-card-date">
-      ${type === 'running'   ? (l.nextEmiDate ? 'Next EMI: ' + fmtDisplayDate(l.nextEmiDate) : '') :
-        type === 'closed'    ? 'Last EMI: ' + lastDate :
-        (l.defaultComment || 'Defaulted')}
+    <div class="emi-card-date" style="color:${sc}${flag?';display:flex;justify-content:space-between':''}">
+      <span>${type==='running' ? bottomTxt : type==='closed' ? 'Last EMI: '+lastDate : (l.defaultComment||'Defaulted')}</span>
+      ${flag?`<span style="font-size:9px;font-weight:600;color:rgba(255,255,255,0.85)">${flag}</span>`:''}
     </div>
   </div>`;
 }
@@ -439,7 +454,7 @@ async function openCdDetail(loanId) {
   const aksPct = l.aksShare != null ? Math.round((l.aksShare <= 1 ? l.aksShare * 100 : l.aksShare)) : 0;
 
   // All 87 columns — show every field, blank shown as '—'
-  const D = (v) => v || '—';
+  const D = (v) => (v === 'Invalid Date') ? '—' : (v || '—');
   const M = (v) => (v == null || v === '') ? '—' : '₹' + Number(v).toLocaleString('en-IN');
   const Dt = (v) => v ? fmtDisplayDate(v) : '—';
   const Pct = (v) => v != null && v !== '' ? v + '%' : '—';

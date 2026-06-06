@@ -244,17 +244,15 @@
       </div>
     </div>
 
-    <!-- ── MY SUBMISSIONS ────────────────────────────────────────────── -->
-    <div class="page" id="page-my-subs">
-      <div style="font-size:15px;font-weight:500;margin-bottom:1rem">My submissions</div>
-      <div id="my-subs-list"></div>
-    </div>
-
     <!-- ── APPROVALS (admin) ─────────────────────────────────────────── -->
     <div class="page" id="page-approvals">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
         <span style="font-size:15px;font-weight:500">Pending approvals</span>
         <button class="btn btn-sm" onclick="fetchPendingFromSheets()">↻ Refresh</button>
+      </div>
+      <div class="emi-search-wrap">
+        <span class="emi-search-icon">🔍</span>
+        <input type="text" id="appr-search" placeholder="Search Loan ID or customer…" oninput="renderApprovals(this.value)">
       </div>
       <!-- Mobile tab switcher -->
       <div class="mob-two-tabs" id="appr-mob-tabs">

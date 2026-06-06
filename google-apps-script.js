@@ -73,8 +73,8 @@ function doGet(e) {
             extraEmiReceived:parseFloat(r[C.extraEmiReceived])||0,
             emiStartDate:    fmtDate(r[C.emiStartDate]),
             lastEmiDate:     fmtDate(r[C.lastEmiDate]),
-            phone:           String(r[C.phone]||'').trim(),
-            aadhaarPan:      String(r[C.aadhaarPan]||'').trim(),
+            phone:           (r[C.phone] instanceof Date) ? '' : String(r[C.phone]||'').trim(),
+            aadhaarPan:      (r[C.aadhaarPan] instanceof Date) ? '' : String(r[C.aadhaarPan]||'').trim(),
             defaultComment:  String(r[C.defaultComment]||'').trim(),
             isDefaulted, emiCompleted, status, _slim:true,
           };
@@ -391,8 +391,8 @@ function buildFullLoan(r) {
   let status='Active'; if(emiCompleted) status='Closed'; if(isDefaulted) status='Defaulted';
   return {
     loanId:String(r[C.loanId]).trim(),billDate:fmtDate(r[C.billDate]),
-    customerName:String(r[C.customerName]||'').trim(),phone:String(r[C.phone]||'').trim(),
-    aadhaarPan:String(r[C.aadhaarPan]||'').trim(),model:String(r[C.model]||'').trim(),
+    customerName:String(r[C.customerName]||'').trim(),phone:(r[C.phone] instanceof Date) ? '' : String(r[C.phone]||'').trim(),
+    aadhaarPan:(r[C.aadhaarPan] instanceof Date) ? '' : String(r[C.aadhaarPan]||'').trim(),model:String(r[C.model]||'').trim(),
     deviceType:String(r[C.deviceType]||'').trim(),mobileAmount:parseFloat(r[C.mobileAmount])||0,
     downPayment:parseFloat(r[C.downPayment])||0,processingFee:parseFloat(r[C.processingFee])||0,
     interest:parseFloat(r[C.interest])||0,emiDuration:dur,emiStartDate:fmtDate(r[C.emiStartDate]),

@@ -33,7 +33,7 @@ function renderLoans() {
     const rows = [
       ['Bill date',          billTxt],
       ['Customer',           l.customerName],
-      ['Phone',              l.phone],
+      ['Phone',              l.phone === 'Invalid Date' ? '—' : (l.phone || '—')],
       ['Aadhaar/PAN',        l.aadhaarPan],
       ['Model',              l.model],
       ['Device type',        l.deviceType],

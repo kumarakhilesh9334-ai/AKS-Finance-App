@@ -48,7 +48,7 @@ function defPage() {
   if (S.cu.perms.emi)       return 'emi';
   if (S.cu.perms.allLoans)  return 'all-loans';
   if (S.cu.perms.approvals) return 'approvals';
-  return 'my-subs';
+  return 'new-loan';
 }
 
 document.addEventListener('DOMContentLoaded', async () => {

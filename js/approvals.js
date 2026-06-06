@@ -13,12 +13,11 @@ async function fetchPendingFromSheets() {
     S.pending = data.pending;
     refreshNav();
     // Always re-render these pages when data arrives — regardless of current page
-    renderApprovals();
-    renderMySubs();
+    renderApprovals($('appr-search') ? $('appr-search').value : '');
   } catch(err) {
     console.warn('fetchPending error:', err.message);
     // Still re-render with whatever is in S.pending (may be empty)
-    renderApprovals();
+    renderApprovals($('appr-search') ? $('appr-search').value : '');
   }
 }
 
@@ -40,20 +39,14 @@ async function gasPost(payload) {
   return res.json();
 }
 
-// ── My Submissions ────────────────────────────────────────────────────────
-function renderMySubs() {
-  const mine = S.pending.filter(p => p.submittedBy === S.cu.id).reverse();
-  $('my-subs-list').innerHTML = mine.length
-    ? mine.map(p => subCard(p, false)).join('')
-    : '<div class="empty">No submissions yet.</div>';
-}
-
 // ── Approvals: two-column layout ──────────────────────────────────────────
-function renderApprovals() {
+function renderApprovals(q) {
+  const query = (q === undefined ? ($('appr-search') ? $('appr-search').value : '') : String(q)).toLowerCase();
   const el1 = $('approvals-loans-list'), el2 = $('approvals-emis-list');
-  if (!el1 || !el2) return; // page not active yet
-  const loans = S.pending.filter(p => p.status === 'pending' && p.type === 'loan').reverse();
-  const emis  = S.pending.filter(p => p.status === 'pending' && p.type === 'emi').reverse();
+  if (!el1 || !el2) return;
+  const match = p => !query || p.data.loanId.toLowerCase().includes(query) || (p.data.customerName||'').toLowerCase().includes(query);
+  const loans = S.pending.filter(p => p.status === 'pending' && p.type === 'loan' && match(p)).reverse();
+  const emis  = S.pending.filter(p => p.status === 'pending' && p.type === 'emi' && match(p)).reverse();
   el1.innerHTML = loans.length
     ? loans.map(p => subCard(p, true)).join('')
     : '<div class="empty">No pending loans 🎉</div>';
@@ -79,9 +72,28 @@ async function approve(id) {
     if (res.ok && res.pending) S.pending = res.pending;
     else await fetchPendingFromSheets();
     refreshNav();
-    renderApprovals();
-    renderMySubs();
+    renderApprovals($('appr-search') ? $('appr-search').value : '');
     showAlert('Approved ✓');
+  } catch(err) {
+    showAlert('Sync failed: ' + err.message, 'w');
+  } finally { hideLoader(); }
+}
+
+// ── Reject ────────────────────────────────────────────────────────────────
+async function reject(id) {
+  const item = S.pending.find(p => p.id === id);
+  if (!item) return;
+  showAlert('Rejecting…', 'w');
+  showLoader();
+  try {
+    const fd = new FormData();
+    fd.append('payload', JSON.stringify({action:'rejectPending', id, type:item.type, data:item.data}));
+    const res = await fetch(S.sheetsUrl, { method:'POST', body: fd }).then(r => r.json());
+    if (res.ok && res.pending) S.pending = res.pending;
+    else await fetchPendingFromSheets();
+    refreshNav();
+    renderApprovals($('appr-search') ? $('appr-search').value : '');
+    showAlert('Entry rejected.', 'e');
   } catch(err) {
     showAlert('Sync failed: ' + err.message, 'w');
   } finally { hideLoader(); }
@@ -102,7 +114,6 @@ async function reject(id) {
     else await fetchPendingFromSheets();
     refreshNav();
     renderApprovals();
-    renderMySubs();
     showAlert('Entry rejected.', 'e');
   } catch(err) {
     showAlert('Sync failed: ' + err.message, 'w');
@@ -215,8 +226,7 @@ async function saveEdit() {
       else await fetchPendingFromSheets();
     }
     refreshNav();
-    renderApprovals();
-    renderMySubs();
+    renderApprovals($('appr-search') ? $('appr-search').value : '');
     showAlert('Entry updated.');
   } finally { hideLoader(); }
 }

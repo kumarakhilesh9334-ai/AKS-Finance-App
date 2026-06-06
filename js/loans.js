@@ -257,8 +257,7 @@ async function submitLoan() {
       else await fetchPendingFromSheets();
     }
     refreshNav();
-    renderApprovals();
-    renderMySubs();
+    renderApprovals($('appr-search') ? $('appr-search').value : '');
     showAlert('Loan submitted for approval.');
   } finally { hideLoader(); }
 }

@@ -4,7 +4,6 @@
 const TAB_ICONS = {
   'new-loan':        { icon: '➕', label: 'New Loan' },
   'emi':             { icon: '💰', label: 'Log EMI' },
-  'my-subs':         { icon: '📋', label: 'My Subs' },
   'approvals':       { icon: '✅', label: 'Approvals' },
   'all-loans':       { icon: '📊', label: 'All Loans' },
   'users':           { icon: '👥', label: 'Users' },
@@ -16,7 +15,6 @@ function buildNav() {
   let tabs = [];
   if (u.perms.loan)      tabs.push({ id: 'new-loan',   label: 'New loan' });
   if (u.perms.emi)       tabs.push({ id: 'emi',         label: 'Log EMI' });
-  if (u.role === 'agent') tabs.push({ id: 'my-subs', label: 'My submissions' });
   if (u.role === 'admin' || u.perms.approvals) tabs.push({ id: 'approvals', label: 'Approvals', badge: pc });
   if (u.role === 'admin' || u.perms.allLoans)  tabs.push({ id: 'all-loans', label: 'All Loans' });
   if (u.role === 'admin') tabs.push({ id: 'users', label: 'Users' });
@@ -52,8 +50,7 @@ function goTo(pg) {
   $('alert-box').innerHTML = '';
   if (pg === 'new-loan')  initNewLoanPage();
   if (pg === 'emi')       { populateEmiSelect(); mobSwitchEmiCol('upcoming'); }
-  if (pg === 'my-subs')   renderMySubs();
-  if (pg === 'approvals') { renderApprovals(); mobSwitchApprCol('loan'); }
+  if (pg === 'approvals') { renderApprovals($('appr-search') ? $('appr-search').value : ''); mobSwitchApprCol('loan'); }
   if (pg === 'all-loans') { renderClosedDefaulted(''); mobSwitchCdCol('running'); }
   if (pg === 'users')     renderUsers();
 }
