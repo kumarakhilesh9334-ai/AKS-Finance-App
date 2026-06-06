@@ -230,19 +230,25 @@ function doPost(e) {
       for (let i=1;i<rows.length;i++){
         if (String(rows[i][0])===String(id)){
           if (type==='loan'){
-            sheet.getRange(i+1,6,1,23).setValues([[
-              d.loanId||'',fmtDateFromYMD(d.billDate),d.customerName||'',d.phone||'',d.idNum||'',
+            // Sheet: BillDate(5), CustomerName(6), Phone(7), Aadhaar(8),
+            // Model(9), DeviceType(10), Price(11), DownPayment(12), ProcessingFee(13),
+            // Interest(14), Tenure(15), EmiStart(16), Guarantor(17), AppLock(18), AKShare(19), RateOfInterest(20)
+            sheet.getRange(i+1,6,1,16).setValues([[
+              fmtDateFromYMD(d.billDate),d.customerName||'',d.phone||'',d.idNum||'',
               d.model||'',d.deviceType||'',d.price||0,d.downPayment||0,d.processingFee||0,
-              d.appLockCharge||0,d.tenure||0,d.monthlyEmi||0,d.interest||0,d.financeAmount||0,
-              d.totalAmount||0,(d.rateOfInterest||0)/100,fmtDateFromYMD(d.emiStart),
-              d.akShare||0,d.aksShare||0,d.akAmount||0,d.aksAmount||0,d.guarantor||''
+              d.interest||0,d.tenure||0,fmtDateFromYMD(d.emiStart),
+              d.guarantor||'',d.appLockCharge||0,(d.akShare||0)/100,(d.rateOfInterest||0)/100
             ]]);
           } else {
-            const diff=(d.amount||0)-(d.expectedAmount||0);
-            sheet.getRange(i+1,6,1,14).setValues([[
-              d.loanId||'',d.customerName||'',d.emiNum||'',d.amount||0,d.expectedAmount||0,
-              diff,d.date||'',d.mode||'',d.reason||'',d.notes||'',
-              d.emiStartDate||'',d.scheduledDate||'',d.akShare||0,d.aksShare||0
+            // Sheet: EMI_ID(5), CustomerName(6), Model(7), EMI_Start_Date(8), EMI_Number(9),
+            // EMI_Date(10), RowNumber(11), Received(12), Received_date(13), MISC(14), Cashflow(15), MISC_Type(16)
+            const newMisc = (d.amount||0) - (d.expectedAmount||0);
+            sheet.getRange(i+1,6,1,12).setValues([[
+              d.loanId||'',d.customerName||'',d.model||'',
+              fmtDateFromYMD(d.emiStartDate),d.emiNum||'',
+              rows[i][10],rows[i][11],rows[i][12],
+              fmtDateFromYMD(d.date||''),
+              newMisc,d.amount||0,d.miscType||''
             ]]);
           }
           return jsonResponse({ok:true, pending:readAllPending(ss)});
