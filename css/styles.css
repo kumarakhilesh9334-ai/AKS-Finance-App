@@ -80,8 +80,6 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 .divider{border:none;border-top:0.5px solid #eee;margin:0.75rem 0}
 .pcount{background:#BA7517;color:#fff;border-radius:20px;font-size:10px;padding:1px 6px;margin-left:4px}
 .diff-warn{background:#FAEEDA;border:0.5px solid #FAC775;border-radius:8px;padding:8px 10px;margin-top:0.5rem;font-size:12px;color:#633806}
-.emi-slot{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:0.5px solid #f0f0f0;font-size:12px}
-.emi-slot:last-child{border-bottom:none}
 .calc-box{background:#f8f7ff;border:0.5px solid #EEEDFE;border-radius:8px;padding:10px;margin-top:0.5rem;font-size:12px}
 .calc-row{display:flex;justify-content:space-between;padding:2px 0}
 .calc-row.total{font-weight:500;border-top:0.5px solid #EEEDFE;padding-top:6px;margin-top:4px}
@@ -162,11 +160,10 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 /* ── NEW LOAN: two-column layout ─────────────────────────────────────── */
 .new-loan-layout{display:grid;grid-template-columns:1fr 320px;gap:0.85rem;align-items:start}
 @media(max-width:700px){.new-loan-layout{grid-template-columns:1fr}}
-.customer-loans-panel{background:#fff;border:0.5px solid #EEEDFE;border-radius:12px;padding:1rem;position:sticky;top:100px}
 .cust-loan-pill{display:flex;align-items:center;gap:4px;padding:5px 8px;border-radius:6px;margin-bottom:3px;font-size:12px}
 
 /* ── AADHAAR DROPDOWN ────────────────────────────────────────────────── */
-.idnum-dd{position:absolute;top:100%;left:0;right:0;background:#fff;border:0.5px solid #534AB7;border-radius:8px;z-index:50;box-shadow:0 4px 16px rgba(0,0,0,0.1);overflow:hidden;margin-top:2px}
+.idnum-dd{position:absolute;top:100%;left:0;right:0;background:#fff;border:0.5px solid #534AB7;border-radius:8px;z-index:60;box-shadow:0 4px 16px rgba(0,0,0,0.1);overflow-y:auto;max-height:280px;margin-top:2px}
 .idnum-option{padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:0.5px solid #f0f0f0}
 .idnum-option:last-child{border-bottom:none}
 .idnum-option:hover{background:#f8f7ff}
@@ -273,8 +270,6 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 
   /* ── New Loan: stack customer panel below form ───────────────────── */
   .new-loan-layout { grid-template-columns: 1fr; }
-  .customer-loans-panel { position: static; margin-top: 0.75rem; }
-
   /* ── EMI tab: tabbed switcher instead of two columns ─────────────── */
   .emi-two-col { display: block; }
   .emi-col-wrap { display: none; border-radius: 0; border: none; }
@@ -415,6 +410,16 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
   .mob-two-tab.active .emi-section-count{background:rgba(255,255,255,0.25);color:#fff}
   .mob-two-tab .emi-section-count{background:#e0e0e0;color:#555;font-size:10px;padding:1px 6px}
 }
+
+/* ── EMI TABLE ───────────────────────────────────────────────────── */
+.emi-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:0}
+.emi-table th,.emi-table td{padding:5px 6px;text-align:left;border-bottom:0.5px solid #eee;white-space:nowrap}
+.emi-table th{background:#f8f7ff;color:#534AB7;font-weight:600;font-size:11px;position:sticky;top:0}
+.emi-table tbody tr:hover{background:#fafafa}
+.emi-table .emi-tr.rcvd td{color:#27500A}
+.emi-table .emi-tr.next td{color:#534AB7;font-weight:500}
+.emi-table .emi-tr.ovd td{color:#A32D2D}
+@media(max-width:600px){.emi-table{font-size:11px}.emi-table th,.emi-table td{padding:4px 4px}}
 
 /* ── LOADING OVERLAY ─────────────────────────────────────────────── */
 @keyframes spin{to{transform:rotate(360deg)}}

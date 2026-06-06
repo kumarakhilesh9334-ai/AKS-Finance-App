@@ -17,7 +17,7 @@ function renderUsers() {
   }).join('');
 }
 
-function addUser() {
+async function addUser() {
   const username = v('nu-user');
   const pin      = v('nu-pin');
   const name     = v('nu-name');
@@ -26,7 +26,7 @@ function addUser() {
   if (!username || !pin || !name) { showAlert('Please fill all fields.', 'e'); return; }
   if (S.users.find(u => u.username === username)) { showAlert('Username already exists.', 'e'); return; }
 
-  S.users.push({
+  const user = {
     id: 'u' + Date.now(),
     username,
     pin,
@@ -38,7 +38,17 @@ function addUser() {
       allLoans:  $('p-allLoans').checked,
       approvals: $('p-approvals').checked,
     },
-  });
+  };
+
+  // Save to sheet
+  try {
+    const body = new URLSearchParams();
+    body.set('payload', JSON.stringify({ action:'addUser', ...user }));
+    await fetch(S.sheetsUrl, { method:'POST', body });
+  } catch(e) { console.warn('Sheet addUser failed, saving locally:', e.message); }
+
+  // Merge response from sheet (or just use local if sheet failed)
+  await syncUsersFromSheet();
 
   $('nu-user').value = '';
   $('nu-pin').value  = '';
@@ -47,8 +57,30 @@ function addUser() {
   showAlert('User added.');
 }
 
-function removeUser(id) {
+async function removeUser(id) {
   if (!confirm('Remove this user?')) return;
-  S.users = S.users.filter(u => u.id !== id);
+  if (id === 'u1') { showAlert('Cannot remove the default admin.', 'e'); return; }
+
+  try {
+    const body = new URLSearchParams();
+    body.set('payload', JSON.stringify({ action:'removeUser', id }));
+    await fetch(S.sheetsUrl, { method:'POST', body });
+  } catch(e) { console.warn('Sheet removeUser failed, removing locally:', e.message); }
+
+  await syncUsersFromSheet();
   renderUsers();
+}
+
+async function syncUsersFromSheet() {
+  try {
+    const res  = await fetch(S.sheetsUrl + '?action=readUsers');
+    const data = await res.json();
+    if (data.ok && Array.isArray(data.users)) {
+      const adminUser = DEFAULT_USERS.find(u => u.id === 'u1');
+      S.users = [adminUser, ...data.users.filter(u => u.id !== 'u1')];
+      saveUsers();
+    }
+  } catch(e) {
+    console.warn('Could not sync users:', e.message);
+  }
 }

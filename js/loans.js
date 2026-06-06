@@ -62,9 +62,14 @@ function selectCustomer(aadhaarPan) {
     aadhaarPan.toLowerCase().replace(/\s/g,'')
   );
   if (!all.length) return;
-  $('f-cname').value = all[0].customerName || ''; // name only
+  $('f-cname').value = all[0].customerName || '';
   renderCustomerLoansPanel(all);
   genLoanId();
+}
+
+function goToLoanDetail(loanId) {
+  goTo('all-loans');
+  setTimeout(() => openCdDetail(loanId), 200);
 }
 
 function renderCustomerLoansPanel(loans) {
@@ -84,7 +89,7 @@ function renderCustomerLoansPanel(loans) {
   const renderGroup = (items, type, label) => !items.length ? '' :
     `<div style="margin-bottom:6px">
       <div style="font-size:10px;font-weight:600;color:${colorMap[type]};text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">${label}</div>
-      ${items.map(l=>`<div class="cust-loan-pill" style="border-left:3px solid ${colorMap[type]};background:${bgMap[type]}">
+      ${items.map(l=>`<div class="cust-loan-pill" style="border-left:3px solid ${colorMap[type]};background:${bgMap[type]};cursor:pointer" onclick="goToLoanDetail('${l.loanId.replace(/'/g,"\\'")}')">
         <span style="font-weight:500;font-size:12px">${l.loanId}</span>
         <span style="font-size:11px;color:#666;margin-left:6px">${lFmt(l.monthlyEmi)}/mo</span>
         ${l.nextEmiDate?`<span style="font-size:10px;color:${colorMap[type]};margin-left:auto">${fmtD2(l.nextEmiDate)}</span>`:''}
@@ -100,7 +105,10 @@ function renderCustomerLoansPanel(loans) {
 }
 
 document.addEventListener('click', e => {
-  if (!e.target.closest('#idnum-wrap')) $('idnum-dropdown').style.display = 'none';
+  if (!e.target.closest('#idnum-wrap')) {
+    $('idnum-dropdown').style.display = 'none';
+    $('customer-loans-panel').style.display = 'none';
+  }
 });
 
 // ── Device type → app lock default ───────────────────────────────────────

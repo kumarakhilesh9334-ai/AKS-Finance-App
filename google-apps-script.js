@@ -9,6 +9,7 @@ const UNAPP_LOAN_SHEET = 'Unapproved_Loan';
 const UNAPP_EMI_SHEET  = 'Unapproved_EMI';
 const INPUT_SHEET      = 'Input';
 const LOGGED_EMI_SHEET = 'logged EMI';
+const USERS_SHEET      = 'Users';
 
 // Column map for Data tab (0-based, column A = 0)
 const C = {
@@ -102,6 +103,14 @@ function doGet(e) {
     try {
       const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
       return jsonResponse({ok:true, pending:readAllPending(ss)});
+    } catch(err){ return jsonResponse({ok:false, error:err.message}); }
+  }
+
+  // ── Read users ──────────────────────────────────────────────────────
+  if (action === 'readUsers') {
+    try {
+      const ss  = SpreadsheetApp.openById(SPREADSHEET_ID);
+      return jsonResponse({ok:true, users:readAllUsers(ss)});
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
 
@@ -210,6 +219,32 @@ function doPost(e) {
         }
       }
       return jsonResponse({ok:false,error:'ID not found'});
+    }
+
+    // ── Add user ────────────────────────────────────────────────────────
+    if (payload.action === 'addUser') {
+      const { id, username, pin, name, role, perms } = payload;
+      const headers = ['ID','Username','PIN','Name','Role','loan','emi','allLoans','approvals'];
+      const sheet = ensureSheet(ss, USERS_SHEET, headers);
+      sheet.appendRow([id, username, pin, name, role,
+        perms.loan ? 'TRUE' : 'FALSE',
+        perms.emi ? 'TRUE' : 'FALSE',
+        perms.allLoans ? 'TRUE' : 'FALSE',
+        perms.approvals ? 'TRUE' : 'FALSE',
+      ]);
+      return jsonResponse({ok:true, users:readAllUsers(ss)});
+    }
+
+    // ── Remove user ─────────────────────────────────────────────────────
+    if (payload.action === 'removeUser') {
+      const { id } = payload;
+      const sheet = ss.getSheetByName(USERS_SHEET);
+      if (!sheet) return jsonResponse({ok:false, error:'Sheet not found'});
+      const vals = sheet.getDataRange().getValues();
+      for (let i=vals.length-1;i>=1;i--){
+        if (String(vals[i][0])===String(id)){ sheet.deleteRow(i+1); break; }
+      }
+      return jsonResponse({ok:true, users:readAllUsers(ss)});
     }
 
     // ── Approve ───────────────────────────────────────────────────────
@@ -459,6 +494,25 @@ function fmtDate(val) {
   if (val instanceof Date && !isNaN(val))
     return val.getDate()+'-'+M[val.getMonth()]+'-'+String(val.getFullYear()).slice(-2);
   return String(val).trim();
+}
+
+function readAllUsers(ss) {
+  const sheet = ss.getSheetByName(USERS_SHEET);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  const raw = sheet.getRange(2, 1, sheet.getLastRow()-1, 9).getValues();
+  return raw.filter(r => r[0] && String(r[0]).trim()).map(r => ({
+    id: String(r[0]).trim(),
+    username: String(r[1]).trim(),
+    pin: String(r[2]).trim(),
+    name: String(r[3]).trim(),
+    role: String(r[4]).trim(),
+    perms: {
+      loan:      String(r[5]).toUpperCase() === 'TRUE',
+      emi:       String(r[6]).toUpperCase() === 'TRUE',
+      allLoans:  String(r[7]).toUpperCase() === 'TRUE',
+      approvals: String(r[8]).toUpperCase() === 'TRUE',
+    },
+  }));
 }
 
 function jsonResponse(obj) {

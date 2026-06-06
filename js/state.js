@@ -7,11 +7,42 @@ const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbzFE_aDkwxYUsB47VPWJ
 //   To update the script code without changing the URL:
 //   Apps Script → Deploy → Manage deployments → Edit → New version → Deploy.
 
+const DEFAULT_USERS = [
+  { id: 'u1', username: 'AKS', pin: '0000', name: 'AKS (You)', role: 'admin', perms: { loan: true, emi: true, allLoans: true, approvals: true } },
+  { id: 'u2', username: 'agent1', pin: '1111', name: 'Agent One', role: 'agent', perms: { loan: true, emi: true, allLoans: false, approvals: false } },
+];
+
+function loadUsers() {
+  try {
+    const saved = localStorage.getItem('aks_users');
+    if (saved) { const u = JSON.parse(saved); if (Array.isArray(u) && u.length) return u; }
+  } catch(e) {}
+  return DEFAULT_USERS;
+}
+
+function saveUsers() {
+  localStorage.setItem('aks_users', JSON.stringify(S.users));
+}
+
+async function fetchUsersFromSheets() {
+  if (!S.sheetsUrl) return;
+  try {
+    const res  = await fetch(S.sheetsUrl + '?action=readUsers');
+    const data = await res.json();
+    if (data.ok && Array.isArray(data.users)) {
+      // Merge: keep the hardcoded admin (u1) as fallback, replace rest with sheet users
+      const sheetUsers = data.users.filter(u => u.id !== 'u1');
+      const adminUser  = DEFAULT_USERS.find(u => u.id === 'u1');
+      S.users = [adminUser, ...sheetUsers];
+      saveUsers();
+    }
+  } catch(e) {
+    console.warn('Could not fetch users from sheet, using local:', e.message);
+  }
+}
+
 const S = {
-  users: [
-    { id: 'u1', username: 'AKS', pin: '0000', name: 'AKS (You)', role: 'admin', perms: { loan: true, emi: true, allLoans: true, approvals: true } },
-    { id: 'u2', username: 'agent1', pin: '1111', name: 'Agent One', role: 'agent', perms: { loan: true, emi: true, allLoans: false, approvals: false } },
-  ],
+  users: loadUsers(),
   loans: [],    // approved loan records
   emis: [],     // approved EMI records
   pending: [],  // submissions awaiting approval

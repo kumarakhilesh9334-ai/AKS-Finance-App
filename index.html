@@ -4,15 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AKS Financing</title>
+<link rel="icon" href="LOGO.jpeg" sizes="any">
+<link rel="apple-touch-icon" href="LOGO.jpeg">
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
+<script>document.documentElement.className='s'</script>
+<style>.s #auth-screen{display:none!important}.s #app{display:block!important}</style>
+<script>(function(){try{if(!localStorage.getItem('aks_user'))document.documentElement.className=''}catch(e){document.documentElement.className=''}})()</script>
 
 <!-- ── AUTH SCREEN ─────────────────────────────────────────────────────── -->
 <div id="auth-screen">
   <div class="auth-card">
-    <h1>AKS Financing</h1>
-    <p style="font-size:13px;color:#888;margin-bottom:1.25rem">Sign in to continue</p>
+    <img src="LOGO.jpeg" alt="AKS Financing" style="width:100%;max-width:200px;display:block;margin:0 auto 1rem;border-radius:12px">
+    <p style="font-size:13px;color:#888;margin-bottom:1.25rem;text-align:center">Sign in to continue</p>
     <div style="margin-bottom:0.75rem"><label>Username</label><input id="l-user" type="text" placeholder="Username" autocomplete="off"></div>
     <div style="margin-bottom:1rem"><label>PIN</label><input id="l-pin" type="password" placeholder="PIN" maxlength="6"></div>
     <div id="l-err" class="alert al-e" style="display:none"></div>
@@ -24,6 +29,7 @@
 <!-- ── APP SHELL ───────────────────────────────────────────────────────── -->
 <div id="app" style="display:none">
   <div class="header">
+    <img src="LOGO.jpeg" alt="" style="height:28px;width:auto;border-radius:6px;margin-right:8px">
     <span class="header-title">AKS Financing</span>
     <div class="header-right">
       <span id="hdr-name"></span>
@@ -52,6 +58,7 @@
               <label>Aadhaar / PAN <span style="color:#A32D2D">*</span> <span style="font-size:11px;color:#888">— type to search existing customers</span></label>
               <input type="text" id="f-idnum" placeholder="Aadhaar or PAN" autocomplete="off" oninput="onIdNumInput();genLoanId()" required>
               <div id="idnum-dropdown" class="idnum-dd" style="display:none"></div>
+              <div id="customer-loans-panel" class="idnum-dd" style="display:none"></div>
             </div>
             <div><label>Customer name <span style="color:#A32D2D">*</span></label><input type="text" id="f-cname" placeholder="Full name" oninput="genLoanId()" required></div>
             <div><label>Mobile number <span style="color:#A32D2D">*</span></label><input type="text" id="f-phone" placeholder="10-digit" maxlength="10" required></div>
@@ -112,9 +119,6 @@
             <button class="btn btn-primary" onclick="submitLoan()">Submit for approval</button>
           </div>
         </div>
-
-        <!-- RIGHT: existing customer loans -->
-        <div id="customer-loans-panel" class="customer-loans-panel" style="display:none"></div>
       </div>
     </div>
 

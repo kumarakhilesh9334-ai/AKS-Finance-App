@@ -36,6 +36,7 @@ function doLogout() {
   S.cu = null;
   S.sheetLoans = [];
   S.pending = [];
+  document.documentElement.className = '';
   $('auth-screen').style.display = 'flex';
   $('app').style.display = 'none';
   $('l-user').value = '';
@@ -50,8 +51,9 @@ function defPage() {
   return 'my-subs';
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   $('l-pin').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  await fetchUsersFromSheets();
   const saved = localStorage.getItem('aks_user');
   if (saved) {
     const user = S.users.find(x => x.username === saved);

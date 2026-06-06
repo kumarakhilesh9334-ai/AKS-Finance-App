@@ -214,42 +214,37 @@ async function selectEmiLoan(loanId) {
     ${loan.guarantor ? `<span class="kv-l">Guarantor</span><span class="kv-v">${loan.guarantor}</span>` : ''}
   `;
 
-  // EMI slots
+  // EMI slots — tabular format
   const duration = loan.emiDuration || 0;
   const slots    = loan.slots || [];
-  let slotsHtml  = '';
   const today2 = new Date(); today2.setHours(0,0,0,0);
-  for (let i = 0; i < duration && i < 8; i++) {
-    const slot = slots[i] || { num:i+1, received:false, scheduledDate:'', receivedDate:'', misc:0, cashflow:0 };
-    // scheduledDate = calculated due date; receivedDate = actual date payment was made
-    const scheduledTxt = slot.scheduledDate ? fmtDisplayDate(slot.scheduledDate) : '—';
-    const receivedTxt  = slot.receivedDate  ? fmtDisplayDate(slot.receivedDate)  : '—';
-    if (slot.received) {
-      const extraTxt = slot.misc !== 0
-        ? ` <span style="color:${slot.misc>0?'#0F6E56':'#A32D2D'}">(${slot.misc>0?'+':''}${fmtAmt(slot.misc)})</span>`
-        : '';
-      const recdLabel = slot.receivedDate && slot.receivedDate !== '—' ? slot.receivedDate : '';
-      slotsHtml += `<div class="emi-slot">
-        <span>EMI ${i+1}</span>
-        <span style="color:#27500A">
-          ${fmtAmt(slot.cashflow)}${extraTxt}
-          ${recdLabel ? '· Recd: ' + fmtDisplayDate(recdLabel) : ''}
-          · Due: ${scheduledTxt}
-        </span>
-        <span class="badge b-approved">Received</span>
-      </div>`;
-    } else {
-      const isNext = i === loan.numReceivedEmi;
-      const isOvd  = slot.scheduledDate && new Date(slot.scheduledDate) < today2;
-      slotsHtml += `<div class="emi-slot">
-        <span>EMI ${i+1}</span>
-        <span style="color:${isOvd?'#A32D2D':'#888'}">Due: ${scheduledTxt}${isOvd?' ⚠':''}</span>
-        <span class="badge ${isNext?'b-pending':''}" style="${isNext?'':'color:#ccc;font-size:11px'}">${isNext?'Next due':'Pending'}</span>
-      </div>`;
+  if (duration > 0) {
+    let tableHtml = '<table class="emi-table"><thead><tr><th>EMI</th><th>Status</th><th>Due Date</th><th>Rcvd Date</th><th>Amount</th><th>Misc</th></tr></thead><tbody>';
+    for (let i = 0; i < duration && i < 8; i++) {
+      const slot = slots[i] || { num:i+1, received:false, scheduledDate:'', receivedDate:'', misc:0, cashflow:0 };
+      const scheduledTxt = slot.scheduledDate ? fmtDisplayDate(slot.scheduledDate) : '—';
+      const receivedTxt  = slot.receivedDate  ? fmtDisplayDate(slot.receivedDate)  : '—';
+      let statusHtml, rowClass = '';
+      if (slot.received) {
+        statusHtml = '<span class="badge b-approved">Received</span>';
+        rowClass = ' rcvd';
+      } else {
+        const isNext = i === loan.numReceivedEmi;
+        const isOvd  = slot.scheduledDate && new Date(slot.scheduledDate) < today2;
+        if (isNext) { statusHtml = '<span class="badge b-pending">Next due</span>'; rowClass = ' next'; }
+        else if (isOvd) { statusHtml = '<span style="color:#A32D2D;font-weight:500">⚠ Overdue</span>'; rowClass = ' ovd'; }
+        else { statusHtml = '<span style="color:#888">Pending</span>'; }
+      }
+      const miscTxt = slot.misc !== 0 ? fmtAmt(slot.misc) : '—';
+      tableHtml += `<tr class="emi-tr${rowClass}"><td>${i+1}</td><td>${statusHtml}</td><td>${scheduledTxt}</td><td>${receivedTxt}</td><td>${fmtAmt(slot.cashflow)}</td><td>${miscTxt}</td></tr>`;
     }
+    tableHtml += '</tbody></table>';
+    $('emi-slots').innerHTML = tableHtml;
+    $('emi-slots-wrap').style.display = 'block';
+  } else {
+    $('emi-slots').innerHTML = '';
+    $('emi-slots-wrap').style.display = 'none';
   }
-  $('emi-slots').innerHTML = slotsHtml;
-  $('emi-slots-wrap').style.display = duration > 0 ? 'block' : 'none';
 
   const nextNum = loan.numReceivedEmi + 1;
   // Expected to collect = monthlyEmi - extraEmiReceived
@@ -445,7 +440,7 @@ async function openCdDetail(loanId) {
 
   // All 87 columns — show every field, blank shown as '—'
   const D = (v) => v || '—';
-  const M = (v) => (v == null || v === '' || v === 0) ? '—' : '₹' + Number(v).toLocaleString('en-IN');
+  const M = (v) => (v == null || v === '') ? '—' : '₹' + Number(v).toLocaleString('en-IN');
   const Dt = (v) => v ? fmtDisplayDate(v) : '—';
   const Pct = (v) => v != null && v !== '' ? v + '%' : '—';
   const Bool = (v) => v === true ? 'Yes' : v === false ? 'No' : '—';
@@ -500,25 +495,39 @@ async function openCdDetail(loanId) {
     ['Defaulted',                    Bool(l.isDefaulted)],
     ['Default Comment',              D(l.defaultComment)],
     ['Final ROI',                    Pct(l.finalRoi)],
-    // EMI slots
-    ...( (l.slots||[]).flatMap((s,i) => [
-      ['EMI ' + (i+1) + ' Received',   Bool(s.received)],
-      ['EMI ' + (i+1) + ' Due Date',   s.scheduledDate ? fmtDisplayDate(s.scheduledDate) : '—'],
-      ['EMI ' + (i+1) + ' Rcvd Date',  s.receivedDate  ? fmtDisplayDate(s.receivedDate)  : '—'],
-      ['EMI ' + (i+1) + ' Misc',       s.misc  ? M(s.misc)  : '—'],
-      ['EMI ' + (i+1) + ' Cashflow',   s.cashflow ? M(s.cashflow) : '—'],
-    ])),
     ['AK Share of EMI',              M(l.akShareOfEmi)],
     ['AKS Share of EMI',             M(l.aksShareOfEmi)],
     ['Drive Link',                   l.driveLink ? '<a href="'+l.driveLink+'" target="_blank" style="color:#534AB7">Open ↗</a>' : '—'],
     ['Down Payment %',               D(l.downPaymentPct)],
   ];
 
+  // Build EMI slots table separately
+  let emiTableHtml = '';
+  const slots2 = l.slots || [];
+  if (slots2.length) {
+    emiTableHtml = '<div style="margin-top:0.75rem"><div style="font-size:12px;font-weight:600;color:#534AB7;margin-bottom:6px">EMI Schedule</div><table class="emi-table"><thead><tr><th>EMI</th><th>Received</th><th>Due Date</th><th>Rcvd Date</th><th>Misc</th><th>Cashflow</th></tr></thead><tbody>';
+    slots2.forEach((s,i) => {
+      emiTableHtml += `<tr class="emi-tr${s.received?' rcvd':''}"><td>${i+1}</td><td>${Bool(s.received)}</td><td>${s.scheduledDate?fmtDisplayDate(s.scheduledDate):'—'}</td><td>${s.receivedDate?fmtDisplayDate(s.receivedDate):'—'}</td><td>${s.misc?M(s.misc):'—'}</td><td>${s.cashflow?M(s.cashflow):'—'}</td></tr>`;
+    });
+    emiTableHtml += '</tbody></table></div>';
+  }
+
+  const HIDDEN_LABELS = new Set([
+    'Rate of Interest', 'App Lock Charge', 'AK Share', 'AKS Share',
+    'AK Amount', 'AK Paid to Kunal', 'AKS Amount', 'AKS Paid to Kunal',
+    'Remaining Principal', 'Remaining Interest', 'Received Principal', 'Received Interest',
+    'Late Payment Fine', 'Early Loan Closing Settlement', 'Extra EMI Received',
+    'Recovery Charge', 'Welcome Message Sent', 'Loan Closing Message Sent',
+    'Default Comment', 'Final ROI', 'AK Share of EMI', 'AKS Share of EMI',
+    'Drive Link', 'Down Payment %',
+  ]);
+
   $('cd-detail-loanid').textContent = l.loanId;
   $('cd-detail-sub').textContent    = l.customerName + (l.phone ? ' · ' + l.phone : '') + (l.model ? ' · ' + l.model : '');
-  $('cd-detail-kv').innerHTML = rows.map(([label, val]) =>
-    `<span class="kv-l">${label}</span><span class="kv-v">${val}</span>`
-  ).join('');
+  $('cd-detail-kv').innerHTML = rows
+    .filter(([label]) => !HIDDEN_LABELS.has(label))
+    .map(([label, val]) => `<span class="kv-l">${label}</span><span class="kv-v">${val}</span>`
+  ).join('') + emiTableHtml;
 
   const panel = $('cd-detail-panel');
   panel.style.display = 'block';
