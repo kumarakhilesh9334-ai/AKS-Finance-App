@@ -60,7 +60,7 @@ function refreshNav() { buildNav(); }
 // ── Mobile column switchers ───────────────────────────────────────────────
 function mobSwitchEmiCol(col) {
   // Show/hide columns
-  ['upcoming','overdue'].forEach(c => {
+  ['upcoming','overdue','partials'].forEach(c => {
     const wrap = $('emi-col-' + c);
     const tab  = $('mob-tab-' + c);
     if (!wrap || !tab) return;
@@ -69,10 +69,11 @@ function mobSwitchEmiCol(col) {
     tab.classList.toggle('active', active);
   });
   // Sync counts to mobile tab labels
-  const uc = $('col-upcoming-count'), oc = $('col-overdue-count');
-  const muc = $('mob-upcoming-count'), moc = $('mob-overdue-count');
-  if (uc && muc) muc.textContent = uc.textContent;
-  if (oc && moc) moc.textContent = oc.textContent;
+  ['upcoming','overdue','partials'].forEach(c => {
+    const colEl = $('col-' + c + '-count');
+    const mobEl = $('mob-' + c + '-count');
+    if (colEl && mobEl) mobEl.textContent = colEl.textContent;
+  });
 }
 
 function mobSwitchCdCol(col) {

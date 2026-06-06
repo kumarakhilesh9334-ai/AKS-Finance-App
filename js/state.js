@@ -46,6 +46,7 @@ const S = {
   loans: [],    // approved loan records
   emis: [],     // approved EMI records
   pending: [],  // submissions awaiting approval
+  approvedPartials: [], // approved partial payments
   cu: null,     // currently logged-in user
   page: null,   // current active page
   sheetsUrl: SHEETS_URL,

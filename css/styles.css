@@ -125,11 +125,12 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 .emi-late-pill{font-size:11px;background:#FAEEDA;color:#633806;border-radius:20px;padding:1px 8px}
 
 /* ── TWO-COLUMN EMI LAYOUT ────────────────────────────────────────────── */
-.emi-two-col{display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:0.75rem}
+.emi-two-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem;margin-bottom:0.75rem}
 .emi-col-wrap{background:#fff;border:0.5px solid #ddd;border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
 .emi-col-hd{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;font-size:12px;font-weight:600;letter-spacing:0.3px}
 .upcoming-hd{background:#E1F5EE;color:#085041}
 .overdue-hd{background:#FCEBEB;color:#791F1F}
+.partials-hd{background:#FFF0E6;color:#A32D2D}
 .closed-hd{background:#F1EFE8;color:#5F5E5A}
 .defaulted-hd{background:#FAEEDA;color:#633806}
 .emi-col-body{padding:8px;display:flex;flex-direction:column;gap:6px;overflow-y:auto;max-height:460px;flex:1}

@@ -7,13 +7,19 @@
 async function fetchPendingFromSheets() {
   if (!S.sheetsUrl) return;
   try {
-    const res  = await fetch(S.sheetsUrl + '?action=readPending');
-    const data = await res.json();
+    const [res, res2] = await Promise.all([
+      fetch(S.sheetsUrl + '?action=readPending'),
+      fetch(S.sheetsUrl + '?action=readApprovedPartials'),
+    ]);
+    const data  = await res.json();
+    const data2 = await res2.json();
     if (!data.ok) throw new Error(data.error);
     S.pending = data.pending;
+    if (data2.ok && Array.isArray(data2.partials)) S.approvedPartials = data2.partials;
     refreshNav();
     // Always re-render these pages when data arrives — regardless of current page
     renderApprovals($('appr-search') ? $('appr-search').value : '');
+    rerenderActiveTab();
   } catch(err) {
     console.warn('fetchPending error:', err.message);
     // Still re-render with whatever is in S.pending (may be empty)
@@ -71,29 +77,11 @@ async function approve(id) {
     const res = await fetch(S.sheetsUrl, { method:'POST', body: fd }).then(r => r.json());
     if (res.ok && res.pending) S.pending = res.pending;
     else await fetchPendingFromSheets();
+    await fetchApprovedPartials();
     refreshNav();
     renderApprovals($('appr-search') ? $('appr-search').value : '');
+    rerenderActiveTab();
     showAlert('Approved ✓');
-  } catch(err) {
-    showAlert('Sync failed: ' + err.message, 'w');
-  } finally { hideLoader(); }
-}
-
-// ── Reject ────────────────────────────────────────────────────────────────
-async function reject(id) {
-  const item = S.pending.find(p => p.id === id);
-  if (!item) return;
-  showAlert('Rejecting…', 'w');
-  showLoader();
-  try {
-    const fd = new FormData();
-    fd.append('payload', JSON.stringify({action:'rejectPending', id, type:item.type, data:item.data}));
-    const res = await fetch(S.sheetsUrl, { method:'POST', body: fd }).then(r => r.json());
-    if (res.ok && res.pending) S.pending = res.pending;
-    else await fetchPendingFromSheets();
-    refreshNav();
-    renderApprovals($('appr-search') ? $('appr-search').value : '');
-    showAlert('Entry rejected.', 'e');
   } catch(err) {
     showAlert('Sync failed: ' + err.message, 'w');
   } finally { hideLoader(); }
@@ -112,8 +100,10 @@ async function reject(id) {
     const res = await fetch(S.sheetsUrl, { method:'POST', body: fd }).then(r => r.json());
     if (res.ok && res.pending) S.pending = res.pending;
     else await fetchPendingFromSheets();
+    await fetchApprovedPartials();
     refreshNav();
-    renderApprovals();
+    renderApprovals($('appr-search') ? $('appr-search').value : '');
+    rerenderActiveTab();
     showAlert('Entry rejected.', 'e');
   } catch(err) {
     showAlert('Sync failed: ' + err.message, 'w');
@@ -225,8 +215,10 @@ async function saveEdit() {
       if (res.ok && res.pending) S.pending = res.pending;
       else await fetchPendingFromSheets();
     }
+    await fetchApprovedPartials();
     refreshNav();
     renderApprovals($('appr-search') ? $('appr-search').value : '');
+    rerenderActiveTab();
     showAlert('Entry updated.');
   } finally { hideLoader(); }
 }

@@ -106,6 +106,24 @@ function doGet(e) {
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
 
+  // ── Read approved partials (for partial payments) ──────────────────
+  if (action === 'readApprovedPartials') {
+    try {
+      const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+      const sheet = ss.getSheetByName(UNAPP_EMI_SHEET);
+      if (!sheet || sheet.getLastRow() < 2) return jsonResponse({ok:true, partials:[]});
+      const rows = sheet.getDataRange().getValues();
+      const partials = rows.slice(1)
+        .filter(r => String(r[1]).toLowerCase()==='approved' && String(r[16]||'').toLowerCase()==='partial payment')
+        .map(r => ({
+          id: String(r[0]), loanId: String(r[5]||'').replace(/_\d+$/,''),
+          customerName: r[6], emiNum: r[9], emiDate: r[10],
+          receivedDate: r[13], amount: parseFloat(r[15])||0,
+        }));
+      return jsonResponse({ok:true, partials});
+    } catch(err){ return jsonResponse({ok:false, error:err.message}); }
+  }
+
   // ── Read users ──────────────────────────────────────────────────────
   if (action === 'readUsers') {
     try {
@@ -164,19 +182,31 @@ function doPost(e) {
       // EMI_ID = LoanID_EMINumber  e.g. Roshan0070/1_5
       const emiId = (d.loanId||'') + '_' + (d.emiNum||'');
 
-      // Find row number of loan in master Data sheet
-      let rowNumber = '';
+      // Find row number of loan in master Data sheet and get EMI start date
+      let rowNumber = '', emiStartDate = '';
       const ds = ss.getSheetByName(DATA_SHEET);
       if (ds && ds.getLastRow() > 1) {
         const ids = ds.getRange(2, C.loanId+1, ds.getLastRow()-1, 1).getValues();
         for (let i=0;i<ids.length;i++){
           if (String(ids[i][0]).trim()===String(d.loanId||'').trim()){ rowNumber=i+2; break; }
         }
+        if (rowNumber) {
+          const row = ds.getRange(rowNumber, 1, 1, ds.getLastColumn()).getValues()[0];
+          emiStartDate = row[C.emiStartDate];
+        }
       }
 
       // Format dates as DD-Mon-YY
       const receivedDateFmt = fmtDateFromYMD(d.date||'');
-      const emiDateFmt      = fmtDate(parseFlexDate(d.scheduledDate||d.date||''));
+      // Use frontend scheduledDate if provided, otherwise compute from Data sheet
+      let emiDateFmt = d.scheduledDate ? fmtDate(parseFlexDate(d.scheduledDate)) : '';
+      if (!emiDateFmt && emiStartDate && d.emiNum) {
+        const sd = new Date(emiStartDate);
+        if (!isNaN(sd)) {
+          sd.setMonth(sd.getMonth() + (d.emiNum - 1));
+          emiDateFmt = fmtDate(sd);
+        }
+      }
 
       const misc     = (d.amount||0) - (d.expectedAmount||0);
       const received = d.received !== false; // default TRUE
@@ -253,9 +283,45 @@ function doPost(e) {
       const sheetName = type==='loan' ? UNAPP_LOAN_SHEET : UNAPP_EMI_SHEET;
       const row = readRowById(ss, sheetName, id);
       if (!row) return jsonResponse({ok:false, error:'Row not found'});
-      if (type==='loan') appendToInput(ss, row);
-      else               appendToLoggedEmi(ss, row);
-      deleteFromSheet(ss, sheetName, id);
+      if (type==='loan') {
+        appendToInput(ss, row);
+        deleteFromSheet(ss, sheetName, id);
+      } else {
+        // Partial payment: approve in-place (stay in unapproved sheet)
+        const miscType = String(row[16] || '').toLowerCase();
+        const rowStatus = String(row[1] || '').toLowerCase();
+        if (miscType === 'partial payment' && rowStatus === 'pending') {
+          const sheet = ss.getSheetByName(UNAPP_EMI_SHEET);
+          const data = sheet.getDataRange().getValues();
+          for (let i=1;i<data.length;i++) {
+            if (String(data[i][0])===String(id)) { sheet.getRange(i+1,2).setValue('approved'); break; }
+          }
+        } else {
+          appendToLoggedEmi(ss, row);
+          deleteFromSheet(ss, sheetName, id);
+        }
+      }
+      return jsonResponse({ok:true, pending:readAllPending(ss)});
+    }
+    // ── Update remaining partial payment ──────────────────────────────
+    if (payload.action === 'updateRemainingEmi') {
+      const { id, additionalAmount, newDate } = payload;
+      const sheet = ss.getSheetByName(UNAPP_EMI_SHEET);
+      if (!sheet) return jsonResponse({ok:false, error:'Sheet not found'});
+      const data = sheet.getDataRange().getValues();
+      for (let i=1;i<data.length;i++) {
+        if (String(data[i][0])===String(id)) {
+          const currentCashflow = parseFloat(data[i][15]) || 0;
+          const newCashflow = currentCashflow + (parseFloat(additionalAmount) || 0);
+          const dateFmt = fmtDateFromYMD(newDate || '');
+          sheet.getRange(i+1, 2).setValue('pending');   // Status
+          sheet.getRange(i+1, 14).setValue(dateFmt);     // Received_date
+          sheet.getRange(i+1, 15).setValue(0);            // Reset MISC to 0
+          sheet.getRange(i+1, 16).setValue(newCashflow);  // Cashflow
+          sheet.getRange(i+1, 17).setValue('');            // Clear miscType
+          break;
+        }
+      }
       return jsonResponse({ok:true, pending:readAllPending(ss)});
     }
 

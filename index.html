@@ -132,7 +132,7 @@
       <div class="emi-fetch-status" id="emi-fetch-status"></div>
       <div class="emi-search-wrap">
         <span class="emi-search-icon">🔍</span>
-        <input type="text" id="emi-search" placeholder="Search Loan ID or customer — results appear in both columns…" oninput="renderEmiColumns(this.value)">
+        <input type="text" id="emi-search" placeholder="Search Loan ID or customer…" oninput="renderEmiColumns(this.value)">
       </div>
       <!-- Mobile: tab switcher -->
       <div class="mob-col-tabs">
@@ -141,6 +141,9 @@
         </button>
         <button class="mob-col-tab" id="mob-tab-overdue" onclick="mobSwitchEmiCol('overdue')">
           🔴 Overdue <span id="mob-overdue-count" class="emi-section-count">0</span>
+        </button>
+        <button class="mob-col-tab" id="mob-tab-partials" onclick="mobSwitchEmiCol('partials')">
+          📋 Partials <span id="mob-partials-count" class="emi-section-count">0</span>
         </button>
       </div>
       <div class="emi-two-col">
@@ -151,6 +154,10 @@
         <div class="emi-col-wrap" id="emi-col-overdue">
           <div class="emi-col-hd overdue-hd"><span>🔴 Overdue</span><span class="emi-section-count" id="col-overdue-count">0</span></div>
           <div class="emi-col-body" id="col-overdue-list"><div class="emi-col-empty">Loading…</div></div>
+        </div>
+        <div class="emi-col-wrap" id="emi-col-partials">
+          <div class="emi-col-hd partials-hd"><span>📋 Partial Payments</span><span class="emi-section-count" id="col-partials-count">0</span></div>
+          <div class="emi-col-body" id="col-partials-list"><div class="emi-col-empty">No partial payments</div></div>
         </div>
       </div>
       <div class="card" id="emi-detail" style="display:none;margin-top:0.75rem">
@@ -163,14 +170,15 @@
         </div>
         <div class="divider" style="margin-bottom:0.75rem"></div>
         <div class="kv" id="emi-kv" style="margin-bottom:0.75rem"></div>
-        <div id="emi-slots-wrap">
+          <div id="emi-slots-wrap">
+            <div class="divider"></div>
+            <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:6px">EMI history</div>
+            <div id="emi-slots"></div>
+          </div>
+          <div id="emi-partial-banner"></div>
           <div class="divider"></div>
-          <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:6px">EMI history</div>
-          <div id="emi-slots"></div>
-        </div>
-        <div class="divider"></div>
-        <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px" id="emi-next-label"></div>
-        <div class="fg fg-2">
+          <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px" id="emi-next-label"></div>
+          <div class="fg fg-2">
           <div><label>Amount received (₹)</label><input type="number" id="emi-amt" placeholder="0" oninput="checkEmiDiff()"></div>
           <div><label>Payment date</label><input type="date" id="emi-date"></div>
           <div><label>Received</label>

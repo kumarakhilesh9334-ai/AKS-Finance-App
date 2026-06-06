@@ -39,18 +39,22 @@ function populateEmiSelect() {
   $('emi-search').value = '';
   $('emi-detail').style.display = 'none';
   S.selectedEmiLoanId = null;
+  // Fire partials fetch in background
+  fetchApprovedPartials();
   // Show loading state immediately; fetchLoansFromSheets will re-render when done
   if (!S.sheetLoans || !S.sheetLoans.length) {
     $('col-upcoming-list').innerHTML = '<div class="emi-col-empty" style="color:#534AB7">Loading loans…</div>';
     $('col-overdue-list').innerHTML  = '<div class="emi-col-empty" style="color:#534AB7">Loading loans…</div>';
+    $('col-partials-list').innerHTML = '<div class="emi-col-empty" style="color:#534AB7">Loading…</div>';
     $('col-upcoming-count').textContent = '…';
     $('col-overdue-count').textContent  = '…';
+    $('col-partials-count').textContent = '…';
   } else {
     renderEmiColumns('');
   }
 }
 
-// ── Two-column renderer ───────────────────────────────────────────────────
+// ── Three-column renderer ─────────────────────────────────────────────────
 function renderEmiColumns(query) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const q = (query || '').toLowerCase();
@@ -93,15 +97,25 @@ function renderEmiColumns(query) {
     return diff !== 0 ? diff : a.loanId.localeCompare(b.loanId);
   });
 
+  // Partial payments column
+  const partials = S.approvedPartials.filter(p => {
+    if (!q) return true;
+    return p.loanId.toLowerCase().includes(q) || (p.customerName||'').toLowerCase().includes(q);
+  });
+
   $('col-upcoming-count').textContent = upcoming.length;
   $('col-overdue-count').textContent  = overdue.length;
+  $('col-partials-count').textContent = partials.length;
   // Sync mobile tab badges
-  const muc = $('mob-upcoming-count'), moc = $('mob-overdue-count');
-  if (muc) muc.textContent = upcoming.length;
-  if (moc) moc.textContent = overdue.length;
+  ['upcoming','overdue','partials'].forEach(c => {
+    const colEl = $('col-' + c + '-count');
+    const mobEl = $('mob-' + c + '-count');
+    if (colEl && mobEl) mobEl.textContent = colEl.textContent;
+  });
   const noDataMsg = (!S.sheetLoans || !S.sheetLoans.length) ? '<div class="emi-col-empty">Fetching from Sheets…</div>' : '';
   $('col-upcoming-list').innerHTML = upcoming.length ? upcoming.map(l => emiCard(l, 'upcoming')).join('') : (noDataMsg || '<div class="emi-col-empty">No upcoming EMIs</div>');
   $('col-overdue-list').innerHTML  = overdue.length  ? overdue.map(l  => emiCard(l, 'overdue')).join('')  : (noDataMsg || '<div class="emi-col-empty">All clear ✓</div>');
+  $('col-partials-list').innerHTML = partials.length ? partials.map(p => partialCard(p)).join('') : '<div class="emi-col-empty">No partial payments</div>';
 }
 
 function emiCard(l, type) {
@@ -148,6 +162,22 @@ function emiCard(l, type) {
       ${l.model ? `<span class="emi-model-pill" style="${pillStyle}">${l.model}</span>` : ''}
       ${lateTxt ? `<span class="emi-late-pill" style="${pillStyle}">&#9888; ${lateTxt}</span>` : ''}
     </div>
+  </div>`;
+}
+
+function partialCard(p) {
+  const dateStr = p.receivedDate ? fmtDisplayDate(p.receivedDate) : '—';
+  return `<div class="emi-card" data-loanid="${p.loanId}" style="border-left:3px solid #A32D2D">
+    <div class="emi-card-top">
+      <span class="emi-card-id">${p.loanId}</span>
+      <span class="badge b-pending" style="font-size:10px">Partial</span>
+    </div>
+    <div class="emi-card-name">${p.customerName}</div>
+    <div class="emi-card-meta" style="margin-top:4px">
+      <span class="emi-amt-pill" style="background:#FFF0E6;color:#A32D2D">${fmtAmt(p.amount)}</span>
+      <span style="font-size:11px;color:#888">${dateStr}</span>
+    </div>
+    <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();logRemainingPartial('${p.id}', ${p.amount})" style="margin-top:6px;width:100%;font-size:11px;padding:4px 0">Log remaining</button>
   </div>`;
 }
 
@@ -246,6 +276,27 @@ async function selectEmiLoan(loanId) {
     $('emi-slots-wrap').style.display = 'none';
   }
 
+  // Show approved partial payment banner if any exist for this loan
+  const bannerEl = $('emi-partial-banner');
+  if (bannerEl) {
+    const partialItems = S.approvedPartials.filter(p => p.loanId === loanId);
+    if (partialItems.length) {
+      let h = '<div class="divider"></div><div style="font-size:12px;font-weight:500;color:#A32D2D;margin-bottom:6px">Approved Partial Payments</div>';
+      partialItems.forEach(p => {
+        const dateStr = p.receivedDate ? fmtDisplayDate(p.receivedDate) : '—';
+        h += `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;margin:6px 0;background:#fff5f5;border-radius:8px;border:0.5px solid #e8c8c8">
+          <div>
+            <div style="font-size:13px;font-weight:500">EMI ${p.emiNum} · ${fmtAmt(p.amount)} received</div>
+            <div style="font-size:11px;color:#888">Received on: ${dateStr}</div>
+          </div>
+        </div>`;
+      });
+      bannerEl.innerHTML = h;
+    } else {
+      bannerEl.innerHTML = '';
+    }
+  }
+
   const nextNum = loan.numReceivedEmi + 1;
   // Expected to collect = monthlyEmi - extraEmiReceived
   const extraReceived = loan.extraEmiReceived || 0;
@@ -276,15 +327,14 @@ function checkEmiDiff() {
   const loanId = S.selectedEmiLoanId; if (!loanId) return;
   const loan = (S.sheetLoans && S.sheetLoans.find(l => l.loanId === loanId)) || S.loans.find(l => l.loanId === loanId);
   if (!loan) return;
-  const extraRcvd = loan.extraEmiReceived || 0;
-  const expected  = Math.max(0, (loan.monthlyEmi || loan?.data?.monthlyEmi || 0) - extraRcvd);
-  const got      = parseFloat($('emi-amt').value) || 0;
+  const stdEmi  = loan.monthlyEmi || loan?.data?.monthlyEmi || 0;
+  const got     = parseFloat($('emi-amt').value) || 0;
   if (!got) return;
-  const diff = got - expected;
+  const diff = got - stdEmi;
   if (Math.abs(diff) > 1) {
     $('emi-reason-wrap').style.display = 'block';
     $('emi-diff-warn').style.display   = 'block';
-    $('emi-diff-msg').textContent = `Differs from expected ${fmtAmt(expected)} by ${diff>0?'+':''}${fmtAmt(Math.abs(diff))}. Please select a reason.`;
+    $('emi-diff-msg').textContent = `Differs from standard EMI ${fmtAmt(stdEmi)} by ${diff>0?'+':''}${fmtAmt(Math.abs(diff))}. Please select a reason.`;
   } else {
     $('emi-reason-wrap').style.display = 'none';
     $('emi-diff-warn').style.display   = 'none';
@@ -302,8 +352,9 @@ async function submitEmi() {
   const date = v('emi-date');
   if (!amt || !date) { showAlert('Please enter amount and payment date.', 'e'); return; }
   const extraRcv = (sheetLoan ? sheetLoan.extraEmiReceived : 0) || 0;
-  const expected = Math.max(0, (sheetLoan ? sheetLoan.monthlyEmi : inAppLoan.data.monthlyEmi) - extraRcv);
-  if (Math.abs(amt - expected) > 1 && !v('emi-reason')) { showAlert('Please select a reason for the amount difference.', 'e'); return; }
+  const stdEmi   = sheetLoan ? sheetLoan.monthlyEmi : inAppLoan.data.monthlyEmi;
+  const expected = Math.max(0, stdEmi - extraRcv);
+  if (Math.abs(amt - stdEmi) > 1 && !v('emi-reason')) { showAlert('Please select a reason for the amount difference.', 'e'); return; }
   const numReceived = sheetLoan ? sheetLoan.numReceivedEmi : inAppLoan.emis.length;
   // Compute scheduled due date for this EMI number
   const emiNum       = numReceived + 1;
@@ -352,6 +403,39 @@ async function submitEmi() {
   S.selectedEmiLoanId = null;
   document.querySelectorAll('.emi-card').forEach(r => r.classList.remove('selected'));
   if ($('emi-received')) $('emi-received').value = 'true';
+}
+
+// ── Fetch approved partial payments ──────────────────────────────────────
+async function fetchApprovedPartials() {
+  if (!S.sheetsUrl) return;
+  try {
+    const res  = await fetch(S.sheetsUrl + '?action=readApprovedPartials');
+    const data = await res.json();
+    if (data.ok && Array.isArray(data.partials)) {
+      S.approvedPartials = data.partials;
+      rerenderActiveTab();
+    }
+  } catch(e) { console.warn('fetchApprovedPartials error:', e.message); }
+}
+
+// ── Log remaining payment for an approved partial ─────────────────────────
+async function logRemainingPartial(id, currentAmount) {
+  const additional = prompt('Enter remaining amount (₹):');
+  if (!additional) return;
+  const newDate = prompt('Enter new receiving date (YYYY-MM-DD):', new Date().toISOString().split('T')[0]);
+  if (!newDate) return;
+  showAlert('Updating…', 'w');
+  showLoader();
+  try {
+    const res = await gasPost({action:'updateRemainingEmi', id, additionalAmount: parseFloat(additional), newDate});
+    if (res.ok && res.pending) S.pending = res.pending;
+    else await fetchPendingFromSheets();
+    await fetchApprovedPartials();
+    refreshNav();
+    rerenderActiveTab();
+    renderApprovals($('appr-search') ? $('appr-search').value : '');
+    showAlert('Remaining payment submitted for approval.');
+  } finally { hideLoader(); }
 }
 
 // ── Closed & Defaulted tab (admin only) ───────────────────────────────────
