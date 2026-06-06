@@ -68,7 +68,7 @@ function showAlert(msg, type = 's') {
 }
 
 function nextPid() {
-  return 'P' + (++pid);
+  return 'P' + Date.now() + '_' + (++pid);
 }
 
 function showLoader() {

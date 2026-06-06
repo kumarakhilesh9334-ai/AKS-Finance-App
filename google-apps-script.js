@@ -395,8 +395,8 @@ function readUnapproved(ss, sheetName, type) {
         const emiIdRaw = String(r[5]||'');
         data = {
           loanId: emiIdRaw.replace(/_\d+$/, ''), customerName:r[6], model:r[7], emiStartDate:fmtDate(r[8]), emiNum:r[9],
-          date:fmtDate(r[10]),rowNumber:r[11],received:r[12],
-          receivedDate:fmtDate(r[13]),misc:misc,miscType:r[16],
+          date:fmtDate(r[13]),rowNumber:r[11],received:r[12],
+          scheduledDate:fmtDate(r[10]),misc:misc,miscType:r[16],
           amount:cashflow,expectedAmount:cashflow - misc,
         };
       }

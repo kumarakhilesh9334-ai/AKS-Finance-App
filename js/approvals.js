@@ -65,8 +65,8 @@ function renderApprovals(q) {
 }
 
 // ── Approve ───────────────────────────────────────────────────────────────
-async function approve(id) {
-  const item = S.pending.find(p => p.id === id);
+async function approve(id, type) {
+  const item = S.pending.find(p => p.id === id && (!type || p.type === type));
   if (!item) return;
 
   showAlert('Approving…', 'w');
@@ -88,9 +88,9 @@ async function approve(id) {
 }
 
 // ── Reject ────────────────────────────────────────────────────────────────
-async function reject(id) {
+async function reject(id, type) {
   const note = prompt('Reason for rejection (optional):') || '';
-  const item = S.pending.find(p => p.id === id);
+  const item = S.pending.find(p => p.id === id && (!type || p.type === type));
   if (!item) return;
   showAlert('Rejecting…', 'w');
   showLoader();
@@ -111,10 +111,11 @@ async function reject(id) {
 }
 
 // ── Edit ──────────────────────────────────────────────────────────────────
-function editSubmission(id) {
-  const item = S.pending.find(p => p.id === id);
+function editSubmission(id, type) {
+  const item = S.pending.find(p => p.id === id && (!type || p.type === type));
   if (!item) return;
   S.editingId = id;
+  S.editingType = type || item.type;
   populateEditModal(item);
   $('edit-modal').style.display = 'flex';
 }
@@ -167,7 +168,8 @@ function editField(label, id, value, type='text') {
 
 async function saveEdit() {
   const id   = S.editingId;
-  const item = S.pending.find(p => p.id === id);
+  const type = S.editingType;
+  const item = S.pending.find(p => p.id === id && (!type || p.type === type));
   if (!item) return;
   const d = item.data;
 
@@ -226,6 +228,7 @@ async function saveEdit() {
 function closeEditModal() {
   $('edit-modal').style.display = 'none';
   S.editingId = null;
+  S.editingType = null;
 }
 
 // ── Submission card ───────────────────────────────────────────────────────
@@ -272,9 +275,9 @@ function subCard(p, showActions) {
 
   const actions = showActions && p.status === 'pending'
     ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:0.75rem;padding-top:0.75rem;border-top:0.5px solid #eee">
-        <button class="btn btn-success btn-sm" onclick="approve('${p.id}')">✓ Approve</button>
-        <button class="btn btn-sm" style="color:#534AB7;border-color:#534AB7" onclick="editSubmission('${p.id}')">✎ Edit</button>
-        <button class="btn btn-danger btn-sm"  onclick="reject('${p.id}')">✗ Reject</button>
+        <button class="btn btn-success btn-sm" onclick="approve('${p.id}','${p.type}')">✓ Approve</button>
+        <button class="btn btn-sm" style="color:#534AB7;border-color:#534AB7" onclick="editSubmission('${p.id}','${p.type}')">✎ Edit</button>
+        <button class="btn btn-danger btn-sm"  onclick="reject('${p.id}','${p.type}')">✗ Reject</button>
        </div>`
     : p.note ? `<div style="font-size:12px;color:#A32D2D;margin-top:0.5rem">Rejection note: ${p.note}</div>` : '';
 
