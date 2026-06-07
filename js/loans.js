@@ -222,6 +222,14 @@ async function submitLoan() {
   if (emiStart && ![5,10,15,20,25].includes(parseInt(emiStart.split('-')[2]))) {
     showAlert('EMI start date must be on 5, 10, 15, 20 or 25.','e'); return;
   }
+  const bd = new Date(billDate + 'T00:00:00');
+  const es = new Date(emiStart + 'T00:00:00');
+  const diffDays = Math.round((es - bd) / (1000*60*60*24));
+  if (diffDays < 20) {
+    if (!confirm('EMI starting in just ' + diffDays + ' day' + (diffDays===1?'':'s') + ' from bill date.\nPlease verify bill date and EMI start date are correct.\n\nSubmit anyway?')) return;
+  } else if (diffDays > 40) {
+    if (!confirm('EMI starting in ' + diffDays + ' days from bill date (>40 days gap).\nPlease verify bill date and EMI start date are correct.\n\nSubmit anyway?')) return;
+  }
   const last4 = idnum.replace(/\s/g,'').slice(-4);
   const base  = cname.split(' ')[0] + last4;
   const existing =

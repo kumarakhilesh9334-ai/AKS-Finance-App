@@ -6,6 +6,7 @@ const TAB_ICONS = {
   'emi':             { icon: '💰', label: 'Log EMI' },
   'approvals':       { icon: '✅', label: 'Approvals' },
   'all-loans':       { icon: '📊', label: 'All Loans' },
+  'my-subs':         { icon: '📝', label: 'My Subs' },
   'users':           { icon: '👥', label: 'Users' },
 };
 
@@ -15,6 +16,9 @@ function buildNav() {
   let tabs = [];
   if (u.perms.loan)      tabs.push({ id: 'new-loan',   label: 'New loan' });
   if (u.perms.emi)       tabs.push({ id: 'emi',         label: 'Log EMI' });
+  const myCount = S.pending.filter(x => x.status === 'pending' && x.submittedBy === u.id).length;
+  if (u.role === 'admin' || u.perms.loan || u.perms.emi)
+    tabs.push({ id: 'my-subs', label: 'My Subs', badge: myCount||null });
   if (u.role === 'admin' || u.perms.approvals) tabs.push({ id: 'approvals', label: 'Approvals', badge: pc });
   if (u.role === 'admin' || u.perms.allLoans)  tabs.push({ id: 'all-loans', label: 'All Loans' });
   if (u.role === 'admin') tabs.push({ id: 'users', label: 'Users' });
@@ -52,6 +56,7 @@ function goTo(pg) {
   if (pg === 'emi')       { populateEmiSelect(); mobSwitchEmiCol('upcoming'); }
   if (pg === 'approvals') { renderApprovals($('appr-search') ? $('appr-search').value : ''); mobSwitchApprCol('loan'); }
   if (pg === 'all-loans') { renderClosedDefaulted(''); mobSwitchCdCol('running'); }
+  if (pg === 'my-subs')   renderMySubs();
   if (pg === 'users')     renderUsers();
 }
 

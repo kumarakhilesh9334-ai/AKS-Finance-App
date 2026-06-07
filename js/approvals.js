@@ -69,19 +69,50 @@ async function approve(id, type) {
   const item = S.pending.find(p => p.id === id && (!type || p.type === type));
   if (!item) return;
 
+  const d = item.data;
+  if (item.type === 'loan') {
+    const bd = parseDDMonYY(d.billDate);
+    const es = parseDDMonYY(d.emiStart);
+    if (bd && es) {
+      const diff = Math.round((es - bd) / (1000*60*60*24));
+      if (diff < 20) {
+        if (!confirm('EMI starting in just ' + diff + ' day' + (diff===1?'':'s') + ' from bill date.\nPlease verify bill date and EMI start date are correct.\n\nApprove anyway?')) return;
+      } else if (diff > 40) {
+        if (!confirm('EMI starting in ' + diff + ' days from bill date (>40 days gap).\nPlease verify bill date and EMI start date are correct.\n\nApprove anyway?')) return;
+      }
+    }
+  } else {
+    if (d.scheduledDate) {
+      const sd = parseDDMonYY(d.scheduledDate);
+      if (sd) {
+        const today = new Date(); today.setHours(0,0,0,0);
+        const diff = Math.round((sd - today) / (1000*60*60*24));
+        if (diff > 10) {
+          if (!confirm('Scheduled date for EMI ' + d.emiNum + ' is ' + diff + ' days from now. Approve anyway?')) return;
+        }
+      }
+    }
+  }
+
   showAlert('Approving…', 'w');
   showLoader();
   try {
     const fd = new FormData();
     fd.append('payload', JSON.stringify({action:'approvePending', id, type:item.type, data:item.data}));
     const res = await fetch(S.sheetsUrl, { method:'POST', body: fd }).then(r => r.json());
-    if (res.ok && res.pending) S.pending = res.pending;
+    if (!res.ok) {
+      if (res.error === 'duplicate_emi') {
+        showAlert('This EMI already exists in the logged EMI sheet!', 'e');
+      } else {
+        await fetchPendingFromSheets();
+      }
+    } else if (res.pending) S.pending = res.pending;
     else await fetchPendingFromSheets();
     await fetchApprovedPartials();
     refreshNav();
     renderApprovals($('appr-search') ? $('appr-search').value : '');
     rerenderActiveTab();
-    showAlert('Approved ✓');
+    if (res.ok) showAlert('Approved ✓');
   } catch(err) {
     showAlert('Sync failed: ' + err.message, 'w');
   } finally { hideLoader(); }
@@ -252,6 +283,7 @@ function subCard(p, showActions) {
       <span class="kv-l">Processing fee</span><span class="kv-v">${fmt(d.processingFee)}</span>
       <span class="kv-l">Interest</span>     <span class="kv-v">${fmt(d.interest)}</span>
       <span class="kv-l">EMI duration</span> <span class="kv-v">${d.tenure} months</span>
+      <span class="kv-l">Monthly EMI</span>  <span class="kv-v">${fmt((d.price - d.downPayment + d.processingFee + d.interest) / (d.tenure||1))}</span>
       <span class="kv-l">EMI start</span>    <span class="kv-v">${fmtDateDD(d.emiStart)}</span>
       <span class="kv-l">App lock</span>     <span class="kv-v">${fmt(d.appLockCharge)}</span>
       <span class="kv-l">AK share</span>     <span class="kv-v">${d.akShare}%</span>
@@ -260,25 +292,31 @@ function subCard(p, showActions) {
     </div>`;
   } else {
     const d = p.data, diff = d.amount - d.expectedAmount;
+    const loan = S.sheetLoans?.find(l => l.loanId === d.loanId);
+    const extraRcv = loan ? (loan.extraEmiReceived||0) : 0;
+    const adjExpected = Math.max(0, d.expectedAmount - extraRcv);
     detail = `<div class="kv">
       <span class="kv-l">Loan ID</span>     <span class="kv-v" style="color:#534AB7">${d.loanId}</span>
       <span class="kv-l">Customer</span>    <span class="kv-v">${d.customerName}</span>
       <span class="kv-l">Model</span>       <span class="kv-v">${d.model}</span>
       <span class="kv-l">EMI number</span>  <span class="kv-v">EMI ${d.emiNum}</span>
       <span class="kv-l">EMI start</span>   <span class="kv-v">${fmtDateDD(d.emiStartDate)}</span>
-      <span class="kv-l">Expected</span>    <span class="kv-v">${fmt(d.expectedAmount)}</span>
-      <span class="kv-l">Received</span>    <span class="kv-v">${fmt(d.amount)}${Math.abs(diff)>1?` (${diff>0?'+':''}${fmt(Math.abs(diff))})`:''}</span>
+      <span class="kv-l">Std EMI</span>    <span class="kv-v">${fmt(d.expectedAmount)}</span>
+      ${adjExpected!==d.expectedAmount?`<span class="kv-l">Expected</span><span class="kv-v">${fmt(adjExpected)}</span>`:''}
+      <span class="kv-l">Received</span>    <span class="kv-v">${fmt(d.amount)}${Math.abs(diff)>1?` (${diff>0?'+':'–'}${fmt(Math.abs(diff))})`:''}</span>
       ${d.miscType?`<span class="kv-l">Reason</span><span class="kv-v">${d.miscType}</span>`:''}
       <span class="kv-l">Payment date</span><span class="kv-v">${fmtDateDD(d.date)}</span>
     </div>`;
   }
 
-  const actions = showActions && p.status === 'pending'
-    ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:0.75rem;padding-top:0.75rem;border-top:0.5px solid #eee">
-        <button class="btn btn-success btn-sm" onclick="approve('${p.id}','${p.type}')">✓ Approve</button>
-        <button class="btn btn-sm" style="color:#534AB7;border-color:#534AB7" onclick="editSubmission('${p.id}','${p.type}')">✎ Edit</button>
-        <button class="btn btn-danger btn-sm"  onclick="reject('${p.id}','${p.type}')">✗ Reject</button>
-       </div>`
+  const btns = {
+    approve: '<button class="btn btn-success btn-sm" onclick="approve(\''+p.id+'\',\''+p.type+'\')">✓ Approve</button>',
+    edit: '<button class="btn btn-sm" style="color:#534AB7;border-color:#534AB7" onclick="editSubmission(\''+p.id+'\',\''+p.type+'\')">✎ Edit</button>',
+    reject: '<button class="btn btn-danger btn-sm"  onclick="reject(\''+p.id+'\',\''+p.type+'\')">✗ Reject</button>',
+  };
+  const actionList = showActions === true ? ['approve','edit','reject'] : (Array.isArray(showActions) ? showActions : []);
+  const actionsHtml = actionList.length && p.status === 'pending'
+    ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:0.75rem;padding-top:0.75rem;border-top:0.5px solid #eee">${actionList.map(a => btns[a]||'').join('')}</div>`
     : p.note ? `<div style="font-size:12px;color:#A32D2D;margin-top:0.5rem">Rejection note: ${p.note}</div>` : '';
 
   return `<div class="card">
@@ -290,7 +328,7 @@ function subCard(p, showActions) {
       </div>
       <span class="badge ${bc}">${p.status}</span>
     </div>
-    ${detail}${actions}
+    ${detail}${actionsHtml}
   </div>`;
 }
 
@@ -316,4 +354,12 @@ function ymdFromDD(val) {
   }
   if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
   return val;
+}
+function parseDDMonYY(str) {
+  if (!str) return null;
+  const m = String(str).match(/^(\d{1,2})-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-(\d{2,4})$/i);
+  if (!m) return null;
+  const months = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+  let yr = parseInt(m[3]); if (yr < 100) yr += yr < 50 ? 2000 : 1900;
+  return new Date(yr, months[m[2].toLowerCase()], parseInt(m[1]));
 }

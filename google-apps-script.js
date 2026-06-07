@@ -293,6 +293,17 @@ function doPost(e) {
         appendToInput(ss, row);
         deleteFromSheet(ss, sheetName, id);
       } else {
+        // Check if this EMI already exists in the logged EMI sheet
+        const emiId = String(row[5] || '').trim();
+        if (emiId) {
+          const logSheet = ss.getSheetByName(LOGGED_EMI_SHEET);
+          if (logSheet && logSheet.getLastRow() > 1) {
+            const logData = logSheet.getRange(2, 1, logSheet.getLastRow()-1, 1).getValues();
+            if (logData.some(r => String(r[0]).trim() === emiId)) {
+              return jsonResponse({ok:false, error:'duplicate_emi'});
+            }
+          }
+        }
         // Partial payment: approve in-place (stay in unapproved sheet)
         const miscType = String(row[16] || '').toLowerCase();
         const rowStatus = String(row[1] || '').toLowerCase();

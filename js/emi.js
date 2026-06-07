@@ -32,6 +32,7 @@ async function fetchLoansFromSheets(force) {
 function rerenderActiveTab() {
   if (S.page === 'emi')        renderEmiColumns($('emi-search') ? $('emi-search').value : '');
   if (S.page === 'all-loans')  renderClosedDefaulted($('cd-search') ? $('cd-search').value : '');
+  if (S.page === 'my-subs')    renderMySubs();
 }
 
 // ── Page init ─────────────────────────────────────────────────────────────
@@ -248,6 +249,10 @@ async function selectEmiLoan(loanId) {
   const duration = loan.emiDuration || 0;
   const slots    = loan.slots || [];
   const today2 = new Date(); today2.setHours(0,0,0,0);
+  const pendingEmiSet = new Set(
+    S.pending.filter(p => p.type==='emi' && p.data.loanId===loanId && p.status==='pending')
+      .map(p => Number(p.data.emiNum))
+  );
   if (duration > 0) {
     let tableHtml = '<table class="emi-table"><thead><tr><th>EMI</th><th>Status</th><th>Due Date</th><th>Rcvd Date</th><th>Amount</th><th>Misc</th></tr></thead><tbody>';
     for (let i = 0; i < duration && i < 8; i++) {
@@ -265,6 +270,7 @@ async function selectEmiLoan(loanId) {
         else if (isOvd) { statusHtml = '<span style="color:#A32D2D;font-weight:500">⚠ Overdue</span>'; rowClass = ' ovd'; }
         else { statusHtml = '<span style="color:#888">Pending</span>'; }
       }
+      if (pendingEmiSet.has(i+1)) statusHtml += ' <span class="badge b-pending" style="font-size:10px">⏳ Pending</span>';
       const miscTxt = slot.misc !== 0 ? fmtAmt(slot.misc) : '—';
       tableHtml += `<tr class="emi-tr${rowClass}"><td>${i+1}</td><td>${statusHtml}</td><td>${scheduledTxt}</td><td>${receivedTxt}</td><td>${fmtAmt(slot.cashflow)}</td><td>${miscTxt}</td></tr>`;
     }
@@ -301,9 +307,25 @@ async function selectEmiLoan(loanId) {
   // Expected to collect = monthlyEmi - extraEmiReceived
   const extraReceived = loan.extraEmiReceived || 0;
   const expectedAmt   = Math.max(0, (loan.monthlyEmi || 0) - extraReceived);
-  const labelTxt = nextNum > duration ? 'All EMIs collected!'
+  let labelTxt = nextNum > duration ? 'All EMIs collected!'
     : `Recording: EMI ${nextNum} of ${duration} · Standard EMI: ${fmtAmt(loan.monthlyEmi)}${extraReceived ? ' · Expected to collect: ' + fmtAmt(expectedAmt) : ''}`;
   $('emi-next-label').textContent = labelTxt;
+  // Check scheduled EMI date vs today — confirm if >10 days away
+  if (nextNum <= duration && loan.emiStartDate) {
+    const parts = String(loan.emiStartDate).match(/(\d{1,2})[\-\/](\w{3})[\-\/](\d{2,4})/);
+    if (parts) {
+      const months = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+      const sd = new Date(parseInt(parts[3])<100?2000+parseInt(parts[3]):parseInt(parts[3]), months[parts[2].toLowerCase()], parseInt(parts[1]));
+      sd.setMonth(sd.getMonth() + (nextNum - 1));
+      const today = new Date(); today.setHours(0,0,0,0);
+      const diff = Math.round((sd - today) / (1000*60*60*24));
+      if (diff > 10) {
+        if (!confirm('Scheduled date for EMI ' + nextNum + ' is ' + diff + ' days from now. Are you sure?')) {
+          closeEmiDetail(); return;
+        }
+      }
+    }
+  }
 
   // Prefill with full monthly EMI (agent types what they actually received)
   $('emi-amt').value  = loan.monthlyEmi || '';
@@ -313,6 +335,19 @@ async function selectEmiLoan(loanId) {
   $('emi-reason').value = '';
   $('emi-reason-wrap').style.display = 'none';
   $('emi-diff-warn').style.display   = 'none';
+
+  // Disable submit button if this EMI already has a pending submission
+  const subBtn = $('emi-submit-btn');
+  if (pendingEmiSet.has(nextNum)) {
+    subBtn.disabled = true;
+    subBtn.style.opacity = '0.5';
+    subBtn.style.cursor = 'not-allowed';
+    $('emi-next-label').textContent = '⚠ EMI ' + nextNum + ' already pending approval.';
+  } else {
+    subBtn.disabled = false;
+    subBtn.style.opacity = '';
+    subBtn.style.cursor = '';
+  }
   } finally { hideLoader(); }
 }
 
@@ -379,7 +414,7 @@ async function submitEmi() {
     customerName:   sheetLoan ? sheetLoan.customerName : inAppLoan.data.customerName,
     model:          sheetLoan ? sheetLoan.model        : inAppLoan.data.model,
     emiNum,
-    amount:         amt, expectedAmount: expected, misc: amt - expected,
+    amount:         amt, expectedAmount: stdEmi, misc: amt - stdEmi,
     date, scheduledDate, emiStartDate,
     received: receivedVal,
     mode: v('emi-mode'), reason: v('emi-reason'), notes: v('emi-notes'),

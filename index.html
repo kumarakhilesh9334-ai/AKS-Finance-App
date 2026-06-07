@@ -70,7 +70,7 @@
             <div><label>Mobile model <span style="color:#A32D2D">*</span></label><input type="text" id="f-model" placeholder="e.g. Samsung Galaxy A55" required></div>
             <div><label>Device type <span style="color:#A32D2D">*</span></label>
               <select id="f-dtype" onchange="onDeviceTypeChange()" required>
-                <option>Mobile</option><option>TV</option><option>Fridge</option><option>Sound Box</option><option>Loan</option><option>Other</option>
+                <option>Mobile</option><option>TV</option><option>Sound Box</option><option>Fridge</option><option>AC</option><option>Washing Machine</option><option>Air Cooler</option><option>Induction</option><option>Mixer</option><option>Gas Stove</option><option>Inverter Battery</option><option>Inverter</option><option>Inverter &amp; Battery</option><option>Loan</option><option>Fan</option><option>Other</option>
               </select>
             </div>
             <div><label>Device amount (₹) <span style="color:#A32D2D">*</span></label><input type="number" id="f-price" placeholder="0" oninput="calcLoan()" required></div>
@@ -202,7 +202,7 @@
         </div>
         <div class="submit-row">
           <button class="btn" onclick="closeEmiDetail()">Cancel</button>
-          <button class="btn btn-primary" onclick="submitEmi()">Submit for approval</button>
+          <button id="emi-submit-btn" class="btn btn-primary" onclick="submitEmi()">Submit for approval</button>
         </div>
       </div>
     </div>
@@ -291,6 +291,12 @@
       </div>
     </div>
 
+    <!-- ── MY SUBMISSIONS ─────────────────────────────────────────────── -->
+    <div class="page" id="page-my-subs">
+      <div style="font-size:15px;font-weight:500;margin-bottom:1rem">My submissions</div>
+      <div id="my-subs-list"></div>
+    </div>
+
     <!-- ── EDIT MODAL ────────────────────────────────────────────────── -->
     <div id="edit-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;align-items:flex-end;justify-content:center">
       <div style="background:#fff;border-radius:16px 16px 0 0;width:100%;max-width:600px;max-height:85vh;overflow-y:auto;padding:1.25rem">
@@ -339,6 +345,7 @@
 <script src="js/loans.js"></script>
 <script src="js/emi.js"></script>
 <script src="js/approvals.js"></script>
+<script src="js/my-subs.js"></script>
 <script src="js/records.js"></script>
 <script src="js/users.js"></script>
 </body>
