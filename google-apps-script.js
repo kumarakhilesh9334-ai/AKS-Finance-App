@@ -237,7 +237,7 @@ function doPost(e) {
               fmtDateFromYMD(d.billDate),d.customerName||'',d.phone||'',d.idNum||'',
               d.model||'',d.deviceType||'',d.price||0,d.downPayment||0,d.processingFee||0,
               d.interest||0,d.tenure||0,fmtDateFromYMD(d.emiStart),
-              d.guarantor||'',d.appLockCharge||0,(d.akShare||0)/100,(d.rateOfInterest||0)/100
+              d.guarantor||'',d.appLockCharge||0,(d.akShare||0)/100,(d.rateOfInterest||0)
             ]]);
           } else {
             // Sheet: EMI_ID(5), CustomerName(6), Model(7), EMI_Start_Date(8), EMI_Number(9),

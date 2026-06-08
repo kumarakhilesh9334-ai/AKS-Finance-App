@@ -9,5 +9,5 @@ function renderMySubs() {
     el.innerHTML = '<div class="empty" style="padding:2rem;color:#aaa;text-align:center">No submissions yet.</div>';
     return;
   }
-  el.innerHTML = items.map(p => subCard(p, ['edit'])).join('');
+  el.innerHTML = items.map(p => subCard(p, ['edit'], true)).join('');
 }

@@ -263,7 +263,7 @@ function closeEditModal() {
 }
 
 // ── Submission card ───────────────────────────────────────────────────────
-function subCard(p, showActions) {
+function subCard(p, showActions, hideRoi) {
   const user = S.users.find(u => u.id === p.submittedBy);
   const date = new Date(p.submittedAt).toLocaleDateString('en-IN', {day:'2-digit',month:'short',year:'numeric'});
   const bc   = p.status==='pending'?'b-pending':p.status==='approved'?'b-approved':'b-rejected';
@@ -287,7 +287,7 @@ function subCard(p, showActions) {
       <span class="kv-l">EMI start</span>    <span class="kv-v">${fmtDateDD(d.emiStart)}</span>
       <span class="kv-l">App lock</span>     <span class="kv-v">${fmt(d.appLockCharge)}</span>
       <span class="kv-l">AK share</span>     <span class="kv-v">${d.akShare}%</span>
-      <span class="kv-l">Rate of interest</span><span class="kv-v" style="color:#BA7517">${Math.round(d.rateOfInterest * 100)}%</span>
+      ${!hideRoi ? `<span class="kv-l">Rate of interest</span><span class="kv-v" style="color:#BA7517">${Math.round(d.rateOfInterest * 100)}%</span>` : ''}
       ${d.guarantor?`<span class="kv-l">Guarantor</span><span class="kv-v">${d.guarantor}</span>`:''}
     </div>`;
   } else {
