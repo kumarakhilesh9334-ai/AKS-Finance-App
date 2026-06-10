@@ -64,7 +64,12 @@
             <div><label>Customer name <span style="color:#A32D2D">*</span></label><input type="text" id="f-cname" placeholder="Full name" oninput="genLoanId()" required></div>
             <div><label>Mobile number <span style="color:#A32D2D">*</span></label><input type="text" id="f-phone" placeholder="10-digit" maxlength="10" required></div>
             <div><label>Bill date <span style="color:#A32D2D">*</span></label><input type="date" id="f-billdate" required></div>
-            <div class="full"><label>Guarantor / Alternate no / Comments</label><textarea id="f-guar" placeholder="Guarantor name, alternate number, or any comments"></textarea></div>
+            <div class="full" id="guarantor-wrap" style="position:relative">
+              <label>Guarantor name <span style="font-size:11px;color:#888">— type to search existing customers</span></label>
+              <input type="text" id="f-guarantor-name" placeholder="Search by customer name" autocomplete="off" oninput="onGuarantorInput()">
+              <div id="guarantor-dropdown" class="idnum-dd" style="display:none"></div>
+            </div>
+            <div class="full"><label>Alternate no / Comments</label><textarea id="f-guar" placeholder="Alternate number or any comments"></textarea></div>
 
             <div class="form-section">Device details</div>
             <div><label>Mobile model <span style="color:#A32D2D">*</span></label><input type="text" id="f-model" placeholder="e.g. Samsung Galaxy A55" required></div>

@@ -183,9 +183,9 @@ function partialCard(p) {
 }
 
 // ── Loan selection ────────────────────────────────────────────────────────
-// Event delegation for emi-card clicks (safe with loanIds containing special chars)
+// Event delegation for emi-card clicks in Log EMI tab only
 document.addEventListener('click', function(e) {
-  const card = e.target.closest('.emi-card[data-loanid]');
+  const card = e.target.closest('#page-emi .emi-card[data-loanid]');
   if (card) {
     const loanId = card.dataset.loanid;
     if (!card.classList.contains('no-action')) selectEmiLoan(loanId);

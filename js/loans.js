@@ -28,9 +28,10 @@ function initNewLoanPage() {
   $('f-akshare').value     = '0';
   $('f-applock').value     = 299;
   $('calc-preview').style.display         = 'none';
-  $('customer-loans-panel').style.display = 'none';
-  $('idnum-dropdown').style.display       = 'none';
-  $('emistart-err').style.display         = 'none';
+  $('customer-loans-panel').style.display  = 'none';
+  $('idnum-dropdown').style.display        = 'none';
+  $('guarantor-dropdown').style.display    = 'none';
+  $('emistart-err').style.display          = 'none';
 }
 
 // ── Aadhaar/PAN autocomplete ──────────────────────────────────────────────
@@ -104,10 +105,46 @@ function renderCustomerLoansPanel(loans) {
   panel.style.display = 'block';
 }
 
+// ── Guarantor autocomplete (search by name, aadhaar, or customer ID) ──
+function onGuarantorInput() {
+  const q  = v('f-guarantor-name').toLowerCase().trim();
+  const dd = $('guarantor-dropdown');
+  if (q.length < 2) { dd.style.display = 'none'; return; }
+  const seen = {};
+  (S.sheetLoans || []).forEach(l => {
+    const name   = (l.customerName || '').toLowerCase().trim();
+    const aadhar = (l.aadhaarPan || '').toLowerCase().replace(/\s/g, '');
+    const custId = (l.customerId || '').toLowerCase().trim();
+    if (name.includes(q) || aadhar.includes(q) || custId.includes(q)) {
+      const key = l.customerId || l.customerName || l.aadhaarPan;
+      if (key && !seen[key]) seen[key] = l;
+    }
+  });
+  const matches = Object.values(seen).slice(0, 6);
+  if (!matches.length) { dd.style.display = 'none'; return; }
+  dd.innerHTML = matches.map(l => {
+    const cid = (l.customerId || '').replace(/'/g, "\\'");
+    return `<div class="idnum-option" onclick="selectGuarantor('${cid}')">
+      <span style="font-weight:500">${l.customerName}</span>
+      <span style="color:#888;font-size:11px;margin-left:8px">${l.aadhaarPan || ''}</span>
+      <span style="color:#BA7517;font-size:10px;margin-left:6px">ID: ${l.customerId || '—'}</span>
+    </div>`;
+  }).join('');
+  dd.style.display = 'block';
+}
+
+function selectGuarantor(customerId) {
+  $('guarantor-dropdown').style.display = 'none';
+  $('f-guarantor-name').value = customerId;
+}
+
 document.addEventListener('click', e => {
   if (!e.target.closest('#idnum-wrap')) {
     $('idnum-dropdown').style.display = 'none';
     $('customer-loans-panel').style.display = 'none';
+  }
+  if (!e.target.closest('#guarantor-wrap')) {
+    $('guarantor-dropdown').style.display = 'none';
   }
 });
 
@@ -196,7 +233,10 @@ function calcLoan() {
 async function submitLoan() {
   const cname      = v('f-cname'), idnum = v('f-idnum'), phone = v('f-phone');
   const model      = v('f-model');
-  const billDate   = v('f-billdate'), guar = v('f-guar');
+  const billDate   = v('f-billdate');
+  const guarName   = v('f-guarantor-name');
+  const guarAlt    = v('f-guar');
+  const guar       = (guarName ? guarName : '') + (guarName && guarAlt ? ' | ' : '') + (guarAlt ? guarAlt : '');
   const dtype      = v('f-dtype');
   const down       = num('f-down'), pfee = num('f-pfee'), applock = num('f-applock');
   const tenure     = num('f-tenure'), price = num('f-price'), monthlyEmi = num('f-monthly-emi');
@@ -272,7 +312,7 @@ async function submitLoan() {
 
 // ── Reset ─────────────────────────────────────────────────────────────────
 function resetLoanForm() {
-  ['f-cname','f-phone','f-idnum','f-guar','f-model','f-price','f-down',
+  ['f-cname','f-phone','f-idnum','f-guarantor-name','f-guar','f-model','f-price','f-down',
    'f-tenure','f-akcustom','f-monthly-emi','f-int','f-emistart']
     .forEach(id => { const el=$(id); if(el) el.value=''; });
   $('f-dtype').selectedIndex = 0;
