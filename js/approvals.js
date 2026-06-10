@@ -3,19 +3,14 @@
 // Approved → appended to Input / logged EMI sheets, deleted from unapproved.
 // Rejected → status updated in unapproved sheet, kept for reference.
 
-// ── Fetch pending from both unapproved sheets ─────────────────────────────
+// ── Fetch pending ─────────────────────────────────────────────────────────
 async function fetchPendingFromSheets() {
   if (!S.sheetsUrl) return;
   try {
-    const [res, res2] = await Promise.all([
-      fetch(S.sheetsUrl + '?action=readPending'),
-      fetch(S.sheetsUrl + '?action=readApprovedPartials'),
-    ]);
-    const data  = await res.json();
-    const data2 = await res2.json();
+    const res = await fetch(S.sheetsUrl + '?action=readPending');
+    const data = await res.json();
     if (!data.ok) throw new Error(data.error);
     S.pending = data.pending;
-    if (data2.ok && Array.isArray(data2.partials)) S.approvedPartials = data2.partials;
     refreshNav();
     // Always re-render these pages when data arrives — regardless of current page
     renderApprovals($('appr-search') ? $('appr-search').value : '');

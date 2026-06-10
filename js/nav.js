@@ -8,6 +8,7 @@ const TAB_ICONS = {
   'all-loans':       { icon: '📊', label: 'All Loans' },
   'my-subs':         { icon: '📝', label: 'My Subs' },
   'users':           { icon: '👥', label: 'Users' },
+  'emi-msgs':        { icon: '📱', label: 'EMI Msgs' },
 };
 
 function buildNav() {
@@ -21,6 +22,7 @@ function buildNav() {
     tabs.push({ id: 'my-subs', label: 'My Subs', badge: myCount||null });
   if (u.role === 'admin' || u.perms.approvals) tabs.push({ id: 'approvals', label: 'Approvals', badge: pc });
   if (u.role === 'admin' || u.perms.allLoans)  tabs.push({ id: 'all-loans', label: 'All Loans' });
+  if (u.role === 'admin') tabs.push({ id: 'emi-msgs', label: 'EMI Msgs' });
   if (u.role === 'admin') tabs.push({ id: 'users', label: 'Users' });
 
   // Desktop top nav
@@ -57,6 +59,7 @@ function goTo(pg) {
   if (pg === 'approvals') { renderApprovals($('appr-search') ? $('appr-search').value : ''); mobSwitchApprCol('loan'); }
   if (pg === 'all-loans') { renderClosedDefaulted(''); mobSwitchCdCol('running'); }
   if (pg === 'my-subs')   renderMySubs();
+  if (pg === 'emi-msgs')  initEmiMsgsPage();
   if (pg === 'users')     renderUsers();
 }
 

@@ -132,6 +132,54 @@ function doGet(e) {
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
 
+  // ── Read message templates (columns CJ:CN, row 1) ───────────────────
+  if (action === 'readMessageTemplates') {
+    try {
+      const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
+      const sheet = ss.getSheetByName(DATA_SHEET);
+      if (!sheet) return jsonResponse({ok:false, error:'Data sheet not found'});
+      const nCols = sheet.getLastColumn();
+      // CJ=88, CN=92 — if sheet is narrower, return empty
+      if (nCols < 88) return jsonResponse({ok:true, templates:{welcome:'',emiReminder:'',lastDate:'',thankYou:'',loanClosing:''}});
+      const endCol = Math.min(nCols, 92);
+      const row    = sheet.getRange(1, 88, 1, endCol - 87).getValues()[0];
+      return jsonResponse({ok:true, templates:{
+        welcome:     String(row[0]||''),
+        emiReminder: String(row[1]||''),
+        lastDate:    String(row[2]||''),
+        thankYou:    String(row[3]||''),
+        loanClosing: String(row[4]||''),
+      }});
+    } catch(err){ return jsonResponse({ok:false, error:err.message}); }
+  }
+
+  // ── Read all loans with full 87 columns for message generation ─────
+  if (action === 'readAllLoansForMsgs') {
+    try {
+      const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
+      const sheet = ss.getSheetByName(DATA_SHEET);
+      if (!sheet || sheet.getLastRow() < 2) return jsonResponse({ok:true, loans:[]});
+      const nCols = 87; // up to helper1 (index 86)
+      const raw   = sheet.getRange(2, 1, sheet.getLastRow()-1, nCols).getValues();
+      const loans = raw.map(r => buildFullLoan(r));
+      return jsonResponse({ok:true, loans});
+    } catch(err){ return jsonResponse({ok:false, error:err.message}); }
+  }
+
+  // ── Read Config sheet (lastMessageSent from B3) ────────────────────
+  if (action === 'readConfig') {
+    try {
+      const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
+      const sheet = ss.getSheetByName('Config');
+      if (!sheet) return jsonResponse({ok:true, lastMessageSent:''});
+      const val = sheet.getRange('B3').getValue();
+      const lastMessageSent = (val instanceof Date && !isNaN(val))
+        ? Utilities.formatDate(val, 'IST', 'yyyy-MM-dd')
+        : String(val || '');
+      return jsonResponse({ok:true, lastMessageSent});
+    } catch(err){ return jsonResponse({ok:false, error:err.message}); }
+  }
+
   return jsonResponse({ok:true, message:'AKS Finance running.'});
 }
 
@@ -379,6 +427,13 @@ function doPost(e) {
         }
       });
       return jsonResponse({ok:true, fixed, pending:readAllPending(ss)});
+    }
+
+    // ── Update last message sent date in Config!B3 ──────────────────
+    if (payload.action === 'updateLastMessageSent') {
+      const sheet = ss.getSheetByName('Config') || ss.insertSheet('Config');
+      sheet.getRange('B3').setValue(payload.date || new Date());
+      return jsonResponse({ok:true});
     }
 
     return jsonResponse({ok:false, error:'Unknown action: '+payload.action});
