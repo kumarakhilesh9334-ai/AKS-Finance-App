@@ -54,21 +54,11 @@ async function generateMessages() {
 
   showLoader();
   try {
-    const [tRes, lRes] = await Promise.all([
-      fetch(S.sheetsUrl + '?action=readMessageTemplates'),
-      fetch(S.sheetsUrl + '?action=readAllLoansForMsgs'),
-    ]);
-    const tData = await tRes.json();
+    const lRes = await fetch(S.sheetsUrl + '?action=readAllLoansForMsgs');
     const lData = await lRes.json();
-    if (!tData.ok) { showAlert('Failed to load templates: ' + (tData.error||''), 'e'); return; }
     if (!lData.ok) { showAlert('Failed to load loans: ' + (lData.error||''), 'e'); return; }
 
-    const templates = tData.templates || {};
     const loans = lData.loans || [];
-    if (!templates.welcome && !templates.emiReminder && !templates.lastDate && !templates.thankYou && !templates.loanClosing) {
-      showAlert('Message templates are empty. Fill cells CJ1:CN1 in the Data sheet with your 5 message templates and try again.', 'e');
-      return;
-    }
 
     const messages = [];
 
@@ -78,7 +68,16 @@ async function generateMessages() {
       if (!phone) return;
       const li    = loan.loanId || '';
 
-      function addIfInRange(label, dateStr, template, extra) {
+      const loanTemplates = {
+        'Welcome':      loan.welcomeMsgText,
+        'EMI Reminder': loan.emiMsgText,
+        'Last Date':    loan.lastDateMsgText,
+        'Thank You':    loan.thankYouMsgText,
+        'Loan Closing': loan.loanClosingMsgText,
+      };
+
+      function addIfInRange(label, dateStr, extra) {
+        const template = loanTemplates[label];
         if (!dateStr || !template) return;
         const dt = parseSheetDate(dateStr);
         if (!dt) return;
@@ -104,7 +103,7 @@ async function generateMessages() {
       // Welcome: billDate + 1 day
       if (loan.billDate) {
         const wd = parseSheetDate(loan.billDate);
-        if (wd) { wd.setDate(wd.getDate() + 1); addIfInRange('Welcome', ymd(wd), templates.welcome); }
+        if (wd) { wd.setDate(wd.getDate() + 1); addIfInRange('Welcome', ymd(wd)); }
       }
 
       // Process slots
@@ -120,7 +119,7 @@ async function generateMessages() {
         if (sdTime >= endDate.getTime()) {
           const lastDateInRange = sdTime >= startDate.getTime() && sdTime <= endDate.getTime();
           if (lastDateInRange)
-            addIfInRange('Last Date', sd, templates.lastDate, { emiNum: slot.num });
+            addIfInRange('Last Date', sd, { emiNum: slot.num });
 
           // EMI Reminder: suppressed if Last Date is in range for this slot
           if (!lastDateInRange) {
@@ -135,14 +134,14 @@ async function generateMessages() {
             if (selectedOffset !== null) {
               const rd = new Date(sdDt);
               rd.setDate(rd.getDate() + selectedOffset);
-              addIfInRange('EMI Reminder', ymd(rd), templates.emiReminder, { emiNum: slot.num, amount: loan.monthlyEmi });
+              addIfInRange('EMI Reminder', ymd(rd), { emiNum: slot.num, amount: loan.monthlyEmi });
             }
           }
         }
 
         if (slot.received && slot.receivedDate) {
           const td = parseSheetDate(slot.receivedDate);
-          if (td) { td.setDate(td.getDate() + 1); addIfInRange('Thank You', ymd(td), templates.thankYou, { emiNum: slot.num }); }
+          if (td) { td.setDate(td.getDate() + 1); addIfInRange('Thank You', ymd(td), { emiNum: slot.num }); }
         }
       });
 
@@ -151,7 +150,7 @@ async function generateMessages() {
         const lastRcv = rcvSlots[rcvSlots.length - 1];
         if (lastRcv && lastRcv.receivedDate) {
           const cd = parseSheetDate(lastRcv.receivedDate);
-          if (cd) { cd.setDate(cd.getDate() + 1); addIfInRange('Loan Closing', ymd(cd), templates.loanClosing, { amount: loan.totalPending || loan.monthlyEmi }); }
+          if (cd) { cd.setDate(cd.getDate() + 1); addIfInRange('Loan Closing', ymd(cd), { amount: loan.totalPending || loan.monthlyEmi }); }
         }
       }
     });

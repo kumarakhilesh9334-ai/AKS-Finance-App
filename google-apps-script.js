@@ -31,6 +31,7 @@ const C = {
   cashflow3:75,cashflow4:76,cashflow5:77,cashflow6:78,cashflow7:79,cashflow8:80,
   akShareOfEmi:81,aksShareOfEmi:82,driveLink:83,downPaymentPct:84,
   recoveryCharge2:85,helper1:86,
+  welcomeMsgText:87,emiMsgText:88,lastDateMsgText:89,thankYouMsgText:90,loanClosingMsgText:91,
 };
 
 // Columns needed for card display — max index = 47 (defaultComment)
@@ -153,13 +154,13 @@ function doGet(e) {
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
 
-  // ── Read all loans with full 87 columns for message generation ─────
+  // ── Read all loans for message generation (92 cols, includes CJ:CN) ─
   if (action === 'readAllLoansForMsgs') {
     try {
       const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
       const sheet = ss.getSheetByName(DATA_SHEET);
       if (!sheet || sheet.getLastRow() < 2) return jsonResponse({ok:true, loans:[]});
-      const nCols = 87; // up to helper1 (index 86)
+      const nCols = 92; // up to loanClosingMsgText (index 91)
       const raw   = sheet.getRange(2, 1, sheet.getLastRow()-1, nCols).getValues();
       const loans = raw.map(r => buildFullLoan(r));
       return jsonResponse({ok:true, loans});
@@ -605,6 +606,11 @@ function buildFullLoan(r) {
     lockRemoved:r[C.lockRemoved]===true,
     driveLink:String(r[C.driveLink]||'').trim(),
     defaultComment:String(r[C.defaultComment]||'').trim(),
+    welcomeMsgText:String(r[C.welcomeMsgText]||'').trim(),
+    emiMsgText:String(r[C.emiMsgText]||'').trim(),
+    lastDateMsgText:String(r[C.lastDateMsgText]||'').trim(),
+    thankYouMsgText:String(r[C.thankYouMsgText]||'').trim(),
+    loanClosingMsgText:String(r[C.loanClosingMsgText]||'').trim(),
     status,isDefaulted,emiCompleted,slots,_slim:false,
   };
 }
