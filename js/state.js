@@ -9,7 +9,7 @@ const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbzFE_aDkwxYUsB47VPWJ
 
 const DEFAULT_USERS = [
   { id: 'u1', username: 'AKS', pin: '0000', name: 'AKS (You)', role: 'admin', perms: { loan: true, emi: true, allLoans: true, approvals: true } },
-  { id: 'u2', username: 'agent1', pin: '1111', name: 'Agent One', role: 'agent', perms: { loan: true, emi: true, allLoans: false, approvals: false } },
+  { id: 'u2', username: 'agent1', pin: '1111', name: 'Agent One', role: 'agent', perms: { loan: true, emi: true, allLoans: true, approvals: false } },
 ];
 
 function loadUsers() {
@@ -52,6 +52,8 @@ const S = {
   sheetsUrl: SHEETS_URL,
   sheetLoans: [],
   selectedEmiLoanId: null,
+  revisedDates: [],
+  showRevisedView: false,
 };
 
 let pid = 100; // auto-increment for pending IDs

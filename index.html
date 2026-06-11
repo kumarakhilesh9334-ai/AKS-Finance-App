@@ -132,7 +132,10 @@
     <div class="page" id="page-emi">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
         <span style="font-size:15px;font-weight:500">Log EMI payment</span>
-        <button class="btn btn-sm" onclick="fetchLoansFromSheets(true)" title="Refresh">↻ Refresh</button>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="pill-toggle" id="revised-view-toggle" onclick="toggleRevisedView()" style="font-size:11px;padding:4px 10px;border-radius:12px;border:1px solid #D4A017;background:none;color:#D4A017;cursor:pointer">Revised Date Cards</button>
+          <button class="btn btn-sm" onclick="fetchLoansFromSheets(true)" title="Refresh">↻ Refresh</button>
+        </div>
       </div>
       <div class="emi-fetch-status" id="emi-fetch-status"></div>
       <div class="emi-search-wrap">
@@ -165,6 +168,7 @@
           <div class="emi-col-body" id="col-partials-list"><div class="emi-col-empty">No partial payments</div></div>
         </div>
       </div>
+      <div id="emi-revised-view" style="display:none;margin-top:0.75rem"></div>
       <div class="card" id="emi-detail" style="display:none;margin-top:0.75rem">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
           <div>
@@ -181,6 +185,10 @@
             <div id="emi-slots"></div>
           </div>
           <div id="emi-partial-banner"></div>
+          <div id="emi-revised-stats" style="margin:8px 0;font-size:12px;color:#555"></div>
+          <div style="margin:8px 0;text-align:right" id="emi-revised-btn-wrap">
+            <button class="btn btn-sm" style="background:#399C9C;color:#fff;border:none;padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer" onclick="showRevisedDateForm()">Set Revised Date</button>
+          </div>
           <div class="divider"></div>
           <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px" id="emi-next-label"></div>
           <div class="fg fg-2">
@@ -208,6 +216,33 @@
         <div class="submit-row">
           <button class="btn" onclick="closeEmiDetail()">Cancel</button>
           <button id="emi-submit-btn" class="btn btn-primary" onclick="submitEmi()">Submit for approval</button>
+        </div>
+      </div>
+      <!-- Revised Date modal -->
+      <div id="revised-date-modal" class="modal-overlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center" onclick="if(event.target===this)closeRevisedDateForm()">
+        <div class="card" style="width:90%;max-width:380px;margin:0;padding:16px" onclick="event.stopPropagation()">
+          <div style="font-size:14px;font-weight:600;color:#534AB7;margin-bottom:10px">Set Revised Date</div>
+          <div class="fg fg-2">
+            <div><label>EMI Number</label>
+              <select id="revised-emi-num"></select>
+            </div>
+            <div><label>Revised Date</label>
+              <input type="date" id="revised-date">
+            </div>
+            <div><label>Amount (₹)</label>
+              <input type="number" id="revised-amt" placeholder="Full EMI amount">
+            </div>
+            <div><label>Note</label>
+              <input type="text" id="revised-note" placeholder="Optional">
+            </div>
+          </div>
+          <div class="submit-row" style="margin-top:12px">
+            <button class="btn" onclick="closeRevisedDateForm()">Cancel</button>
+            <button class="btn btn-primary" onclick="submitRevisedDate()">Save</button>
+          </div>
+          <div class="divider" style="margin:12px 0"></div>
+          <div style="font-size:11px;color:#888;margin-bottom:6px">Or mark the device as seized:</div>
+          <button class="btn" style="width:100%;background:#000;color:#fff;border:none;padding:8px;border-radius:8px;font-size:12px;cursor:pointer" onclick="submitMobileJabt()">Mark as Mobile Jabt</button>
         </div>
       </div>
     </div>

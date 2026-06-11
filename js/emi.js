@@ -17,6 +17,12 @@ async function fetchLoansFromSheets(force) {
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'Unknown error');
     S.sheetLoans = data.loans || [];
+    // Fetch revised dates in parallel
+    try {
+      const revRes  = await fetch(S.sheetsUrl + '?action=readRevisedDates');
+      const revData = await revRes.json();
+      if (revData.ok) S.revisedDates = revData.dates;
+    } catch(e) { console.warn('Could not load revised dates:', e.message); }
     if (statusEl) {
       statusEl.textContent = '✓ ' + S.sheetLoans.length + ' loans loaded.';
       statusEl.className = 'emi-fetch-status ok';
@@ -57,6 +63,24 @@ function populateEmiSelect() {
 
 // ── Three-column renderer ─────────────────────────────────────────────────
 function renderEmiColumns(query) {
+  // Show/hide revised view
+  if (S.showRevisedView) {
+    const tc = document.querySelector('.emi-two-col');
+    if (tc) tc.style.display = 'none';
+    const mt = document.querySelector('.mob-col-tabs');
+    if (mt) mt.style.display = 'none';
+    const rv = $('emi-revised-view');
+    if (rv) rv.style.display = 'block';
+    renderRevisedView();
+    return;
+  } else {
+    const tc = document.querySelector('.emi-two-col');
+    if (tc) tc.style.display = '';
+    const mt = document.querySelector('.mob-col-tabs');
+    if (mt) mt.style.display = '';
+    const rv = $('emi-revised-view');
+    if (rv) rv.style.display = 'none';
+  }
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const q = (query || '').toLowerCase();
 
@@ -148,15 +172,45 @@ function emiCard(l, type) {
   const cardStyle = bg ? `background:${bg};border-left-color:${border};border-color:${border}` : '';
   const pillStyle = bg ? 'background:rgba(255,255,255,0.2);color:#fff' : '';
 
+  // Revised badge — top center (Mobile Jabt takes precedence)
+  const revDates = S.revisedDates.filter(rd => rd.loanId === l.loanId);
+  let revBadge = '';
+  if (revDates.length > 0) {
+    const jabtRecord = revDates.find(rd => rd.note === 'Mobile Jabt');
+    if (jabtRecord) {
+      revBadge = 'Mobile Jabt';
+    } else {
+      const latest = revDates.reduce((a, b) => {
+        const da = parseSheetDate(a.revisedDate);
+        const db = parseSheetDate(b.revisedDate);
+        if (!da) return b; if (!db) return a;
+        return da > db ? a : b;
+      });
+      const revDateStr = latest.revisedDate ? fmtDisplayDate(latest.revisedDate) : '';
+      const revDt = parseSheetDate(latest.revisedDate);
+      let prefix = '';
+      if (revDt) {
+        const today = new Date(); today.setHours(0,0,0,0);
+        const diff = Math.round((revDt - today) / 86400000);
+        if (diff === 0) prefix = '⚠️ ';
+        else if (diff < 0) prefix = '❌ ';
+      }
+      revBadge = `${prefix}Revised: ${revDateStr}`;
+    }
+  }
+
   return `<div class="emi-card ${type}" data-loanid="${l.loanId}" style="${cardStyle}">
+    ${revBadge ? `<div style="text-align:center;margin-bottom:2px"><span style="display:inline-block;font-size:12px;font-weight:600;color:#000;background:#fff;padding:1px 10px;border-radius:8px;border:1px solid #ddd">${revBadge}</span></div>` : ''}
     <div class="emi-card-top">
       <span class="emi-card-id" style="color:${textColor}">${l.loanId}</span>
       <div style="text-align:right">
         <div class="emi-card-date-big" style="color:${textColor}">${dueTxt}</div>
-        ${overdueLabel ? `<div style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.85);margin-top:1px">${overdueLabel}</div>` : ''}
       </div>
     </div>
-    <div class="emi-card-name" style="color:${textColor}">${l.customerName}</div>
+    <div class="emi-card-name" style="display:flex;justify-content:space-between;align-items:center;color:${textColor};gap:8px">
+      <span>${l.customerName}</span>
+      ${overdueLabel ? `<span style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.85);flex-shrink:0">${overdueLabel}</span>` : ''}
+    </div>
     <div class="emi-card-meta">
       ${billTxt ? `<span style="font-size:11px;color:${subColor}">Bill: ${billTxt}</span>` : ''}
       <span class="emi-amt-pill" style="${pillStyle}">${fmtAmt(l.monthlyEmi)}/mo</span>
@@ -180,6 +234,76 @@ function partialCard(p) {
     </div>
     <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();logRemainingPartial('${p.id}', ${p.amount})" style="margin-top:6px;width:100%;font-size:11px;padding:4px 0">Log remaining</button>
   </div>`;
+}
+
+// ── Revised Overdue toggle ───────────────────────────────────────────────
+// ── Revised View toggle ──────────────────────────────────────────────────
+const _revViewCollapsed = { upcoming: false, overdue: false };
+
+function toggleRevisedView() {
+  S.showRevisedView = !S.showRevisedView;
+  const btn = $('revised-view-toggle');
+  if (btn) {
+    if (S.showRevisedView) {
+      btn.style.background = '#399C9C';
+      btn.style.color = '#fff';
+    } else {
+      btn.style.background = 'none';
+      btn.style.color = '#399C9C';
+    }
+  }
+  renderEmiColumns($('emi-search') ? $('emi-search').value : '');
+}
+
+window.__revViewToggle = function(label) {
+  _revViewCollapsed[label] = !_revViewCollapsed[label];
+  renderRevisedView();
+};
+
+function renderRevisedView() {
+  const el = $('emi-revised-view');
+  if (!el) return;
+  const q = (($('emi-search') ? $('emi-search').value : '') || '').toLowerCase();
+  const source = (S.sheetLoans && S.sheetLoans.length) ? S.sheetLoans : [];
+  const active = source.filter(l => !l.isDefaulted && !l.emiCompleted && l.status !== 'Closed');
+  const filtered = q ? active.filter(l => l.loanId.toLowerCase().includes(q) || (l.customerName||'').toLowerCase().includes(q)) : active;
+
+  // Only loans with revised dates
+  const today = new Date(); today.setHours(0,0,0,0);
+  const hasRevDates = filtered.filter(l => S.revisedDates.some(rd => rd.loanId === l.loanId));
+
+  const upcoming = [], overdue = [], mobileJabt = [];
+  hasRevDates.forEach(l => {
+    const hasJabt = S.revisedDates.some(rd => rd.loanId === l.loanId && rd.note === 'Mobile Jabt');
+    if (hasJabt) { mobileJabt.push(l); return; }
+    const dates = S.revisedDates.filter(rd => rd.loanId === l.loanId && rd.revisedDate);
+    let latest = null;
+    dates.forEach(d => { const dt = parseSheetDate(d.revisedDate); if (dt && (!latest || dt > latest)) latest = dt; });
+    if (!latest) { upcoming.push(l); return; }
+    if (latest >= today) upcoming.push(l); else overdue.push(l);
+  });
+  // Sort: overdue descending (most overdue first), scheduled ascending (soonest first)
+  const getLastRev = (lid) => { let m = null; S.revisedDates.filter(rd => rd.loanId === lid && rd.revisedDate).forEach(d => { const dt = parseSheetDate(d.revisedDate); if (dt && (!m || dt > m)) m = dt; }); return m; };
+  const getFirstRev = (lid) => { let m = null; S.revisedDates.filter(rd => rd.loanId === lid && rd.revisedDate).forEach(d => { const dt = parseSheetDate(d.revisedDate); if (dt && (!m || dt < m)) m = dt; }); return m; };
+  overdue.sort((a, b) => { const da = getLastRev(a.loanId), db = getLastRev(b.loanId); if (!da && !db) return 0; if (!da) return 1; if (!db) return -1; return db - da; });
+  upcoming.sort((a, b) => { const da = getFirstRev(a.loanId), db = getFirstRev(b.loanId); if (!da && !db) return 0; if (!da) return 1; if (!db) return -1; return da - db; });
+
+  function sectionHtml(label, key, color, bg, icon, items, cardType) {
+    const collapsed = _revViewCollapsed[key];
+    return `<div class="card" style="margin-bottom:0.5rem;padding:0;overflow:hidden">
+      <div onclick="window.__revViewToggle('${key}')" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:${bg};user-select:none">
+        <span style="font-size:14px">${collapsed ? '\u25B6' : '\u25BC'}</span>
+        <span style="font-size:12px;font-weight:600;color:${color}">${icon} ${label}</span>
+        <span style="font-size:11px;color:#888;margin-left:auto">${items.length}</span>
+      </div>
+      ${collapsed ? '' : `<div style="padding:6px">${items.map(l => emiCard(l, cardType)).join('')}</div>`}
+    </div>`;
+  }
+
+  el.innerHTML = `<div style="font-size:12px;color:#888;margin-bottom:0.5rem">${hasRevDates.length} loan(s) with revised dates</div>`
+    + sectionHtml('Revised (Overdue)', 'overdue', '#c62828', '#ffebee', '\uD83D\uDD34', overdue, 'overdue')
+    + sectionHtml('Revised (Scheduled)', 'scheduled', '#2e7d32', '#e8f5e9', '\uD83D\uDFE2', upcoming, 'upcoming')
+    + (mobileJabt.length ? sectionHtml('Mobile Jabt', 'mobile-jabt', '#000', '#f5f5f5', '\uD83D\uDCF1', mobileJabt, 'overdue') : '');
 }
 
 // ── Loan selection ────────────────────────────────────────────────────────
@@ -302,6 +426,33 @@ async function selectEmiLoan(loanId) {
     } else {
       bannerEl.innerHTML = '';
     }
+  }
+
+  // Revised date stats
+  const statsEl = $('emi-revised-stats');
+  const btnWrap = $('emi-revised-btn-wrap');
+  if (statsEl) {
+    const customerPrefix = loan.loanId.split('/')[0];
+    const dates = S.revisedDates || [];
+    const emiCount = dates.filter(d => d.loanId === loanId && d.emiNum === loan.numReceivedEmi + 1).length;
+    const loanCount = dates.filter(d => d.loanId === loanId).length;
+    const customerCount = dates.filter(d => d.loanId.split('/')[0] === customerPrefix).length;
+    if (loanCount > 0) {
+      statsEl.innerHTML = `<div style="display:flex;gap:12px;flex-wrap:wrap;padding:6px 0">
+        <span style="color:#399C9C;font-weight:500">Revised Date Revisions:</span>
+        <span>This EMI: <strong>${emiCount}</strong></span>
+        <span>This Loan: <strong>${loanCount}</strong></span>
+        <span>This Customer: <strong>${customerCount}</strong></span>
+      </div>`;
+    } else {
+      statsEl.innerHTML = '';
+    }
+  }
+  if (btnWrap) {
+    btnWrap.style.display = (loan.numReceivedEmi < duration) ? '' : 'none';
+    // Store the loan data for the form
+    btnWrap.dataset.monthlyEmi = loan.monthlyEmi || '';
+    btnWrap.dataset.duration = duration;
   }
 
   const nextNum = loan.numReceivedEmi + 1;
@@ -713,6 +864,98 @@ function fmtDisplayDate(d) {
   const dt = parseSheetDate(d);
   if (!dt) return String(d);
   return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+// ── Revised Date form ─────────────────────────────────────────────────────
+function showRevisedDateForm() {
+  if (!S.selectedEmiLoanId) return;
+  const loan = (S.sheetLoans && S.sheetLoans.find(l => l.loanId === S.selectedEmiLoanId))
+    || S.loans.find(l => l.loanId === S.selectedEmiLoanId);
+  if (!loan) return;
+  const duration = loan.emiDuration || 0;
+  const nextNum = loan.numReceivedEmi + 1;
+  if (nextNum > duration) return;
+
+  // Populate EMI number dropdown with unreceived EMIs
+  const sel = $('revised-emi-num');
+  if (sel) {
+    sel.innerHTML = '';
+    for (let i = nextNum; i <= duration; i++) {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = 'EMI ' + i;
+      if (i === nextNum) opt.selected = true;
+      sel.appendChild(opt);
+    }
+  }
+  // Prefill amount with monthly EMI
+  const amtInput = $('revised-amt');
+  if (amtInput) amtInput.value = loan.monthlyEmi || '';
+  // Default date = today
+  const dateInput = $('revised-date');
+  if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+  // Clear note
+  const noteInput = $('revised-note');
+  if (noteInput) noteInput.value = '';
+  // Show modal
+  const modal = $('revised-date-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeRevisedDateForm() {
+  const modal = $('revised-date-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function submitRevisedDate() {
+  const loanId = S.selectedEmiLoanId;
+  if (!loanId) return;
+  const emiNum = parseInt($('revised-emi-num')?.value) || 0;
+  const revisedDate = $('revised-date')?.value || '';
+  const amount = parseFloat($('revised-amt')?.value) || 0;
+  const note = $('revised-note')?.value?.trim() || '';
+  if (!emiNum || !revisedDate || !amount) {
+    showAlert('Please fill EMI number, revised date, and amount.', 'e');
+    return;
+  }
+  closeRevisedDateForm();
+  showLoader();
+  try {
+    const res = await gasPost({ action: 'setRevisedDate', loanId, emiNum, revisedDate, amount, note });
+    if (res.ok && res.pending) S.pending = res.pending;
+    // Re-fetch revised dates
+    try {
+      const revRes = await fetch(S.sheetsUrl + '?action=readRevisedDates');
+      const revData = await revRes.json();
+      if (revData.ok) S.revisedDates = revData.dates;
+    } catch(e) { console.warn('Could not re-fetch revised dates:', e.message); }
+    // Re-render loan detail and cards
+    selectEmiLoan(loanId);
+    rerenderActiveTab();
+    renderApprovals($('appr-search') ? $('appr-search').value : '');
+    showAlert('Revised date saved.');
+  } finally { hideLoader(); }
+}
+
+async function submitMobileJabt() {
+  const loanId = S.selectedEmiLoanId;
+  if (!loanId) return;
+  if (!confirm('Confirm marking this loan as Mobile Jabt (device seized, no further action)?')) return;
+  closeRevisedDateForm();
+  showLoader();
+  try {
+    const res = await gasPost({ action: 'setRevisedDate', loanId, emiNum: 0, revisedDate: '', amount: 0, note: 'Mobile Jabt' });
+    if (res.ok && res.pending) S.pending = res.pending;
+    try {
+      const revRes = await fetch(S.sheetsUrl + '?action=readRevisedDates');
+      const revData = await revRes.json();
+      if (revData.ok) S.revisedDates = revData.dates;
+    } catch(e) { console.warn('Could not re-fetch revised dates:', e.message); }
+    selectEmiLoan(loanId);
+    rerenderActiveTab();
+    renderApprovals($('appr-search') ? $('appr-search').value : '');
+    showAlert('Loan marked as Mobile Jabt.');
+  } finally { hideLoader(); }
 }
 
 

@@ -8,8 +8,9 @@ const DATA_SHEET       = 'Data';
 const UNAPP_LOAN_SHEET = 'Unapproved_Loan';
 const UNAPP_EMI_SHEET  = 'Unapproved_EMI';
 const INPUT_SHEET      = 'Input';
-const LOGGED_EMI_SHEET = 'logged EMI';
-const USERS_SHEET      = 'Users';
+const LOGGED_EMI_SHEET     = 'logged EMI';
+const USERS_SHEET          = 'Users';
+const REVISED_DATES_SHEET  = 'Revised_Dates';
 
 // Column map for Data tab (0-based, column A = 0)
 const C = {
@@ -30,8 +31,9 @@ const C = {
   emiMisc5:69,emiMisc6:70,emiMisc7:71,emiMisc8:72,cashflow1:73,cashflow2:74,
   cashflow3:75,cashflow4:76,cashflow5:77,cashflow6:78,cashflow7:79,cashflow8:80,
   akShareOfEmi:81,aksShareOfEmi:82,driveLink:83,downPaymentPct:84,
-  recoveryCharge2:85,helper1:86,
+  revisedDateData:85,helper1:86,
   welcomeMsgText:87,emiMsgText:88,lastDateMsgText:89,thankYouMsgText:90,loanClosingMsgText:91,
+  revisedDateMsg:92,
 };
 
 // Columns needed for card display — max index = 47 (defaultComment)
@@ -114,7 +116,42 @@ function doGet(e) {
           });
         }
       } catch(e) { /* non-critical */ }
+      // Enrich with revised dates for this loan
+      try {
+        const revSheet = ss.getSheetByName(REVISED_DATES_SHEET);
+        if (revSheet && revSheet.getLastRow() > 1) {
+          const revData = revSheet.getRange(2, 1, revSheet.getLastRow()-1, 6).getValues();
+          loan.revisedDates = revData
+            .filter(r => String(r[0]||'').trim() === loanId)
+            .map(r => ({
+              emiNum: parseInt(r[1])||0,
+              revisedDate: fmtDate(r[2]),
+              amount: parseFloat(r[3])||0,
+              note: String(r[4]||'').trim(),
+              createdAt: String(r[5]||''),
+            }));
+        }
+      } catch(e) { /* non-critical */ }
       return jsonResponse({ok:true, loan});
+    } catch(err){ return jsonResponse({ok:false, error:err.message}); }
+  }
+
+  // ── Read all revised dates (lightweight, for Log EMI tab) ──────────
+  if (action === 'readRevisedDates') {
+    try {
+      const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
+      const sheet = ss.getSheetByName(REVISED_DATES_SHEET);
+      if (!sheet || sheet.getLastRow() < 2) return jsonResponse({ok:true, dates:[]});
+      const rows = sheet.getRange(2, 1, sheet.getLastRow()-1, 6).getValues();
+      const dates = rows.filter(r => r[0] && String(r[0]).trim()).map(r => ({
+        loanId: String(r[0]||'').trim(),
+        emiNum: parseInt(r[1])||0,
+        revisedDate: fmtDate(r[2]),
+        amount: parseFloat(r[3])||0,
+        note: String(r[4]||'').trim(),
+        createdAt: String(r[5]||''),
+      }));
+      return jsonResponse({ok:true, dates});
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
 
@@ -179,7 +216,7 @@ function doGet(e) {
       const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
       const sheet = ss.getSheetByName(DATA_SHEET);
       if (!sheet || sheet.getLastRow() < 2) return jsonResponse({ok:true, loans:[]});
-      const nCols = 92; // up to loanClosingMsgText (index 91)
+      const nCols = 93; // up to revisedDateMsg (index 92)
       const raw   = sheet.getRange(2, 1, sheet.getLastRow()-1, nCols).getValues();
       const loans = raw.map(r => buildFullLoan(r));
       return jsonResponse({ok:true, loans});
@@ -375,7 +412,65 @@ function doPost(e) {
         // Partial payment: approve in-place (stay in unapproved sheet)
         const miscType = String(row[16] || '').toLowerCase();
         const rowStatus = String(row[1] || '').toLowerCase();
-        if (miscType === 'partial payment' && rowStatus === 'pending') {
+
+        // ── Early loan closing settlement: auto-complete all remaining EMIs ──
+        if (miscType === 'early loan closing settlement') {
+          const rowNum = parseInt(row[11]) || 0;
+          if (rowNum > 1) {
+            const ds = ss.getSheetByName(DATA_SHEET);
+            const loanRow = ds.getRange(rowNum, 1, 1, ds.getLastColumn()).getValues()[0];
+            const duration = parseInt(loanRow[C.emiDuration]) || 0;
+            const stdEmi = parseFloat(loanRow[C.monthlyEmi]) || 0;
+            const numRcv = parseInt(loanRow[C.numReceivedEmi]) || 0;
+            const settlementAmt = parseFloat(row[15]) || 0;
+            const receivedDate = String(row[13] || '').trim();
+            const remaining = duration - numRcv;
+
+            if (remaining > 0) {
+              const emiCols   = [C.emi1,C.emi2,C.emi3,C.emi4,C.emi5,C.emi6,C.emi7,C.emi8];
+              const dateCols  = [C.emiDate1,C.emiDate2,C.emiDate3,C.emiDate4,C.emiDate5,C.emiDate6,C.emiDate7,C.emiDate8];
+              const miscCols  = [C.emiMisc1,C.emiMisc2,C.emiMisc3,C.emiMisc4,C.emiMisc5,C.emiMisc6,C.emiMisc7,C.emiMisc8];
+              const cashCols  = [C.cashflow1,C.cashflow2,C.cashflow3,C.cashflow4,C.cashflow5,C.cashflow6,C.cashflow7,C.cashflow8];
+              const updateRow = ds.getRange(rowNum, 1, 1, ds.getLastColumn()).getValues()[0];
+              const logSheet  = ensureSheet(ss, LOGGED_EMI_SHEET,
+                ['EMI_ID','Customer Name','Mobile Model','EMI_Start_Date','EMI_Number',
+                 'EMI_Date','Row Number','Received','Received_date','MISC','Cashflow','MISC Type']);
+
+              for (let i = 0; i < remaining; i++) {
+                const slotIdx = numRcv + i;
+                const isLast  = (i === remaining - 1);
+                const cash    = isLast ? settlementAmt : 0;
+
+                if (slotIdx < 8) {
+                  updateRow[emiCols[slotIdx]]  = true;
+                  updateRow[dateCols[slotIdx]] = receivedDate;
+                  updateRow[cashCols[slotIdx]] = cash;
+                  updateRow[miscCols[slotIdx]] = cash - stdEmi;
+                }
+
+                logSheet.appendRow([
+                  String(loanRow[C.loanId]||'').trim() + '_' + (slotIdx + 1),
+                  loanRow[C.customerName] || '',
+                  loanRow[C.model] || '',
+                  loanRow[C.emiStartDate] || '',
+                  slotIdx + 1,
+                  row[10] || '',
+                  rowNum,
+                  true,
+                  receivedDate,
+                  cash - stdEmi,
+                  cash,
+                  'Early loan closing settlement',
+                ]);
+              }
+
+              updateRow[C.numReceivedEmi] = duration;
+              updateRow[C.emiCompleted]   = 'YES';
+              ds.getRange(rowNum, 1, 1, ds.getLastColumn()).setValues([updateRow]);
+            }
+          }
+          deleteFromSheet(ss, sheetName, id);
+        } else if (miscType === 'partial payment' && rowStatus === 'pending') {
           const sheet = ss.getSheetByName(UNAPP_EMI_SHEET);
           const data = sheet.getDataRange().getValues();
           for (let i=1;i<data.length;i++) {
@@ -454,6 +549,21 @@ function doPost(e) {
       const sheet = ss.getSheetByName('Config') || ss.insertSheet('Config');
       sheet.getRange('B3').setValue(payload.date || new Date());
       return jsonResponse({ok:true});
+    }
+
+    // ── Set revised date ────────────────────────────────────────────
+    if (payload.action === 'setRevisedDate') {
+      const { loanId, emiNum, revisedDate, amount, note } = payload;
+      const sheet = ensureSheet(ss, REVISED_DATES_SHEET, ['LoanID','EMI_Num','Revised_Date','Amount','Note','CreatedAt']);
+      sheet.appendRow([
+        String(loanId||'').trim(),
+        parseInt(emiNum)||0,
+        fmtDateFromYMD(revisedDate||''),
+        parseFloat(amount)||0,
+        String(note||'').trim(),
+        new Date().toISOString(),
+      ]);
+      return jsonResponse({ok:true, pending:readAllPending(ss)});
     }
 
     return jsonResponse({ok:false, error:'Unknown action: '+payload.action});
@@ -625,11 +735,13 @@ function buildFullLoan(r) {
     lockRemoved:r[C.lockRemoved]===true,
     driveLink:String(r[C.driveLink]||'').trim(),
     defaultComment:String(r[C.defaultComment]||'').trim(),
+    revisedDateData:fmtDate(r[C.revisedDateData]),
     welcomeMsgText:String(r[C.welcomeMsgText]||'').trim(),
     emiMsgText:String(r[C.emiMsgText]||'').trim(),
     lastDateMsgText:String(r[C.lastDateMsgText]||'').trim(),
     thankYouMsgText:String(r[C.thankYouMsgText]||'').trim(),
     loanClosingMsgText:String(r[C.loanClosingMsgText]||'').trim(),
+    revisedDateMsg:String(r[C.revisedDateMsg]||'').trim(),
     status,isDefaulted,emiCompleted,slots,_slim:false,
   };
 }

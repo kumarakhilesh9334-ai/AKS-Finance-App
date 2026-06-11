@@ -54,11 +54,24 @@ async function generateMessages() {
 
   showLoader();
   try {
-    const lRes = await fetch(S.sheetsUrl + '?action=readAllLoansForMsgs');
+    const [lRes, rRes] = await Promise.all([
+      fetch(S.sheetsUrl + '?action=readAllLoansForMsgs'),
+      fetch(S.sheetsUrl + '?action=readRevisedDates'),
+    ]);
     const lData = await lRes.json();
+    const rData = await rRes.json();
     if (!lData.ok) { showAlert('Failed to load loans: ' + (lData.error||''), 'e'); return; }
 
     const loans = lData.loans || [];
+    const revisedEntries = (rData.ok && rData.dates) ? rData.dates : [];
+
+    // Build lookup: loanId -> { emiNum, note }[]
+    const revisedLookup = {};
+    revisedEntries.forEach(entry => {
+      const id = entry.loanId || '';
+      if (!revisedLookup[id]) revisedLookup[id] = [];
+      revisedLookup[id].push({ emiNum: entry.emiNum, note: entry.note });
+    });
 
     const messages = [];
 
@@ -74,6 +87,7 @@ async function generateMessages() {
         'Last Date':    loan.lastDateMsgText,
         'Thank You':    loan.thankYouMsgText,
         'Loan Closing': loan.loanClosingMsgText,
+        'Revised Date': loan.revisedDateMsg,
       };
 
       function addIfInRange(label, dateStr, extra) {
@@ -104,6 +118,14 @@ async function generateMessages() {
       if (loan.billDate) {
         const wd = parseSheetDate(loan.billDate);
         if (wd) { wd.setDate(wd.getDate() + 1); addIfInRange('Welcome', ymd(wd)); }
+      }
+
+      // Revised Date: trigger on revised date (similar to normal EMI message type)
+      if (loan.revisedDateData && loan.revisedDateMsg) {
+        const revs = revisedLookup[li] || [];
+        const emiLabels = revs.map(r => r.note === 'Mobile Jabt' ? 'Mobile Jabt' : r.emiNum).filter(v => v != null);
+        const emiLabel = emiLabels.length ? emiLabels.join(', ') : '';
+        addIfInRange('Revised Date', loan.revisedDateData, { amount: loan.monthlyEmi, emiNum: emiLabel || undefined });
       }
 
       // Process slots
@@ -161,7 +183,7 @@ async function generateMessages() {
       if (messages[i].label === 'Thank You' && closingLoans.has(messages[i].loanId)) messages.splice(i, 1);
     }
 
-    const TYPE_ORDER = { 'Welcome':1, 'Loan Closing':2, 'Thank You':3, 'Last Date':4, 'EMI Reminder':4 };
+    const TYPE_ORDER = { 'Welcome':1, 'Loan Closing':2, 'Thank You':3, 'Revised Date':4, 'Last Date':5, 'EMI Reminder':5 };
     messages.sort((a, b) =>
       (TYPE_ORDER[a.label]||99) - (TYPE_ORDER[b.label]||99) ||
       a.date.localeCompare(b.date) ||
@@ -186,10 +208,11 @@ function renderMessageResults(messages) {
     'Welcome':      { color:'#0F6E56', bg:'#E1F5EE', icon:'\uD83D\uDC4B' },
     'Loan Closing': { color:'#888',    bg:'#F1EFE8', icon:'\uD83D\uDD12' },
     'Thank You':    { color:'#1A73E8', bg:'#E8F0FE', icon:'\u2705' },
+    'Revised Date': { color:'#0F6E56', bg:'#E1F5EE', icon:'\uD83D\uDCC5' },
     'Last Date':    { color:'#A32D2D', bg:'#FCEBEB', icon:'\u26A0\uFE0F' },
     'EMI Reminder': { color:'#BA7517', bg:'#FAEEDA', icon:'\uD83D\uDD14' },
   };
-  const TYPE_ORDER = { 'Welcome':1, 'Loan Closing':2, 'Thank You':3, 'Last Date':4, 'EMI Reminder':4 };
+  const TYPE_ORDER = { 'Welcome':1, 'Loan Closing':2, 'Thank You':3, 'Revised Date':4, 'Last Date':5, 'EMI Reminder':5 };
 
   const groups = {};
   messages.forEach(m => { if (!groups[m.label]) groups[m.label] = []; groups[m.label].push(m); });
