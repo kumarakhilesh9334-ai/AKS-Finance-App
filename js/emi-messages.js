@@ -207,18 +207,16 @@ function renderMessageResults(messages) {
         </div>
         ${collapsed ? '' :
           `<div style="overflow-x:auto"><table class="emi-table" style="width:100%"><thead><tr>
-            <th>Customer</th><th>Phone</th><th>Loan</th><th>EMI</th><th>Date</th><th>Preview</th><th>Action</th>
+            <th>Customer</th><th>Phone</th><th>Loan</th><th>EMI</th><th>Date</th><th>Action</th>
           </tr></thead><tbody>` +
           group.map(m => {
             const url = `https://wa.me/91${m.phone}?text=${encodeURIComponent(m.msg)}`;
-            const preview = m.msg.length > 120 ? m.msg.slice(0, 120) + '…' : m.msg;
             return `<tr>
               <td style="white-space:nowrap">${m.customerName}</td>
               <td style="white-space:nowrap">${m.phone}</td>
               <td style="white-space:nowrap">${m.loanId}</td>
               <td>${m.emiNum || '\u2014'}</td>
               <td style="white-space:nowrap">${fmtDisplayDate(m.date)}</td>
-              <td style="font-size:11px;color:#555;max-width:260px;word-break:break-word;line-height:1.3" title="${m.msg.replace(/"/g,'&quot;')}">${preview}</td>
               <td><a href="${url}" target="_blank" class="btn btn-sm" style="background:#25D366;color:#fff;border-color:#25D366;text-decoration:none">\uD83D\uDCF1 Send</a></td>
             </tr>`;
           }).join('') +
