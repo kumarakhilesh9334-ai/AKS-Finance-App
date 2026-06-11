@@ -286,14 +286,14 @@ function doPost(e) {
               fmtDateFromYMD(d.billDate),d.customerName||'',d.phone||'',d.idNum||'',
               d.model||'',d.deviceType||'',d.price||0,d.downPayment||0,d.processingFee||0,
               d.interest||0,d.tenure||0,fmtDateFromYMD(d.emiStart),
-              d.guarantor||'',d.appLockCharge||0,(d.akShare||0)/100,(d.rateOfInterest||0)
+              d.guarantor||'',d.appLockCharge||0,(d.akShare||0)/100,(d.rateOfInterest||0)/100
             ]]);
           } else {
             // Sheet: EMI_ID(5), CustomerName(6), Model(7), EMI_Start_Date(8), EMI_Number(9),
             // EMI_Date(10), RowNumber(11), Received(12), Received_date(13), MISC(14), Cashflow(15), MISC_Type(16)
             const newMisc = (d.amount||0) - (d.expectedAmount||0);
             sheet.getRange(i+1,6,1,12).setValues([[
-              d.loanId||'',d.customerName||'',d.model||'',
+              (d.loanId||'')+'_'+(d.emiNum||''),d.customerName||'',d.model||'',
               fmtDateFromYMD(d.emiStartDate),d.emiNum||'',
               rows[i][10],rows[i][11],rows[i][12],
               fmtDateFromYMD(d.date||''),
@@ -494,7 +494,7 @@ function readUnapproved(ss, sheetName, type) {
           processingFee:r[13], interest:r[14], tenure:r[15], emiStart:fmtDate(r[16]),
           guarantor:r[17], appLockCharge:r[18], akShare:r[19]*100,
           aksShare:100-(r[19]*100),
-          rateOfInterest: parseFloat(r[20])||0,
+          rateOfInterest: (parseFloat(r[20])||0) * 100,
           // Derived fields for display in approval card
           loanId: (String(r[6]).split(' ')[0] || '') + String(r[8]).slice(-4) + '/1',
           monthlyEmi: 0, financeAmount: 0, totalAmount: 0,
