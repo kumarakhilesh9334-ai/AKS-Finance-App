@@ -95,7 +95,26 @@ function doGet(e) {
       const raw   = sheet.getRange(2,1,sheet.getLastRow()-1,nCols).getValues();
       const row   = raw.find(r => String(r[C.loanId]).trim() === String(loanId).trim());
       if (!row) return jsonResponse({ok:false,error:'Not found'});
-      return jsonResponse({ok:true, loan:buildFullLoan(row)});
+      const loan = buildFullLoan(row);
+      // Enrich slots with miscType from logged EMI sheet
+      try {
+        const logSheet = ss.getSheetByName(LOGGED_EMI_SHEET);
+        if (logSheet && logSheet.getLastRow() > 1) {
+          const logData = logSheet.getRange(2, 1, logSheet.getLastRow()-1, 12).getValues();
+          const prefix = String(loanId) + '_';
+          logData.forEach(r => {
+            if (String(r[0]||'').startsWith(prefix)) {
+              const emiNum = parseInt(r[4]);
+              const miscType = String(r[11]||'').trim();
+              if (miscType && loan.slots) {
+                const slot = loan.slots.find(s => s.num === emiNum);
+                if (slot) slot.miscType = miscType;
+              }
+            }
+          });
+        }
+      } catch(e) { /* non-critical */ }
+      return jsonResponse({ok:true, loan});
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
 

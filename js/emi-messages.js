@@ -155,6 +155,12 @@ async function generateMessages() {
       }
     });
 
+    // Suppress Thank You when Loan Closing exists for same loanId
+    const closingLoans = new Set(messages.filter(m => m.label === 'Loan Closing').map(m => m.loanId));
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].label === 'Thank You' && closingLoans.has(messages[i].loanId)) messages.splice(i, 1);
+    }
+
     const TYPE_ORDER = { 'Welcome':1, 'Loan Closing':2, 'Thank You':3, 'Last Date':4, 'EMI Reminder':4 };
     messages.sort((a, b) =>
       (TYPE_ORDER[a.label]||99) - (TYPE_ORDER[b.label]||99) ||

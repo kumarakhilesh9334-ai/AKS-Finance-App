@@ -254,7 +254,7 @@ async function selectEmiLoan(loanId) {
       .map(p => Number(p.data.emiNum))
   );
   if (duration > 0) {
-    let tableHtml = '<table class="emi-table"><thead><tr><th>EMI</th><th>Status</th><th>Due Date</th><th>Rcvd Date</th><th>Amount</th><th>Misc</th></tr></thead><tbody>';
+    let tableHtml = '<table class="emi-table"><thead><tr><th>EMI</th><th>Status</th><th>Due Date</th><th>Rcvd Date</th><th>Amount</th><th>Misc</th><th>Reason</th></tr></thead><tbody>';
     for (let i = 0; i < duration && i < 8; i++) {
       const slot = slots[i] || { num:i+1, received:false, scheduledDate:'', receivedDate:'', misc:0, cashflow:0 };
       const scheduledTxt = slot.scheduledDate ? fmtDisplayDate(slot.scheduledDate) : '—';
@@ -272,7 +272,8 @@ async function selectEmiLoan(loanId) {
       }
       if (pendingEmiSet.has(i+1)) statusHtml += ' <span class="badge b-pending" style="font-size:10px">⏳ Pending</span>';
       const miscTxt = slot.misc !== 0 ? fmtAmt(slot.misc) : '—';
-      tableHtml += `<tr class="emi-tr${rowClass}"><td>${i+1}</td><td>${statusHtml}</td><td>${scheduledTxt}</td><td>${receivedTxt}</td><td>${fmtAmt(slot.cashflow)}</td><td>${miscTxt}</td></tr>`;
+      const reason = slot.miscType || (pendingEmiSet.has(i+1) ? (S.pending.find(p => p.type==='emi' && p.data.loanId===loanId && p.status==='pending' && Number(p.data.emiNum)===i+1)?.data?.reason || '—') : '—');
+      tableHtml += `<tr class="emi-tr${rowClass}"><td>${i+1}</td><td>${statusHtml}</td><td>${scheduledTxt}</td><td>${receivedTxt}</td><td>${fmtAmt(slot.cashflow)}</td><td>${miscTxt}</td><td style="font-size:11px;color:#555">${reason}</td></tr>`;
     }
     tableHtml += '</tbody></table>';
     $('emi-slots').innerHTML = tableHtml;
