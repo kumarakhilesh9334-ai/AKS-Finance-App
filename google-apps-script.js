@@ -276,28 +276,28 @@ function doPost(e) {
     if (payload.action === 'saveEmi') {
       const p = payload.item, d = p.data;
       // Columns: EMI_ID, Customer Name, Mobile Model, EMI_Start_Date, EMI_Number,
-      // EMI_Date, Row Number, Received, Received_date, MISC, Cashflow, MISC Type
+      // EMI_Date, Loan ID, Received, Received_date, MISC, Cashflow, MISC Type
       const headers = [
         'ID','Status','SubmittedBy','SubmittedAt','Note',
         'EMI_ID','Customer Name','Mobile Model','EMI_Start_Date','EMI_Number',
-        'EMI_Date','Row Number','Received','Received_date','MISC','Cashflow','MISC Type'
+        'EMI_Date','Loan ID','Received','Received_date','MISC','Cashflow','MISC Type'
       ];
       const sheet = ensureSheet(ss, UNAPP_EMI_SHEET, headers);
 
       // EMI_ID = LoanID_EMINumber  e.g. Roshan0070/1_5
       const emiId = (d.loanId||'') + '_' + (d.emiNum||'');
 
-      // Find row number of loan in master Data sheet and get EMI start date
-      let rowNumber = '', emiStartDate = '';
+      // Get EMI start date from master Data sheet
+      let emiStartDate = '';
       const ds = ss.getSheetByName(DATA_SHEET);
       if (ds && ds.getLastRow() > 1) {
         const ids = ds.getRange(2, C.loanId+1, ds.getLastRow()-1, 1).getValues();
         for (let i=0;i<ids.length;i++){
-          if (String(ids[i][0]).trim()===String(d.loanId||'').trim()){ rowNumber=i+2; break; }
-        }
-        if (rowNumber) {
-          const row = ds.getRange(rowNumber, 1, 1, ds.getLastColumn()).getValues()[0];
-          emiStartDate = row[C.emiStartDate];
+          if (String(ids[i][0]).trim()===String(d.loanId||'').trim()){
+            const row = ds.getRange(i+2, 1, 1, ds.getLastColumn()).getValues()[0];
+            emiStartDate = row[C.emiStartDate];
+            break;
+          }
         }
       }
 
@@ -320,7 +320,7 @@ function doPost(e) {
       sheet.appendRow([
         p.id, p.status, p.submittedBy, p.submittedAt, '',
         emiId, d.customerName||'', d.model||'', d.emiStartDate||'', d.emiNum||'',
-        emiDateFmt, rowNumber, received, receivedDateFmt, misc, d.amount||0, miscType
+        emiDateFmt, d.loanId||'', received, receivedDateFmt, misc, d.amount||0, miscType
       ]);
       return jsonResponse({ok:true, pending:readAllPending(ss)});
     }
@@ -346,7 +346,7 @@ function doPost(e) {
             ]]);
           } else {
             // Sheet: EMI_ID(5), CustomerName(6), Model(7), EMI_Start_Date(8), EMI_Number(9),
-            // EMI_Date(10), RowNumber(11), Received(12), Received_date(13), MISC(14), Cashflow(15), MISC_Type(16)
+            // EMI_Date(10), LoanID(11), Received(12), Received_date(13), MISC(14), Cashflow(15), MISC_Type(16)
             const newMisc = (d.amount||0) - (d.expectedAmount||0);
             sheet.getRange(i+1,6,1,12).setValues([[
               (d.loanId||'')+'_'+(d.emiNum||''),d.customerName||'',d.model||'',
@@ -415,37 +415,49 @@ function doPost(e) {
 
         // ── Early loan closing settlement: auto-complete all remaining EMIs ──
         if (miscType === 'early loan closing settlement') {
-          const rowNum = parseInt(row[11]) || 0;
-          if (rowNum > 1) {
+          const loanId = String(row[5]||'').replace(/_\d+$/, '');
+          if (loanId) {
             const ds = ss.getSheetByName(DATA_SHEET);
-            const loanRow = ds.getRange(rowNum, 1, 1, ds.getLastColumn()).getValues()[0];
+            let loanRow = null, rowNum = 0;
+            if (ds && ds.getLastRow() > 1) {
+              const ids = ds.getRange(2, C.loanId+1, ds.getLastRow()-1, 1).getValues();
+              for (let i=0;i<ids.length;i++) {
+                if (String(ids[i][0]).trim() === loanId) {
+                  loanRow = ds.getRange(i+2, 1, 1, ds.getLastColumn()).getValues()[0];
+                  rowNum = i + 2;
+                  break;
+                }
+              }
+            }
+            if (!loanRow) { deleteFromSheet(ss, sheetName, id); return jsonResponse({ok:true, pending:readAllPending(ss)}); }
             const duration = parseInt(loanRow[C.emiDuration]) || 0;
             const stdEmi = parseFloat(loanRow[C.monthlyEmi]) || 0;
             const numRcv = parseInt(loanRow[C.numReceivedEmi]) || 0;
             const settlementAmt = parseFloat(row[15]) || 0;
-            const receivedDate = String(row[13] || '').trim();
+            const receivedDate = String(fmtDate(row[13]) || '').trim();
             const remaining = duration - numRcv;
 
             if (remaining > 0) {
-              const emiCols   = [C.emi1,C.emi2,C.emi3,C.emi4,C.emi5,C.emi6,C.emi7,C.emi8];
-              const dateCols  = [C.emiDate1,C.emiDate2,C.emiDate3,C.emiDate4,C.emiDate5,C.emiDate6,C.emiDate7,C.emiDate8];
-              const miscCols  = [C.emiMisc1,C.emiMisc2,C.emiMisc3,C.emiMisc4,C.emiMisc5,C.emiMisc6,C.emiMisc7,C.emiMisc8];
-              const cashCols  = [C.cashflow1,C.cashflow2,C.cashflow3,C.cashflow4,C.cashflow5,C.cashflow6,C.cashflow7,C.cashflow8];
-              const updateRow = ds.getRange(rowNum, 1, 1, ds.getLastColumn()).getValues()[0];
+              // Parse EMI start date for computing per-EMI scheduled dates
+              const emiStartRaw = loanRow[C.emiStartDate];
+              const emiStart = (emiStartRaw instanceof Date && !isNaN(emiStartRaw))
+                ? new Date(emiStartRaw) : parseFlexDate(emiStartRaw);
+
               const logSheet  = ensureSheet(ss, LOGGED_EMI_SHEET,
                 ['EMI_ID','Customer Name','Mobile Model','EMI_Start_Date','EMI_Number',
-                 'EMI_Date','Row Number','Received','Received_date','MISC','Cashflow','MISC Type']);
+                 'EMI_Date','Loan ID','Received','Received_date','MISC','Cashflow','MISC Type']);
 
               for (let i = 0; i < remaining; i++) {
                 const slotIdx = numRcv + i;
                 const isLast  = (i === remaining - 1);
                 const cash    = isLast ? settlementAmt : 0;
 
-                if (slotIdx < 8) {
-                  updateRow[emiCols[slotIdx]]  = true;
-                  updateRow[dateCols[slotIdx]] = receivedDate;
-                  updateRow[cashCols[slotIdx]] = cash;
-                  updateRow[miscCols[slotIdx]] = cash - stdEmi;
+                // Compute scheduled EMI date
+                let scheduledDate = '';
+                if (emiStart) {
+                  const d = new Date(emiStart);
+                  d.setMonth(d.getMonth() + slotIdx);
+                  scheduledDate = fmtDate(d);
                 }
 
                 logSheet.appendRow([
@@ -454,8 +466,8 @@ function doPost(e) {
                   loanRow[C.model] || '',
                   loanRow[C.emiStartDate] || '',
                   slotIdx + 1,
-                  row[10] || '',
-                  rowNum,
+                  scheduledDate,
+                  loanId,
                   true,
                   receivedDate,
                   cash - stdEmi,
@@ -463,10 +475,6 @@ function doPost(e) {
                   'Early loan closing settlement',
                 ]);
               }
-
-              updateRow[C.numReceivedEmi] = duration;
-              updateRow[C.emiCompleted]   = 'YES';
-              ds.getRange(rowNum, 1, 1, ds.getLastColumn()).setValues([updateRow]);
             }
           }
           deleteFromSheet(ss, sheetName, id);
@@ -632,7 +640,7 @@ function readUnapproved(ss, sheetName, type) {
       } else {
         // Cols: ID(0) Status(1) SubmittedBy(2) SubmittedAt(3) Note(4)
         // EMI_ID(5) CustomerName(6) Model(7) EMI_Start_Date(8) EMI_Number(9)
-        // EMI_Date(10) RowNumber(11) Received(12) Received_date(13) MISC(14) Cashflow(15) MISC_Type(16)
+        // EMI_Date(10) LoanID(11) Received(12) Received_date(13) MISC(14) Cashflow(15) MISC_Type(16)
         const cashflow = parseFloat(r[15])||0;
         const misc = parseFloat(r[14])||0;
         const emiIdRaw = String(r[5]||'');
@@ -674,10 +682,10 @@ function appendToInput(ss, row) {
 // ── Append approved EMI to logged EMI sheet ───────────────────────────────
 // row comes from Unapproved_EMI: ID(0) Status(1) SubmittedBy(2) SubmittedAt(3) Note(4)
 // EMI_ID(5) CustomerName(6) Model(7) EMI_Start_Date(8) EMI_Number(9)
-// EMI_Date(10) RowNumber(11) Received(12) Received_date(13) MISC(14) Cashflow(15) MISC_Type(16)
+// EMI_Date(10) LoanID(11) Received(12) Received_date(13) MISC(14) Cashflow(15) MISC_Type(16)
 function appendToLoggedEmi(ss, row) {
   const headers = ['EMI_ID','Customer Name','Mobile Model','EMI_Start_Date','EMI_Number',
-    'EMI_Date','Row Number','Received','Received_date','MISC','Cashflow','MISC Type'];
+    'EMI_Date','Loan ID','Received','Received_date','MISC','Cashflow','MISC Type'];
   const sheet = ensureSheet(ss, LOGGED_EMI_SHEET, headers);
   sheet.appendRow([
     row[5], row[6], row[7], row[8], row[9],
