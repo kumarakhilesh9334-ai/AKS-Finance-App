@@ -11,6 +11,7 @@ async function fetchPendingFromSheets() {
     const data = await res.json();
     if (!data.ok) throw new Error(data.error);
     S.pending = data.pending;
+    S._submittedEmis = {}; // server is now source of truth
     refreshNav();
     // Always re-render these pages when data arrives — regardless of current page
     renderApprovals($('appr-search') ? $('appr-search').value : '');

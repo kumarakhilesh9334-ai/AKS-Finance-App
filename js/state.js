@@ -55,6 +55,7 @@ const S = {
   revisedDates: [],
   showRevisedView: false,
   _fullLoaded: false,
+  _submittedEmis: {}, // local-only: { loanId_emiNum: true }
 };
 
 let pid = 100; // auto-increment for pending IDs

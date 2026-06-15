@@ -198,6 +198,10 @@ function emiCard(l, type) {
   const today = new Date(); today.setHours(0,0,0,0);
   let bg = '', border = '', textColor = '#1a1a1a', subColor = '#888', overdueLabel = '';
 
+  // Check if this loan has a pending EMI submission (server + local)
+  const hasPendingEmi = (S.pending && S.pending.some(p => p.type==='emi' && p.data.loanId===l.loanId && p.status==='pending'))
+    || Object.keys(S._submittedEmis || {}).some(k => k.startsWith(l.loanId + '_'));
+
   if (type === 'overdue' && l.nextEmiDate) {
     const due = new Date(l.nextEmiDate); due.setHours(0,0,0,0);
     const days = Math.round((today - due) / 86400000);
@@ -236,6 +240,7 @@ function emiCard(l, type) {
       <span class="emi-amt-pill" style="${pillStyle}">${fmtAmt(l.monthlyEmi)}/mo</span>
       ${l.model ? `<span class="emi-model-pill" style="${pillStyle}">${l.model}</span>` : ''}
       ${lateTxt ? `<span class="emi-late-pill" style="${pillStyle}">&#9888; ${lateTxt}</span>` : ''}
+      ${hasPendingEmi ? `<span class="emi-late-pill" style="${pillStyle}">⏳ Pending</span>` : ''}
     </div>
   </div>`;
 }
@@ -393,6 +398,17 @@ async function selectEmiLoan(loanId) {
     S.pending.filter(p => p.type==='emi' && p.data.loanId===loanId && p.status==='pending')
       .map(p => Number(p.data.emiNum))
   );
+  // Merge locally-submitted EMIs (instant, no server dependency)
+  Object.keys(S._submittedEmis || {}).forEach(k => {
+    if (k.startsWith(loanId + '_')) pendingEmiSet.add(parseInt(k.split('_')[1]));
+  });
+  // Remove approved ones from local tracking
+  [...pendingEmiSet].forEach(n => {
+    if (loan.slots && loan.slots[n-1] && loan.slots[n-1].received) {
+      delete S._submittedEmis[loanId + '_' + n];
+      pendingEmiSet.delete(n);
+    }
+  });
   if (duration > 0) {
     let tableHtml = '<table class="emi-table"><thead><tr><th>EMI</th><th>Status</th><th>Due Date</th><th>Rcvd Date</th><th>Amount</th><th>Misc</th><th>Reason</th></tr></thead><tbody>';
     for (let i = 0; i < duration && i < 8; i++) {
@@ -595,10 +611,13 @@ async function submitEmi() {
   try {
     if (S.sheetsUrl) {
       const res = await gasPost({action:'saveEmi', item:emiItem});
-      if (res.ok && res.pending) S.pending = res.pending;
-      else await fetchPendingFromSheets();
+      if (res.ok) {
+        S._submittedEmis[loanId + '_' + emiNum] = true;
+        if (res.pending) S.pending = res.pending;
+      } else await fetchPendingFromSheets();
     }
     refreshNav();
+    rerenderActiveTab();
     renderApprovals($('appr-search') ? $('appr-search').value : '');
     showAlert('EMI payment submitted for approval.');
   } finally { hideLoader(); }
