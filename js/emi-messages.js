@@ -137,8 +137,10 @@ async function generateMessages() {
         }
       }
 
-      // Process slots
+      // Process slots — only generate Last Date/EMI Reminder for the first unreceived slot
       const slots = loan.slots || [];
+      const unreceived = slots.filter(s => !s.received).map(s => s.num);
+      const firstDue = unreceived.length ? Math.min(...unreceived) : Infinity;
       slots.forEach(slot => {
         const sd = slot.scheduledDate;
         if (!sd) return;
@@ -146,8 +148,8 @@ async function generateMessages() {
         if (!sdDt) return;
         const sdTime = sdDt.getTime();
 
-        // Last Date and EMI Reminder: skip if already received
-        if (!slot.received && sdTime >= endDate.getTime()) {
+        // Last Date and EMI Reminder: only for the first unreceived slot
+        if (slot.num === firstDue && !slot.received && sdTime >= endDate.getTime()) {
           const lastDateInRange = sdTime >= startDate.getTime() && sdTime <= endDate.getTime();
           if (lastDateInRange)
             addIfInRange('Last Date', sd, { emiNum: slot.num });
