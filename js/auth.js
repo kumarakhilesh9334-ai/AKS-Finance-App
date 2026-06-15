@@ -44,11 +44,11 @@ function doLogout() {
 }
 
 function defPage() {
-  if (S.cu.perms.loan)      return 'new-loan';
   if (S.cu.perms.emi)       return 'emi';
+  if (S.cu.perms.loan)      return 'new-loan';
   if (S.cu.perms.allLoans)  return 'all-loans';
   if (S.cu.perms.approvals) return 'approvals';
-  return 'new-loan';
+  return 'emi';
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
