@@ -289,9 +289,17 @@ function renderRevisedView() {
   const active = source.filter(l => !l.isDefaulted && !l.emiCompleted && l.status !== 'Closed');
   const filtered = q ? active.filter(l => l.loanId.toLowerCase().includes(q) || (l.customerName||'').toLowerCase().includes(q)) : active;
 
-  // Only loans with revised dates
+  // Only loans with unpaid revised dates
   const today = new Date(); today.setHours(0,0,0,0);
-  const hasRevDates = filtered.filter(l => S.revisedDates.some(rd => rd.loanId === l.loanId));
+  const hasRevDates = filtered.filter(l => {
+    const revs = S.revisedDates.filter(rd => rd.loanId === l.loanId);
+    // At least one unpaid revision OR a Mobile Jabt record
+    return revs.some(rd => {
+      if (rd.note === 'Mobile Jabt') return true;
+      const slot = (l.slots || []).find(s => s.num === rd.emiNum);
+      return !slot || !slot.received;
+    });
+  });
 
   const upcoming = [], overdue = [], mobileJabt = [];
   hasRevDates.forEach(l => {
