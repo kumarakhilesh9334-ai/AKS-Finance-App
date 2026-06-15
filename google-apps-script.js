@@ -36,23 +36,22 @@ const C = {
   revisedDateMsg:92,
 };
 
-// Columns needed for card display — max index = 47 (defaultComment)
-// We only read up to column 49 instead of 87 — much faster
-const SLIM_COLS_MAX = 49;
-
 // ── GET ───────────────────────────────────────────────────────────────────
 function doGet(e) {
   const action = (e && e.parameter && e.parameter.action) || '';
 
-  // ── Slim: only card columns — login fetch ───────────────────────────
+  // ── Slim: card columns only (49 cols) — instant card rendering ──────
   if (action === 'readLoansSlim') {
     try {
+      const cache = CacheService.getScriptCache();
+      const cached = cache.get('loans_slim');
+      if (cached) return jsonResponse({ok:true, loans: JSON.parse(cached)});
+
       const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
       const sheet = ss.getSheetByName(DATA_SHEET);
       if (!sheet || sheet.getLastRow() < 2) return jsonResponse({ok:true,loans:[]});
       const nRows = sheet.getLastRow() - 1;
-      // Read only the first SLIM_COLS_MAX columns — skips EMI slots, cashflows etc.
-      const raw = sheet.getRange(2, 1, nRows, SLIM_COLS_MAX).getValues();
+      const raw   = sheet.getRange(2, 1, nRows, 49).getValues();
       const loans = raw
         .filter(r => r[C.loanId] && String(r[C.loanId]).trim())
         .map(r => {
@@ -82,6 +81,51 @@ function doGet(e) {
             isDefaulted, emiCompleted, status, _slim:true,
           };
         });
+      cache.put('loans_slim', JSON.stringify(loans), 15);
+      return jsonResponse({ok:true, loans});
+    } catch(err){ return jsonResponse({ok:false, error:err.message}); }
+  }
+
+  // ── Full loan data for all loans (93 cols + miscType enrichment) ────
+  if (action === 'readAllLoans') {
+    try {
+      const cache = CacheService.getScriptCache();
+      const cached = cache.get('loans_full');
+      if (cached) return jsonResponse({ok:true, loans: JSON.parse(cached)});
+
+      const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
+      const sheet = ss.getSheetByName(DATA_SHEET);
+      if (!sheet || sheet.getLastRow() < 2) return jsonResponse({ok:true,loans:[]});
+      const nCols = 93;
+      const raw   = sheet.getRange(2, 1, sheet.getLastRow()-1, nCols).getValues();
+      const loans = raw.filter(r => r[C.loanId] && String(r[C.loanId]).trim()).map(r => buildFullLoan(r));
+
+      // Enrich all loans with miscType from logged EMI sheet (eliminates per-card round-trip)
+      try {
+        const logSheet = ss.getSheetByName(LOGGED_EMI_SHEET);
+        if (logSheet && logSheet.getLastRow() > 1) {
+          const logData = logSheet.getRange(2, 1, logSheet.getLastRow()-1, 12).getValues();
+          const byLoan = {};
+          logData.forEach(r => {
+            const lid = String(r[0]||'').replace(/_\d+$/, '');
+            if (!byLoan[lid]) byLoan[lid] = [];
+            byLoan[lid].push(r);
+          });
+          loans.forEach(loan => {
+            const rows = byLoan[loan.loanId];
+            if (rows) rows.forEach(r => {
+              const emiNum = parseInt(r[4]);
+              const mt = String(r[11]||'').trim();
+              if (mt && loan.slots) {
+                const slot = loan.slots.find(s => s.num === emiNum);
+                if (slot) slot.miscType = mt;
+              }
+            });
+          });
+        }
+      } catch(e) { /* non-critical */ }
+
+      cache.put('loans_full', JSON.stringify(loans), 600);
       return jsonResponse({ok:true, loans});
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
@@ -249,6 +293,13 @@ function doPost(e) {
                   : (e.postData && e.postData.contents ? e.postData.contents : '{}');
     const payload = JSON.parse(raw);
     const ss      = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+    // ── Verify caller identity on every mutation ───────────────────────
+    const _userId = String(payload._userId || '').trim();
+    const _pin    = String(payload._pin || '').trim();
+    if (!_userId || !_pin || !verifyAuth(ss, _userId, _pin)) {
+      return jsonResponse({ok:false, error:'Unauthorized'});
+    }
 
     // ── Save new loan submission ──────────────────────────────────────
     if (payload.action === 'saveLoan') {
@@ -489,6 +540,8 @@ function doPost(e) {
           deleteFromSheet(ss, sheetName, id);
         }
       }
+      try { CacheService.getScriptCache().remove('loans_slim'); } catch(e) {}
+      try { CacheService.getScriptCache().remove('loans_full'); } catch(e) {}
       return jsonResponse({ok:true, pending:readAllPending(ss)});
     }
     // ── Update remaining partial payment ──────────────────────────────
@@ -571,6 +624,8 @@ function doPost(e) {
         String(note||'').trim(),
         new Date().toISOString(),
       ]);
+      try { CacheService.getScriptCache().remove('loans_slim'); } catch(e) {}
+      try { CacheService.getScriptCache().remove('loans_full'); } catch(e) {}
       return jsonResponse({ok:true, pending:readAllPending(ss)});
     }
 
@@ -843,6 +898,11 @@ function readAllUsers(ss) {
       approvals: String(r[8]).toUpperCase() === 'TRUE',
     },
   }));
+}
+
+function verifyAuth(ss, userId, pin) {
+  const users = readAllUsers(ss);
+  return users.some(u => u.id === userId && u.pin === pin);
 }
 
 function jsonResponse(obj) {

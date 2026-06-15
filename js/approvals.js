@@ -35,6 +35,8 @@ async function savePendingToSheets(item) {
 // Apps Script receives the JSON in e.parameter.payload
 async function gasPost(payload) {
   const form = new FormData();
+  payload._userId = S.cu ? S.cu.id : '';
+  payload._pin    = S.cu ? S.cu.pin : '';
   form.append('payload', JSON.stringify(payload));
   const res = await fetch(S.sheetsUrl, { method:'POST', body: form });
   return res.json();

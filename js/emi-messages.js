@@ -79,6 +79,8 @@ async function generateMessages() {
       const name  = loan.customerName || '';
       const phone = loan.phone || '';
       if (!phone) return;
+      // Skip defaulted loans entirely — no messages for bad loans
+      if (loan.isDefaulted) return;
       const li    = loan.loanId || '';
 
       const loanTemplates = {
@@ -114,18 +116,28 @@ async function generateMessages() {
         messages.push({ label, phone, customerName: name, loanId: li, emiNum: extra && extra.emiNum, date: dateStr, msg });
       }
 
-      // Welcome: billDate + 1 day
-      if (loan.billDate) {
-        const wd = parseSheetDate(loan.billDate);
-        if (wd) { wd.setDate(wd.getDate() + 1); addIfInRange('Welcome', ymd(wd)); }
-      }
+      // Skip Welcome and Revised Date if loan is already completed
+      if (!loan.emiCompleted) {
+        if (loan.billDate) {
+          const wd = parseSheetDate(loan.billDate);
+          if (wd) { wd.setDate(wd.getDate() + 1); addIfInRange('Welcome', ymd(wd)); }
+        }
 
-      // Revised Date: trigger on revised date (similar to normal EMI message type)
-      if (loan.revisedDateData && loan.revisedDateMsg) {
-        const revs = revisedLookup[li] || [];
-        const emiLabels = revs.map(r => r.note === 'Mobile Jabt' ? 'Mobile Jabt' : r.emiNum).filter(v => v != null);
-        const emiLabel = emiLabels.length ? emiLabels.join(', ') : '';
-        addIfInRange('Revised Date', loan.revisedDateData, { amount: loan.monthlyEmi, emiNum: emiLabel || undefined });
+        if (loan.revisedDateData && loan.revisedDateMsg) {
+          const revs = revisedLookup[li] || [];
+          // Skip if all revised EMIs have been received
+          const anyUnreceived = revs.some(r => {
+            if (r.note === 'Mobile Jabt') return false;
+            if (r.note === 'Foreclosure') return false;
+            const slot = (loan.slots || []).find(s => s.num === r.emiNum);
+            return slot && !slot.received;
+          });
+          if (anyUnreceived || revs.length === 0) {
+            const emiLabels = revs.map(r => r.note === 'Mobile Jabt' ? 'Mobile Jabt' : r.emiNum).filter(v => v != null);
+            const emiLabel = emiLabels.length ? emiLabels.join(', ') : '';
+            addIfInRange('Revised Date', loan.revisedDateData, { amount: loan.monthlyEmi, emiNum: emiLabel || undefined });
+          }
+        }
       }
 
       // Process slots
@@ -137,8 +149,8 @@ async function generateMessages() {
         if (!sdDt) return;
         const sdTime = sdDt.getTime();
 
-        // Last Date and EMI Reminder: only if scheduled date >= endDate
-        if (sdTime >= endDate.getTime()) {
+        // Last Date and EMI Reminder: skip if already received
+        if (!slot.received && sdTime >= endDate.getTime()) {
           const lastDateInRange = sdTime >= startDate.getTime() && sdTime <= endDate.getTime();
           if (lastDateInRange)
             addIfInRange('Last Date', sd, { emiNum: slot.num });

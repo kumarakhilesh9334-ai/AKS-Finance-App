@@ -54,6 +54,7 @@ const S = {
   selectedEmiLoanId: null,
   revisedDates: [],
   showRevisedView: false,
+  _fullLoaded: false,
 };
 
 let pid = 100; // auto-increment for pending IDs

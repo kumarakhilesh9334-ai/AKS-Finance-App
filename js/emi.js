@@ -13,22 +13,37 @@ async function fetchLoansFromSheets(force) {
   const statusEl = $('emi-fetch-status');
   if (statusEl) { statusEl.textContent = 'Loading loans…'; statusEl.className = 'emi-fetch-status loading'; }
   try {
-    const res  = await fetch(S.sheetsUrl + '?action=readLoansSlim');
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || 'Unknown error');
-    S.sheetLoans = data.loans || [];
-    // Fetch revised dates in parallel
-    try {
-      const revRes  = await fetch(S.sheetsUrl + '?action=readRevisedDates');
-      const revData = await revRes.json();
-      if (revData.ok) S.revisedDates = revData.dates;
-    } catch(e) { console.warn('Could not load revised dates:', e.message); }
+    // Step 1: Slim fetch — card columns only, instant render
+    const slimRes  = await fetch(S.sheetsUrl + '?action=readLoansSlim');
+    const slimData = await slimRes.json();
+    if (!slimData.ok) throw new Error(slimData.error || 'Unknown error');
+    S.sheetLoans   = slimData.loans || [];
+    S._fullLoaded  = false;
+    rerenderActiveTab();
+
+    // Step 2: Pre-fetch full data (93 cols + miscType) + revised dates in parallel
+    const [fullFetch, revFetch] = await Promise.all([
+      fetch(S.sheetsUrl + '?action=readAllLoans').catch(() => null),
+      fetch(S.sheetsUrl + '?action=readRevisedDates').catch(() => null),
+    ]);
+    if (fullFetch) {
+      try {
+        const fullData = await fullFetch.json();
+        if (fullData.ok) { S.sheetLoans = fullData.loans || []; S._fullLoaded = true; }
+      } catch(e) { /* non-critical */ }
+    }
+    if (revFetch) {
+      try {
+        const revData = await revFetch.json();
+        if (revData.ok) S.revisedDates = revData.dates;
+      } catch(e) { console.warn('Could not load revised dates:', e.message); }
+    }
+
     if (statusEl) {
       statusEl.textContent = '✓ ' + S.sheetLoans.length + ' loans loaded.';
       statusEl.className = 'emi-fetch-status ok';
       setTimeout(() => { if ($('emi-fetch-status')) $('emi-fetch-status').textContent = ''; }, 3000);
     }
-    rerenderActiveTab();
   } catch (err) {
     if (statusEl) { statusEl.textContent = '⚠ Could not load: ' + err.message; statusEl.className = 'emi-fetch-status warn'; }
     S.sheetLoans = [];
@@ -327,25 +342,21 @@ async function selectEmiLoan(loanId) {
       || (() => { const l = S.loans.find(l => l.loanId === loanId); return l ? { ...l.data, status:'Active', slots:[], numReceivedEmi: l.emis.length } : null; })();
     if (!loan) return;
 
-    $('emi-detail-loanid').textContent = loanId;
-    $('emi-detail-sub').textContent    = loan.customerName || '';
-
-    // If we only have slim data, fetch full detail first
-    if (loan._slim) {
-      $('emi-detail').style.display = 'block';
-      $('emi-kv').innerHTML = '<div style="color:#888;font-size:12px;padding:8px 0">Loading details…</div>';
-      $('emi-slots-wrap').style.display = 'none';
+    // If full data not yet loaded and card is slim, fetch detail on click
+    if (!S._fullLoaded && loan._slim) {
       try {
         const res  = await fetch(S.sheetsUrl + '?action=readLoanDetail&loanId=' + encodeURIComponent(loanId));
         const data = await res.json();
         if (data.ok && data.loan) {
-          // Update cache with full data
           const idx = S.sheetLoans.findIndex(l => l.loanId === loanId);
           if (idx !== -1) S.sheetLoans[idx] = data.loan;
           loan = data.loan;
         }
       } catch(e) { console.warn('Could not load detail:', e.message); }
     }
+
+    $('emi-detail-loanid').textContent = loanId;
+    $('emi-detail-sub').textContent    = loan.customerName || '';
 
     const detail = $('emi-detail');
     detail.style.display = 'block';
@@ -703,25 +714,20 @@ async function openCdDetail(loanId) {
     let l = S.sheetLoans && S.sheetLoans.find(x => x.loanId === loanId);
     if (!l) return;
 
-  // If slim, show panel immediately with loading state then fetch full
-  if (l._slim) {
-    $('cd-detail-panel').style.display = 'block';
-    $('cd-detail-loanid').textContent = loanId;
-    $('cd-detail-sub').textContent    = l.customerName;
-    $('cd-detail-kv').innerHTML = '<div style="color:#888;font-size:12px;padding:8px 0">Loading full details…</div>';
-    $('cd-detail-panel').scrollIntoView({ behavior:'smooth', block:'nearest' });
-    try {
-      const res  = await fetch(S.sheetsUrl + '?action=readLoanDetail&loanId=' + encodeURIComponent(loanId));
-      const data = await res.json();
-      if (data.ok && data.loan) {
-        const idx = S.sheetLoans.findIndex(x => x.loanId === loanId);
-        if (idx !== -1) S.sheetLoans[idx] = data.loan;
-        l = data.loan;
-      }
-    } catch(e) { console.warn('Could not load detail:', e.message); }
-  }
+    // If full data not yet loaded and card is slim, fetch detail on click
+    if (!S._fullLoaded && l._slim) {
+      try {
+        const res  = await fetch(S.sheetsUrl + '?action=readLoanDetail&loanId=' + encodeURIComponent(loanId));
+        const data = await res.json();
+        if (data.ok && data.loan) {
+          const idx = S.sheetLoans.findIndex(x => x.loanId === loanId);
+          if (idx !== -1) S.sheetLoans[idx] = data.loan;
+          l = data.loan;
+        }
+      } catch(e) { console.warn('Could not load detail:', e.message); }
+    }
 
-  const akPct  = l.akShare  != null ? Math.round((l.akShare  <= 1 ? l.akShare  * 100 : l.akShare))  : 0;
+    const akPct  = l.akShare  != null ? Math.round((l.akShare  <= 1 ? l.akShare  * 100 : l.akShare))  : 0;
   const aksPct = l.aksShare != null ? Math.round((l.aksShare <= 1 ? l.aksShare * 100 : l.aksShare)) : 0;
 
   // All 87 columns — show every field, blank shown as '—'
