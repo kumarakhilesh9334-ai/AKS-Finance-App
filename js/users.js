@@ -1,20 +1,36 @@
-function renderUsers() {
+let blockedUsers = [];
+
+async function renderUsers() {
+  // Fetch blocked users
+  if (S.cu && S.cu.role === 'admin') {
+    const d = await gasGet('readBlockedUsers').catch(() => null);
+    if (d && d.ok) blockedUsers = d.blocked || [];
+  }
   $('users-list').innerHTML = S.users.map(u => {
     const perms = [];
     if (u.perms.loan)      perms.push('New Loan');
     if (u.perms.emi)       perms.push('Log EMI');
     if (u.perms.allLoans)  perms.push('All Loans');
     if (u.perms.approvals) perms.push('Approvals');
+    const isBlocked = blockedUsers.includes(u.username);
     return `<div class="user-row">
       <div class="avatar">${u.name.slice(0, 2).toUpperCase()}</div>
       <div style="flex:1">
         <div style="font-size:13px;font-weight:500">${u.name}</div>
         <div style="font-size:11px;color:#888">@${u.username} · ${perms.join(', ') || 'no tabs'}</div>
       </div>
-      <span class="badge b-${u.role}">${u.role}</span>
-      ${u.id !== 'u1' ? `<button class="btn btn-sm" style="color:#A32D2D;border-color:#f09595" onclick="removeUser('${u.id}')">Remove</button>` : ''}
+      ${isBlocked ? '<span class="badge b-default" style="background:#A32D2D">Blocked</span>' : `<span class="badge b-${u.role}">${u.role}</span>`}
+      ${isBlocked ? `<button class="btn btn-sm" style="color:#0F6E56;border-color:#0F6E56" onclick="unblockUser('${u.username}')">Unblock</button>` : ''}
+      ${!isBlocked && u.id !== 'u1' ? `<button class="btn btn-sm" style="color:#A32D2D;border-color:#f09595" onclick="removeUser('${u.id}')">Remove</button>` : ''}
     </div>`;
   }).join('');
+}
+
+async function unblockUser(username) {
+  if (!confirm('Unblock @' + username + '?')) return;
+  const res = await gasPost({ action: 'unblockUser', username });
+  if (res.ok) { showAlert('@' + username + ' unblocked.'); blockedUsers = blockedUsers.filter(u => u !== username); renderUsers(); }
+  else showAlert('Failed to unblock: ' + (res.error || 'Unknown error'), 'e');
 }
 
 async function addUser() {
@@ -73,8 +89,7 @@ async function syncUsersFromSheet() {
   try {
     const data = await gasGet('readUsers');
     if (data.ok && Array.isArray(data.users)) {
-      const adminUser = DEFAULT_USERS.find(u => u.id === 'u1');
-      S.users = [adminUser, ...data.users.filter(u => u.id !== 'u1')];
+      S.users = data.users;
       saveUsers();
     }
   } catch(e) {

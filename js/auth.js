@@ -3,24 +3,29 @@
 async function doLogin() {
   const u = v('l-user'), p = v('l-pin');
 
-  // Try local match (hardcoded users have PINs in S.users)
+  // Try local match (only works if user was previously cached with PIN from prior login)
   let user = S.users.find(x => x.username === u && x.pin === p);
 
-  // Fallback: verify against server (sheet users whose PINs are stored server-side)
+  // Fallback: verify against server
+  let serverErr = '';
   if (!user && S.sheetsUrl) {
     const res = await gasPost({ action: 'login', username: u, pin: p });
     if (res.ok && res.user) {
       user = res.user;
+      // Store session token for auto-restore on page refresh
+      if (res.token) localStorage.setItem('aks_token', res.token);
       // Merge full user (with PIN) into S.users for future lookups
       const idx = S.users.findIndex(x => x.id === user.id);
       if (idx >= 0) S.users[idx] = user;
       else S.users.push(user);
       saveUsers();
+    } else if (res && res.error) {
+      serverErr = res.error;
     }
   }
 
   if (!user) {
-    $('l-err').textContent = 'Invalid username or PIN';
+    $('l-err').textContent = serverErr || 'Invalid username or PIN';
     $('l-err').style.display = 'block';
     setTimeout(() => $('l-err').style.display = 'none', 3000);
     return;
@@ -49,6 +54,7 @@ function completeLogin(user) {
 
 function doLogout() {
   localStorage.removeItem('aks_user');
+  localStorage.removeItem('aks_token');
   S.cu = null;
   S.sheetLoans = [];
   S.pending = [];
@@ -70,11 +76,23 @@ function defPage() {
 document.addEventListener('DOMContentLoaded', async () => {
   $('l-pin').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   await fetchUsersFromSheets();
+
+  // Try restoring session from token (no PIN re-entry needed)
+  const token = localStorage.getItem('aks_token');
+  if (token) {
+    const res = await gasPost({ action: 'restoreSession', token });
+    if (res.ok && res.user) {
+      completeLogin(res.user);
+      return;
+    }
+    // Token expired or invalid — clear it and show login
+    localStorage.removeItem('aks_token');
+  }
+
+  // Fallback: restore from saved username (only if user has PIN cached locally)
   const saved = localStorage.getItem('aks_user');
   if (saved) {
     const user = S.users.find(x => x.username === saved);
-    // Only auto-restore if user has a PIN (hardcoded admin).
-    // Sheet users re-enter their PIN on each page load (PINs are never stored in localStorage).
     if (user && user.pin) completeLogin(user);
   }
 });

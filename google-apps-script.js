@@ -245,6 +245,15 @@ function doGet(e) {
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
 
+  // ── Read blocked usernames (for admin Unblock button) ────────────────
+  if (action === 'readBlockedUsers') {
+    const props = ScriptProperties.getProperties();
+    const blocked = Object.keys(props)
+      .filter(k => k.startsWith('blocked_'))
+      .map(k => k.replace('blocked_', ''));
+    return jsonResponse({ok:true, blocked});
+  }
+
   // ── Read message templates (columns CJ:CN, row 1) ───────────────────
   if (action === 'readMessageTemplates') {
     try {
@@ -309,10 +318,54 @@ function doPost(e) {
     // ── Login: skip auth (user hasn't logged in yet) ────────────────────
     if (payload.action === 'login') {
       const { username, pin } = payload;
+      if (!username) return jsonResponse({ok:false, error:'Username required'});
+
+      // Check if account is permanently blocked
+      if (ScriptProperties.getProperty('blocked_' + username)) {
+        return jsonResponse({ok:false, error:'Account blocked. Contact admin.'});
+      }
+
       const users = readAllUsers(ss);
       const user = users.find(u => u.username === username && u.pin === pin);
-      if (user) return jsonResponse({ok:true, user});
-      return jsonResponse({ok:false, error:'Invalid credentials'});
+
+      if (user) {
+        // Success — reset failed attempts
+        ScriptProperties.deleteProperty('failed_' + username);
+        return jsonResponse({ok:true, user, token: createSession(user)});
+      }
+
+      // Failed attempt — block after 5
+      const MAX_FAILS = 5;
+      let attempts = parseInt(ScriptProperties.getProperty('failed_' + username) || '0');
+      attempts++;
+      ScriptProperties.setProperty('failed_' + username, String(attempts));
+
+      if (attempts >= MAX_FAILS) {
+        ScriptProperties.setProperty('blocked_' + username, 'true');
+        ScriptProperties.deleteProperty('failed_' + username);
+        return jsonResponse({ok:false, error:'Account blocked due to 5 failed attempts. Contact admin.'});
+      }
+
+      return jsonResponse({ok:false, error:'Invalid credentials. ' + (MAX_FAILS - attempts) + ' attempt(s) remaining.'});
+    }
+
+    // ── Unblock user (admin only) ───────────────────────────────────────
+    if (payload.action === 'unblockUser') {
+      const { username } = payload;
+      if (!verifyAuth(ss, payload._userId, payload._pin)) return jsonResponse({ok:false, error:'Unauthorized'});
+      ScriptProperties.deleteProperty('blocked_' + username);
+      ScriptProperties.deleteProperty('failed_' + username);
+      return jsonResponse({ok:true});
+    }
+
+    // ── Restore session from token (no PIN re-entry) ────────────────────
+    if (payload.action === 'restoreSession') {
+      const { token } = payload;
+      if (token) {
+        const userJson = ScriptProperties.getProperty('session_' + token);
+        if (userJson) return jsonResponse({ok:true, user: JSON.parse(userJson)});
+      }
+      return jsonResponse({ok:false, error:'Invalid or expired session'});
     }
 
     // ── Verify caller identity on every mutation ───────────────────────
@@ -904,9 +957,12 @@ function fmtDate(val) {
 
 function readAllUsers(ss) {
   const sheet = ss.getSheetByName(USERS_SHEET);
-  if (!sheet || sheet.getLastRow() < 2) return [];
+  if (!sheet || sheet.getLastRow() < 2) {
+    return [{ id:'u1', username:'AKS', pin:'0000', name:'AKS (You)', role:'admin',
+      perms:{ loan:true, emi:true, allLoans:true, approvals:true } }];
+  }
   const raw = sheet.getRange(2, 1, sheet.getLastRow()-1, 9).getValues();
-  return raw.filter(r => r[0] && String(r[0]).trim()).map(r => ({
+  const users = raw.filter(r => r[0] && String(r[0]).trim()).map(r => ({
     id: String(r[0]).trim(),
     username: String(r[1]).trim(),
     pin: String(r[2]).trim(),
@@ -919,6 +975,12 @@ function readAllUsers(ss) {
       approvals: String(r[8]).toUpperCase() === 'TRUE',
     },
   }));
+  // Ensure default admin is always present (even if not in the sheet)
+  if (!users.some(u => u.id === 'u1')) {
+    users.unshift({ id:'u1', username:'AKS', pin:'0000', name:'AKS (You)', role:'admin',
+      perms:{ loan:true, emi:true, allLoans:true, approvals:true } });
+  }
+  return users;
 }
 
 // Public version — no PINs exposed (used by GET readUsers)
@@ -927,10 +989,15 @@ function readAllUsersPublic(ss) {
 }
 
 function verifyAuth(ss, userId, pin) {
-  // Hardcoded admin fallback for the frontend's default admin (u1/0000)
-  if (userId === 'u1' && pin === '0000') return true;
   const users = readAllUsers(ss);
   return users.some(u => u.id === userId && u.pin === pin);
+}
+
+// Create a session token for a logged-in user
+function createSession(user) {
+  const token = Utilities.getUuid();
+  ScriptProperties.setProperty('session_' + token, JSON.stringify(user));
+  return token;
 }
 
 function jsonResponse(obj) {
