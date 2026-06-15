@@ -151,31 +151,38 @@ function renderEmiColumns(query) {
 }
 
 // ── Revised badge helper (used by both emiCard and cdCard) ──────────────
-function revisedBadgeHtml(loanId) {
+function revisedBadgeHtml(loan) {
+  const loanId = loan.loanId;
   const revDates = S.revisedDates.filter(rd => rd.loanId === loanId);
   if (!revDates.length) return '';
   const jabtRecord = revDates.find(rd => rd.note === 'Mobile Jabt');
-  let text;
+  // Find unreceived revised EMIs (skip those already paid)
+  const unpaidRevisions = revDates.filter(rd => {
+    if (rd.note === 'Mobile Jabt') return false; // handled separately
+    const slot = (loan.slots || []).find(s => s.num === rd.emiNum);
+    return !slot || !slot.received;
+  });
+  // Mobile Jabt takes priority over unpaid revisions
   if (jabtRecord) {
-    text = 'Mobile Jabt';
-  } else {
-    const latest = revDates.reduce((a, b) => {
-      const da = parseSheetDate(a.revisedDate);
-      const db = parseSheetDate(b.revisedDate);
-      if (!da) return b; if (!db) return a;
-      return da > db ? a : b;
-    });
-    const revDateStr = latest.revisedDate ? fmtDisplayDate(latest.revisedDate) : '';
-    const revDt = parseSheetDate(latest.revisedDate);
-    let prefix = '';
-    if (revDt) {
-      const t = new Date(); t.setHours(0,0,0,0);
-      const diff = Math.round((revDt - t) / 86400000);
-      if (diff === 0) prefix = '⚠️ ';
-      else if (diff < 0) prefix = '❌ ';
-    }
-    text = `${prefix}Revised: ${revDateStr}`;
+    return `<div style="text-align:center;margin-bottom:2px"><span style="display:inline-block;font-size:12px;font-weight:600;color:#000;background:#fff;padding:1px 10px;border-radius:8px;border:1px solid #ddd">Mobile Jabt</span></div>`;
   }
+  if (!unpaidRevisions.length) return '';
+  const latest = unpaidRevisions.reduce((a, b) => {
+    const da = parseSheetDate(a.revisedDate);
+    const db = parseSheetDate(b.revisedDate);
+    if (!da) return b; if (!db) return a;
+    return da > db ? a : b;
+  });
+  const revDateStr = latest.revisedDate ? fmtDisplayDate(latest.revisedDate) : '';
+  const revDt = parseSheetDate(latest.revisedDate);
+  let prefix = '';
+  if (revDt) {
+    const t = new Date(); t.setHours(0,0,0,0);
+    const diff = Math.round((revDt - t) / 86400000);
+    if (diff === 0) prefix = '⚠️ ';
+    else if (diff < 0) prefix = '❌ ';
+  }
+  const text = `${prefix}Revised: ${revDateStr}`;
   return `<div style="text-align:center;margin-bottom:2px"><span style="display:inline-block;font-size:12px;font-weight:600;color:#000;background:#fff;padding:1px 10px;border-radius:8px;border:1px solid #ddd">${text}</span></div>`;
 }
 
@@ -213,7 +220,7 @@ function emiCard(l, type) {
   const pillStyle = bg ? 'background:rgba(255,255,255,0.2);color:#fff' : '';
 
   return `<div class="emi-card ${type}" data-loanid="${l.loanId}" style="${cardStyle}">
-    ${revisedBadgeHtml(l.loanId)}
+    ${revisedBadgeHtml(l)}
     <div class="emi-card-top">
       <span class="emi-card-id" style="color:${textColor}">${l.loanId}</span>
       <div style="text-align:right">
@@ -703,7 +710,7 @@ function cdCard(l, type) {
   const ps = bg ? 'background:rgba(255,255,255,0.2);color:#fff' : '';
 
   return `<div class="emi-card ${type}" data-loanid="${l.loanId}" data-type="${type}" onclick="openCdDetail('${l.loanId}')" style="cursor:pointer;${cs}">
-    ${revisedBadgeHtml(l.loanId)}
+    ${revisedBadgeHtml(l)}
     <div class="emi-card-top">
       <span class="emi-card-id" style="color:${tc}">${l.loanId}</span>
       <span class="badge ${type==='running'?'b-active':type==='closed'?'b-closed':'b-defaulted'}">${type}</span>
