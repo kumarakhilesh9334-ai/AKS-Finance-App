@@ -81,7 +81,8 @@ function doGet(e) {
             isDefaulted, emiCompleted, status, _slim:true,
           };
         });
-      cache.put('loans_slim', JSON.stringify(loans), 15);
+      const loansSlimStr = JSON.stringify(loans);
+      if (loansSlimStr.length <= 95000) cache.put('loans_slim', loansSlimStr, 15);
       return jsonResponse({ok:true, loans});
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
@@ -125,7 +126,8 @@ function doGet(e) {
         }
       } catch(e) { /* non-critical */ }
 
-      cache.put('loans_full', JSON.stringify(loans), 600);
+      const loansStr = JSON.stringify(loans);
+      if (loansStr.length <= 95000) cache.put('loans_full', loansStr, 600);
       return jsonResponse({ok:true, loans});
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
