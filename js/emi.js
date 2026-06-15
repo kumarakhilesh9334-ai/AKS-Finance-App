@@ -39,6 +39,9 @@ async function fetchLoansFromSheets(force) {
       } catch(e) { console.warn('Could not load revised dates:', e.message); }
     }
 
+    // Re-render cards with full data + revised badges now available
+    rerenderActiveTab();
+
     if (statusEl) {
       statusEl.textContent = '✓ ' + S.sheetLoans.length + ' loans loaded.';
       statusEl.className = 'emi-fetch-status ok';
@@ -158,6 +161,35 @@ function renderEmiColumns(query) {
   $('col-partials-list').innerHTML = partials.length ? partials.map(p => partialCard(p)).join('') : '<div class="emi-col-empty">No partial payments</div>';
 }
 
+// ── Revised badge helper (used by both emiCard and cdCard) ──────────────
+function revisedBadgeHtml(loanId) {
+  const revDates = S.revisedDates.filter(rd => rd.loanId === loanId);
+  if (!revDates.length) return '';
+  const jabtRecord = revDates.find(rd => rd.note === 'Mobile Jabt');
+  let text;
+  if (jabtRecord) {
+    text = 'Mobile Jabt';
+  } else {
+    const latest = revDates.reduce((a, b) => {
+      const da = parseSheetDate(a.revisedDate);
+      const db = parseSheetDate(b.revisedDate);
+      if (!da) return b; if (!db) return a;
+      return da > db ? a : b;
+    });
+    const revDateStr = latest.revisedDate ? fmtDisplayDate(latest.revisedDate) : '';
+    const revDt = parseSheetDate(latest.revisedDate);
+    let prefix = '';
+    if (revDt) {
+      const t = new Date(); t.setHours(0,0,0,0);
+      const diff = Math.round((revDt - t) / 86400000);
+      if (diff === 0) prefix = '⚠️ ';
+      else if (diff < 0) prefix = '❌ ';
+    }
+    text = `${prefix}Revised: ${revDateStr}`;
+  }
+  return `<div style="text-align:center;margin-bottom:2px"><span style="display:inline-block;font-size:12px;font-weight:600;color:#000;background:#fff;padding:1px 10px;border-radius:8px;border:1px solid #ddd">${text}</span></div>`;
+}
+
 function emiCard(l, type) {
   const dueTxt  = l.nextEmiDate ? fmtDisplayDate(l.nextEmiDate) : '—';
   const lateTxt = l.lateEmis ? l.lateEmis + '/' + l.numReceivedEmi + ' late' : '';
@@ -187,35 +219,8 @@ function emiCard(l, type) {
   const cardStyle = bg ? `background:${bg};border-left-color:${border};border-color:${border}` : '';
   const pillStyle = bg ? 'background:rgba(255,255,255,0.2);color:#fff' : '';
 
-  // Revised badge — top center (Mobile Jabt takes precedence)
-  const revDates = S.revisedDates.filter(rd => rd.loanId === l.loanId);
-  let revBadge = '';
-  if (revDates.length > 0) {
-    const jabtRecord = revDates.find(rd => rd.note === 'Mobile Jabt');
-    if (jabtRecord) {
-      revBadge = 'Mobile Jabt';
-    } else {
-      const latest = revDates.reduce((a, b) => {
-        const da = parseSheetDate(a.revisedDate);
-        const db = parseSheetDate(b.revisedDate);
-        if (!da) return b; if (!db) return a;
-        return da > db ? a : b;
-      });
-      const revDateStr = latest.revisedDate ? fmtDisplayDate(latest.revisedDate) : '';
-      const revDt = parseSheetDate(latest.revisedDate);
-      let prefix = '';
-      if (revDt) {
-        const today = new Date(); today.setHours(0,0,0,0);
-        const diff = Math.round((revDt - today) / 86400000);
-        if (diff === 0) prefix = '⚠️ ';
-        else if (diff < 0) prefix = '❌ ';
-      }
-      revBadge = `${prefix}Revised: ${revDateStr}`;
-    }
-  }
-
   return `<div class="emi-card ${type}" data-loanid="${l.loanId}" style="${cardStyle}">
-    ${revBadge ? `<div style="text-align:center;margin-bottom:2px"><span style="display:inline-block;font-size:12px;font-weight:600;color:#000;background:#fff;padding:1px 10px;border-radius:8px;border:1px solid #ddd">${revBadge}</span></div>` : ''}
+    ${revisedBadgeHtml(l.loanId)}
     <div class="emi-card-top">
       <span class="emi-card-id" style="color:${textColor}">${l.loanId}</span>
       <div style="text-align:right">
@@ -686,6 +691,7 @@ function cdCard(l, type) {
   const ps = bg ? 'background:rgba(255,255,255,0.2);color:#fff' : '';
 
   return `<div class="emi-card ${type}" data-loanid="${l.loanId}" data-type="${type}" onclick="openCdDetail('${l.loanId}')" style="cursor:pointer;${cs}">
+    ${revisedBadgeHtml(l.loanId)}
     <div class="emi-card-top">
       <span class="emi-card-id" style="color:${tc}">${l.loanId}</span>
       <span class="badge ${type==='running'?'b-active':type==='closed'?'b-closed':'b-defaulted'}">${type}</span>
