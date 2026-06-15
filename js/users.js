@@ -42,9 +42,8 @@ async function addUser() {
 
   // Save to sheet
   try {
-    const body = new URLSearchParams();
-    body.set('payload', JSON.stringify({ action:'addUser', ...user }));
-    await fetch(S.sheetsUrl, { method:'POST', body });
+    const res = await gasPost({ action:'addUser', ...user });
+    if (!res.ok) { showAlert('Failed to add user: ' + (res.error || 'Unknown error'), 'e'); return; }
   } catch(e) { console.warn('Sheet addUser failed, saving locally:', e.message); }
 
   // Merge response from sheet (or just use local if sheet failed)
@@ -62,9 +61,8 @@ async function removeUser(id) {
   if (id === 'u1') { showAlert('Cannot remove the default admin.', 'e'); return; }
 
   try {
-    const body = new URLSearchParams();
-    body.set('payload', JSON.stringify({ action:'removeUser', id }));
-    await fetch(S.sheetsUrl, { method:'POST', body });
+    const res = await gasPost({ action:'removeUser', id });
+    if (!res.ok) { showAlert('Failed to remove user: ' + (res.error || 'Unknown error'), 'e'); return; }
   } catch(e) { console.warn('Sheet removeUser failed, removing locally:', e.message); }
 
   await syncUsersFromSheet();
@@ -73,8 +71,7 @@ async function removeUser(id) {
 
 async function syncUsersFromSheet() {
   try {
-    const res  = await fetch(S.sheetsUrl + '?action=readUsers');
-    const data = await res.json();
+    const data = await gasGet('readUsers');
     if (data.ok && Array.isArray(data.users)) {
       const adminUser = DEFAULT_USERS.find(u => u.id === 'u1');
       S.users = [adminUser, ...data.users.filter(u => u.id !== 'u1')];

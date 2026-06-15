@@ -7,8 +7,7 @@
 async function fetchPendingFromSheets() {
   if (!S.sheetsUrl) return;
   try {
-    const res = await fetch(S.sheetsUrl + '?action=readPending');
-    const data = await res.json();
+    const data = await gasGet('readPending');
     if (!data.ok) throw new Error(data.error);
     S.pending = data.pending;
     S._submittedEmis = {}; // server is now source of truth
@@ -39,8 +38,28 @@ async function gasPost(payload) {
   payload._userId = S.cu ? S.cu.id : '';
   payload._pin    = S.cu ? S.cu.pin : '';
   form.append('payload', JSON.stringify(payload));
-  const res = await fetch(S.sheetsUrl, { method:'POST', body: form });
-  return res.json();
+  try {
+    const res = await fetch(S.sheetsUrl, { method:'POST', body: form });
+    return await res.json();
+  } catch(err) {
+    return { ok: false, error: 'Network error: ' + err.message };
+  }
+}
+
+// Authenticated GET helper — auto-injects _userId and _pin as query params
+async function gasGet(action, params = {}) {
+  params.action = action;
+  params._userId = S.cu ? S.cu.id : '';
+  params._pin    = S.cu ? S.cu.pin : '';
+  const qs = Object.entries(params)
+    .map(([k,v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v === undefined ? '' : v))
+    .join('&');
+  try {
+    const res = await fetch(S.sheetsUrl + '?' + qs);
+    return await res.json();
+  } catch(err) {
+    return { ok: false, error: 'Network error: ' + err.message };
+  }
 }
 
 // ── Approvals: two-column layout ──────────────────────────────────────────
@@ -95,22 +114,22 @@ async function approve(id, type) {
   showAlert('Approving…', 'w');
   showLoader();
   try {
-    const fd = new FormData();
-    fd.append('payload', JSON.stringify({action:'approvePending', id, type:item.type, data:item.data}));
-    const res = await fetch(S.sheetsUrl, { method:'POST', body: fd }).then(r => r.json());
-    if (!res.ok) {
+    const res = await gasPost({action:'approvePending', id, type:item.type, data:item.data});
+    if (res.ok) {
+      if (res.pending) S.pending = res.pending;
+      await fetchApprovedPartials();
+      refreshNav();
+      renderApprovals($('appr-search') ? $('appr-search').value : '');
+      rerenderActiveTab();
+      showAlert('Approved ✓');
+    } else {
       if (res.error === 'duplicate_emi') {
         showAlert('This EMI already exists in the logged EMI sheet!', 'e');
       } else {
         await fetchPendingFromSheets();
+        showAlert('Approval failed: ' + (res.error || 'Unknown error'), 'e');
       }
-    } else if (res.pending) S.pending = res.pending;
-    else await fetchPendingFromSheets();
-    await fetchApprovedPartials();
-    refreshNav();
-    renderApprovals($('appr-search') ? $('appr-search').value : '');
-    rerenderActiveTab();
-    if (res.ok) showAlert('Approved ✓');
+    }
   } catch(err) {
     showAlert('Sync failed: ' + err.message, 'w');
   } finally { hideLoader(); }
@@ -124,16 +143,18 @@ async function reject(id, type) {
   showAlert('Rejecting…', 'w');
   showLoader();
   try {
-    const fd = new FormData();
-    fd.append('payload', JSON.stringify({action:'rejectPending', id, type:item.type, note}));
-    const res = await fetch(S.sheetsUrl, { method:'POST', body: fd }).then(r => r.json());
-    if (res.ok && res.pending) S.pending = res.pending;
-    else await fetchPendingFromSheets();
-    await fetchApprovedPartials();
-    refreshNav();
-    renderApprovals($('appr-search') ? $('appr-search').value : '');
-    rerenderActiveTab();
-    showAlert('Entry rejected.', 'e');
+    const res = await gasPost({action:'rejectPending', id, type:item.type, note});
+    if (res.ok) {
+      if (res.pending) S.pending = res.pending;
+      await fetchApprovedPartials();
+      refreshNav();
+      renderApprovals($('appr-search') ? $('appr-search').value : '');
+      rerenderActiveTab();
+      showAlert('Entry rejected.', 'e');
+    } else {
+      await fetchPendingFromSheets();
+      showAlert('Rejection failed: ' + (res.error || 'Unknown error'), 'e');
+    }
   } catch(err) {
     showAlert('Sync failed: ' + err.message, 'w');
   } finally { hideLoader(); }
@@ -243,14 +264,18 @@ async function saveEdit() {
   try {
     if (S.sheetsUrl) {
       const res = await gasPost({action:'updatePending', id, type:item.type, data:d});
-      if (res.ok && res.pending) S.pending = res.pending;
-      else await fetchPendingFromSheets();
+      if (res.ok) {
+        if (res.pending) S.pending = res.pending;
+        await fetchApprovedPartials();
+        refreshNav();
+        renderApprovals($('appr-search') ? $('appr-search').value : '');
+        rerenderActiveTab();
+        showAlert('Entry updated.');
+      } else {
+        await fetchPendingFromSheets();
+        showAlert('Edit failed: ' + (res.error || 'Unknown error'), 'e');
+      }
     }
-    await fetchApprovedPartials();
-    refreshNav();
-    renderApprovals($('appr-search') ? $('appr-search').value : '');
-    rerenderActiveTab();
-    showAlert('Entry updated.');
   } finally { hideLoader(); }
 }
 

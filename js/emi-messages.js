@@ -19,8 +19,7 @@ async function initEmiMsgsPage() {
   $('emsg-results').innerHTML = '';
   $('emsg-mark-wrap').style.display = 'none';
   try {
-    const res = await fetch(S.sheetsUrl + '?action=readConfig');
-    const data = await res.json();
+    const data = await gasGet('readConfig');
     if (data.ok && data.lastMessageSent) {
       const last = parseDate(data.lastMessageSent);
       if (last) {
@@ -54,12 +53,10 @@ async function generateMessages() {
 
   showLoader();
   try {
-    const [lRes, rRes] = await Promise.all([
-      fetch(S.sheetsUrl + '?action=readAllLoansForMsgs'),
-      fetch(S.sheetsUrl + '?action=readRevisedDates'),
+    const [lData, rData] = await Promise.all([
+      gasGet('readAllLoansForMsgs'),
+      gasGet('readRevisedDates'),
     ]);
-    const lData = await lRes.json();
-    const rData = await rRes.json();
     if (!lData.ok) { showAlert('Failed to load loans: ' + (lData.error||''), 'e'); return; }
 
     const loans = lData.loans || [];
@@ -273,13 +270,16 @@ async function markMessagesDone() {
   const today = $('emsg-start').value || ymd(new Date());
   showLoader();
   try {
-    await gasPost({ action: 'updateLastMessageSent', date: today });
+    const res = await gasPost({ action: 'updateLastMessageSent', date: today });
+    if (!res.ok) {
+      showAlert('Failed to mark messages done: ' + (res.error || 'Unknown error'), 'e');
+      return;
+    }
     const next = parseDate(today);
     if (next) { next.setDate(next.getDate() + 1); $('emsg-from').value = ymd(next); }
     $('emsg-from-label').textContent = '(last marked: ' + today + ', +1 day)';
     $('emsg-results').innerHTML = '<div class="card" style="text-align:center;color:#888;font-size:13px">Marked as done.</div>';
     $('emsg-mark-wrap').style.display = 'none';
     showAlert('Last message sent date updated to ' + today);
-  } catch(err) { showAlert('Error: ' + err.message, 'e'); }
-  finally { hideLoader(); }
+  } finally { hideLoader(); }
 }

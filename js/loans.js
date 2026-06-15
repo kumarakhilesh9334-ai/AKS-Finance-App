@@ -301,12 +301,15 @@ async function submitLoan() {
   try {
     if (S.sheetsUrl) {
       const res = await gasPost({action:'saveLoan', item:loanItem});
-      if (res.ok && res.pending) S.pending = res.pending;
-      else await fetchPendingFromSheets();
+      if (res.ok) {
+        if (res.pending) S.pending = res.pending;
+        refreshNav();
+        showAlert('Loan submitted for approval.');
+      } else {
+        await fetchPendingFromSheets();
+        showAlert('Submission failed: ' + (res.error || 'Unknown error'), 'e');
+      }
     }
-    refreshNav();
-    renderApprovals($('appr-search') ? $('appr-search').value : '');
-    showAlert('Loan submitted for approval.');
   } finally { hideLoader(); }
 }
 

@@ -1,8 +1,24 @@
 // ── AUTH ──────────────────────────────────────────────────────────────────
 
-function doLogin() {
+async function doLogin() {
   const u = v('l-user'), p = v('l-pin');
-  const user = S.users.find(x => x.username === u && x.pin === p);
+
+  // Try local match (hardcoded users have PINs in S.users)
+  let user = S.users.find(x => x.username === u && x.pin === p);
+
+  // Fallback: verify against server (sheet users whose PINs are stored server-side)
+  if (!user && S.sheetsUrl) {
+    const res = await gasPost({ action: 'login', username: u, pin: p });
+    if (res.ok && res.user) {
+      user = res.user;
+      // Merge full user (with PIN) into S.users for future lookups
+      const idx = S.users.findIndex(x => x.id === user.id);
+      if (idx >= 0) S.users[idx] = user;
+      else S.users.push(user);
+      saveUsers();
+    }
+  }
+
   if (!user) {
     $('l-err').textContent = 'Invalid username or PIN';
     $('l-err').style.display = 'block';
@@ -57,6 +73,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const saved = localStorage.getItem('aks_user');
   if (saved) {
     const user = S.users.find(x => x.username === saved);
-    if (user) completeLogin(user);
+    // Only auto-restore if user has a PIN (hardcoded admin).
+    // Sheet users re-enter their PIN on each page load (PINs are never stored in localStorage).
+    if (user && user.pin) completeLogin(user);
   }
 });

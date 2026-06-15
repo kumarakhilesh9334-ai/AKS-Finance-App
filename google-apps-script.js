@@ -40,6 +40,16 @@ const C = {
 function doGet(e) {
   const action = (e && e.parameter && e.parameter.action) || '';
 
+  // ── Auth check: all actions except readUsers require PIN verification ──
+  if (action !== 'readUsers') {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const _userId = (e && e.parameter && e.parameter._userId) || '';
+    const _pin    = (e && e.parameter && e.parameter._pin) || '';
+    if (!_userId || !_pin || !verifyAuth(ss, _userId, _pin)) {
+      return jsonResponse({ok:false, error:'Unauthorized'});
+    }
+  }
+
   // ── Slim: card columns only (49 cols) — instant card rendering ──────
   if (action === 'readLoansSlim') {
     try {
@@ -231,7 +241,7 @@ function doGet(e) {
   if (action === 'readUsers') {
     try {
       const ss  = SpreadsheetApp.openById(SPREADSHEET_ID);
-      return jsonResponse({ok:true, users:readAllUsers(ss)});
+      return jsonResponse({ok:true, users:readAllUsersPublic(ss)});
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
 
@@ -295,6 +305,15 @@ function doPost(e) {
                   : (e.postData && e.postData.contents ? e.postData.contents : '{}');
     const payload = JSON.parse(raw);
     const ss      = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+    // ── Login: skip auth (user hasn't logged in yet) ────────────────────
+    if (payload.action === 'login') {
+      const { username, pin } = payload;
+      const users = readAllUsers(ss);
+      const user = users.find(u => u.username === username && u.pin === pin);
+      if (user) return jsonResponse({ok:true, user});
+      return jsonResponse({ok:false, error:'Invalid credentials'});
+    }
 
     // ── Verify caller identity on every mutation ───────────────────────
     const _userId = String(payload._userId || '').trim();
@@ -902,7 +921,14 @@ function readAllUsers(ss) {
   }));
 }
 
+// Public version — no PINs exposed (used by GET readUsers)
+function readAllUsersPublic(ss) {
+  return readAllUsers(ss).map(({ pin, ...u }) => u);
+}
+
 function verifyAuth(ss, userId, pin) {
+  // Hardcoded admin fallback for the frontend's default admin (u1/0000)
+  if (userId === 'u1' && pin === '0000') return true;
   const users = readAllUsers(ss);
   return users.some(u => u.id === userId && u.pin === pin);
 }

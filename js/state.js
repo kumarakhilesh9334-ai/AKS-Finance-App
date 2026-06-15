@@ -21,7 +21,7 @@ function loadUsers() {
 }
 
 function saveUsers() {
-  localStorage.setItem('aks_users', JSON.stringify(S.users));
+  localStorage.setItem('aks_users', JSON.stringify(S.users.map(({ pin, ...u }) => u)));
 }
 
 async function fetchUsersFromSheets() {

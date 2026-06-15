@@ -14,30 +14,19 @@ async function fetchLoansFromSheets(force) {
   if (statusEl) { statusEl.textContent = 'Loading loans…'; statusEl.className = 'emi-fetch-status loading'; }
   try {
     // Step 1: Slim fetch — card columns only, instant render
-    const slimRes  = await fetch(S.sheetsUrl + '?action=readLoansSlim');
-    const slimData = await slimRes.json();
-    if (!slimData.ok) throw new Error(slimData.error || 'Unknown error');
-    S.sheetLoans   = slimData.loans || [];
+    const slimRes  = await gasGet('readLoansSlim');
+    if (!slimRes.ok) throw new Error(slimRes.error || 'Unknown error');
+    S.sheetLoans   = slimRes.loans || [];
     S._fullLoaded  = false;
     rerenderActiveTab();
 
     // Step 2: Pre-fetch full data (93 cols + miscType) + revised dates in parallel
-    const [fullFetch, revFetch] = await Promise.all([
-      fetch(S.sheetsUrl + '?action=readAllLoans').catch(() => null),
-      fetch(S.sheetsUrl + '?action=readRevisedDates').catch(() => null),
+    const [fullData, revData] = await Promise.all([
+      gasGet('readAllLoans'),
+      gasGet('readRevisedDates'),
     ]);
-    if (fullFetch) {
-      try {
-        const fullData = await fullFetch.json();
-        if (fullData.ok) { S.sheetLoans = fullData.loans || []; S._fullLoaded = true; }
-      } catch(e) { /* non-critical */ }
-    }
-    if (revFetch) {
-      try {
-        const revData = await revFetch.json();
-        if (revData.ok) S.revisedDates = revData.dates;
-      } catch(e) { console.warn('Could not load revised dates:', e.message); }
-    }
+    if (fullData.ok) { S.sheetLoans = fullData.loans || []; S._fullLoaded = true; }
+    if (revData.ok) S.revisedDates = revData.dates;
 
     // Re-render cards with full data + revised badges now available
     rerenderActiveTab();
@@ -355,8 +344,7 @@ async function selectEmiLoan(loanId) {
     // If full data not yet loaded and card is slim, fetch detail on click
     if (!S._fullLoaded && loan._slim) {
       try {
-        const res  = await fetch(S.sheetsUrl + '?action=readLoanDetail&loanId=' + encodeURIComponent(loanId));
-        const data = await res.json();
+        const data = await gasGet('readLoanDetail', { loanId });
         if (data.ok && data.loan) {
           const idx = S.sheetLoans.findIndex(l => l.loanId === loanId);
           if (idx !== -1) S.sheetLoans[idx] = data.loan;
@@ -614,12 +602,14 @@ async function submitEmi() {
       if (res.ok) {
         S._submittedEmis[loanId + '_' + emiNum] = true;
         if (res.pending) S.pending = res.pending;
-      } else await fetchPendingFromSheets();
+        refreshNav();
+        rerenderActiveTab();
+        showAlert('EMI payment submitted for approval.');
+      } else {
+        await fetchPendingFromSheets();
+        showAlert('Submission failed: ' + (res.error || 'Unknown error'), 'e');
+      }
     }
-    refreshNav();
-    rerenderActiveTab();
-    renderApprovals($('appr-search') ? $('appr-search').value : '');
-    showAlert('EMI payment submitted for approval.');
   } finally { hideLoader(); }
   $('emi-detail').style.display = 'none';
   S.selectedEmiLoanId = null;
@@ -631,8 +621,7 @@ async function submitEmi() {
 async function fetchApprovedPartials() {
   if (!S.sheetsUrl) return;
   try {
-    const res  = await fetch(S.sheetsUrl + '?action=readApprovedPartials');
-    const data = await res.json();
+    const data = await gasGet('readApprovedPartials');
     if (data.ok && Array.isArray(data.partials)) {
       S.approvedPartials = data.partials;
       rerenderActiveTab();
@@ -650,13 +639,17 @@ async function logRemainingPartial(id, currentAmount) {
   showLoader();
   try {
     const res = await gasPost({action:'updateRemainingEmi', id, additionalAmount: parseFloat(additional), newDate});
-    if (res.ok && res.pending) S.pending = res.pending;
-    else await fetchPendingFromSheets();
-    await fetchApprovedPartials();
-    refreshNav();
-    rerenderActiveTab();
-    renderApprovals($('appr-search') ? $('appr-search').value : '');
-    showAlert('Remaining payment submitted for approval.');
+    if (res.ok) {
+      if (res.pending) S.pending = res.pending;
+      await fetchApprovedPartials();
+      refreshNav();
+      rerenderActiveTab();
+      renderApprovals($('appr-search') ? $('appr-search').value : '');
+      showAlert('Remaining payment submitted for approval.');
+    } else {
+      await fetchPendingFromSheets();
+      showAlert('Submission failed: ' + (res.error || 'Unknown error'), 'e');
+    }
   } finally { hideLoader(); }
 }
 
@@ -742,8 +735,7 @@ async function openCdDetail(loanId) {
     // If full data not yet loaded and card is slim, fetch detail on click
     if (!S._fullLoaded && l._slim) {
       try {
-        const res  = await fetch(S.sheetsUrl + '?action=readLoanDetail&loanId=' + encodeURIComponent(loanId));
-        const data = await res.json();
+        const data = await gasGet('readLoanDetail', { loanId });
         if (data.ok && data.loan) {
           const idx = S.sheetLoans.findIndex(x => x.loanId === loanId);
           if (idx !== -1) S.sheetLoans[idx] = data.loan;
@@ -953,18 +945,21 @@ async function submitRevisedDate() {
   showLoader();
   try {
     const res = await gasPost({ action: 'setRevisedDate', loanId, emiNum, revisedDate, amount, note });
-    if (res.ok && res.pending) S.pending = res.pending;
-    // Re-fetch revised dates
-    try {
-      const revRes = await fetch(S.sheetsUrl + '?action=readRevisedDates');
-      const revData = await revRes.json();
-      if (revData.ok) S.revisedDates = revData.dates;
-    } catch(e) { console.warn('Could not re-fetch revised dates:', e.message); }
-    // Re-render loan detail and cards
-    selectEmiLoan(loanId);
-    rerenderActiveTab();
-    renderApprovals($('appr-search') ? $('appr-search').value : '');
-    showAlert('Revised date saved.');
+    if (res.ok) {
+      if (res.pending) S.pending = res.pending;
+      // Re-fetch revised dates
+      try {
+        const revData = await gasGet('readRevisedDates');
+        if (revData.ok) S.revisedDates = revData.dates;
+      } catch(e) { console.warn('Could not re-fetch revised dates:', e.message); }
+      // Re-render loan detail and cards
+      selectEmiLoan(loanId);
+      rerenderActiveTab();
+      renderApprovals($('appr-search') ? $('appr-search').value : '');
+      showAlert('Revised date saved.');
+    } else {
+      showAlert('Failed to save revised date: ' + (res.error || 'Unknown error'), 'e');
+    }
   } finally { hideLoader(); }
 }
 
@@ -976,16 +971,19 @@ async function submitMobileJabt() {
   showLoader();
   try {
     const res = await gasPost({ action: 'setRevisedDate', loanId, emiNum: 0, revisedDate: '', amount: 0, note: 'Mobile Jabt' });
-    if (res.ok && res.pending) S.pending = res.pending;
-    try {
-      const revRes = await fetch(S.sheetsUrl + '?action=readRevisedDates');
-      const revData = await revRes.json();
-      if (revData.ok) S.revisedDates = revData.dates;
-    } catch(e) { console.warn('Could not re-fetch revised dates:', e.message); }
-    selectEmiLoan(loanId);
-    rerenderActiveTab();
-    renderApprovals($('appr-search') ? $('appr-search').value : '');
-    showAlert('Loan marked as Mobile Jabt.');
+    if (res.ok) {
+      if (res.pending) S.pending = res.pending;
+      try {
+        const revData = await gasGet('readRevisedDates');
+        if (revData.ok) S.revisedDates = revData.dates;
+      } catch(e) { console.warn('Could not re-fetch revised dates:', e.message); }
+      selectEmiLoan(loanId);
+      rerenderActiveTab();
+      renderApprovals($('appr-search') ? $('appr-search').value : '');
+      showAlert('Loan marked as Mobile Jabt.');
+    } else {
+      showAlert('Failed to mark Mobile Jabt: ' + (res.error || 'Unknown error'), 'e');
+    }
   } finally { hideLoader(); }
 }
 
