@@ -1,0 +1,23 @@
+{
+  "name": "aks-finance-app",
+  "version": "1.0.0",
+  "description": "AKS Finance - Loan and EMI management application",
+  "main": "index.html",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kumarakhilesh9334-ai/AKS-Finance-App.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/kumarakhilesh9334-ai/AKS-Finance-App/issues"
+  },
+  "homepage": "https://github.com/kumarakhilesh9334-ai/AKS-Finance-App#readme",
+  "dependencies": {
+    "@vercel/analytics": "^2.0.1"
+  }
+}
