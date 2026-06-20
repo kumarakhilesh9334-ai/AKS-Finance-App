@@ -7,7 +7,7 @@
 <link rel="icon" href="LOGO.jpeg" sizes="any">
 <link rel="apple-touch-icon" href="LOGO.jpeg">
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/styles.css?v=2">
 </head>
 <body>
 <script>document.documentElement.className='s'</script>
@@ -55,21 +55,21 @@
             <div class="form-section">Customer details</div>
 
             <!-- Aadhaar/PAN with autocomplete — FIRST field -->
-            <div class="full" id="idnum-wrap" style="position:relative">
+            <div id="idnum-wrap" style="position:relative">
               <label>Aadhaar / PAN <span style="color:#A32D2D">*</span> <span style="font-size:11px;color:#888">— type to search existing customers</span></label>
               <input type="text" id="f-idnum" placeholder="Aadhaar or PAN" autocomplete="off" oninput="onIdNumInput();genLoanId()" required>
               <div id="idnum-dropdown" class="idnum-dd" style="display:none"></div>
               <div id="customer-loans-panel" class="idnum-dd" style="display:none"></div>
             </div>
+            <div><label>Bill date <span style="color:#A32D2D">*</span></label><input type="date" id="f-billdate" required></div>
             <div><label>Customer name <span style="color:#A32D2D">*</span></label><input type="text" id="f-cname" placeholder="Full name" oninput="genLoanId()" required></div>
             <div><label>Mobile number <span style="color:#A32D2D">*</span></label><input type="text" id="f-phone" placeholder="10-digit" maxlength="10" required></div>
-            <div><label>Bill date <span style="color:#A32D2D">*</span></label><input type="date" id="f-billdate" required></div>
-            <div class="full" id="guarantor-wrap" style="position:relative">
+            <div id="guarantor-wrap" style="position:relative">
               <label>Guarantor name <span style="font-size:11px;color:#888">— type to search existing customers</span></label>
               <input type="text" id="f-guarantor-name" placeholder="Search by customer name" autocomplete="off" oninput="onGuarantorInput()">
               <div id="guarantor-dropdown" class="idnum-dd" style="display:none"></div>
             </div>
-            <div class="full"><label>Alternate no / Comments</label><textarea id="f-guar" placeholder="Alternate number or any comments"></textarea></div>
+            <div><label>Alternate no / Comments</label><input type="text" id="f-guar" placeholder="Alternate number or any comments"></div>
 
             <div class="form-section">Device details</div>
             <div><label>Mobile model <span style="color:#A32D2D">*</span></label><input type="text" id="f-model" placeholder="e.g. Samsung Galaxy A55" required></div>

@@ -43,6 +43,7 @@ function completeLogin(user) {
   S.sheetLoans = [];
   S.selectedEmiLoanId = null;
   S.pending = [];
+  restoreState();   // hydrate from cache for instant first paint
   buildNav();
   goTo(S.page || defPage());
 
@@ -55,6 +56,7 @@ function completeLogin(user) {
 function doLogout() {
   localStorage.removeItem('aks_user');
   localStorage.removeItem('aks_token');
+  clearCache();
   S.cu = null;
   S.sheetLoans = [];
   S.pending = [];

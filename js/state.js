@@ -33,6 +33,33 @@ async function fetchUsersFromSheets() {
   }
 }
 
+// ── CACHE ───────────────────────────────────────────────────────────────────
+const CACHE_KEYS = ['sheetLoans','pending','revisedDates','approvedPartials'];
+
+function cacheState() {
+  try {
+    CACHE_KEYS.forEach(k => {
+      const v = S[k];
+      if (v !== undefined && v !== null) localStorage.setItem('aks_cache_'+k, JSON.stringify(v));
+    });
+  } catch(e) { /* quota exceeded */ }
+}
+
+function restoreState() {
+  try {
+    let restored = false;
+    CACHE_KEYS.forEach(k => {
+      const s = localStorage.getItem('aks_cache_'+k);
+      if (s) { const v = JSON.parse(s); if (v !== null) { S[k] = v; restored = true; } }
+    });
+    if (restored) S._fullLoaded = true;
+  } catch(e) {}
+}
+
+function clearCache() {
+  CACHE_KEYS.forEach(k => localStorage.removeItem('aks_cache_'+k));
+}
+
 const S = {
   users: loadUsers(),
   loans: [],    // approved loan records

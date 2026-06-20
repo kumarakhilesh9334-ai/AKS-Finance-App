@@ -11,6 +11,7 @@ async function fetchPendingFromSheets() {
     if (!data.ok) throw new Error(data.error);
     S.pending = data.pending;
     S._submittedEmis = {}; // server is now source of truth
+    cacheState();
     refreshNav();
     // Always re-render these pages when data arrives — regardless of current page
     renderApprovals($('appr-search') ? $('appr-search').value : '');

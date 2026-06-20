@@ -18,6 +18,7 @@ async function fetchLoansFromSheets(force) {
     if (!slimRes.ok) throw new Error(slimRes.error || 'Unknown error');
     S.sheetLoans   = slimRes.loans || [];
     S._fullLoaded  = false;
+    cacheState();   // persist slim data immediately
     rerenderActiveTab();
 
     // Step 2: Pre-fetch full data (93 cols + miscType) + revised dates in parallel
@@ -27,6 +28,7 @@ async function fetchLoansFromSheets(force) {
     ]);
     if (fullData.ok) { S.sheetLoans = fullData.loans || []; S._fullLoaded = true; }
     if (revData.ok) S.revisedDates = revData.dates;
+    cacheState();   // persist fresh data to localStorage
 
     // Re-render cards with full data + revised badges now available
     rerenderActiveTab();
@@ -643,6 +645,7 @@ async function fetchApprovedPartials() {
     const data = await gasGet('readApprovedPartials');
     if (data.ok && Array.isArray(data.partials)) {
       S.approvedPartials = data.partials;
+      cacheState();
       rerenderActiveTab();
     }
   } catch(e) { console.warn('fetchApprovedPartials error:', e.message); }
