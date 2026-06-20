@@ -160,7 +160,7 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 
 /* ── NEW LOAN: two-column layout ─────────────────────────────────────── */
 .new-loan-layout{display:grid;grid-template-columns:1fr 320px;gap:0.85rem;align-items:start}
-@media(max-width:700px){.new-loan-layout{grid-template-columns:1fr}}
+@media(orientation:portrait){.new-loan-layout{grid-template-columns:1fr}}
 .cust-loan-pill{display:flex;align-items:center;gap:4px;padding:5px 8px;border-radius:6px;margin-bottom:3px;font-size:12px}
 
 /* ── AADHAAR DROPDOWN ────────────────────────────────────────────────── */
@@ -196,7 +196,7 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 
 /* ── THREE-COLUMN LAYOUT ─────────────────────────────────────────────── */
 .emi-three-col{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.75rem;margin-bottom:0.75rem}
-@media(max-width:700px){.emi-three-col{grid-template-columns:1fr}}
+@media(orientation:portrait){.emi-three-col{grid-template-columns:1fr}}
 .running-hd{background:#E8F0FE;color:#1a56db}
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -210,7 +210,7 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
    • No horizontal scrolling
    ═══════════════════════════════════════════════════════════════════════ */
 
-@media (max-width: 600px) {
+@media (orientation: portrait) {
 
   /* ── Base ─────────────────────────────────────────────────────────── */
   body { font-size: 15px; }
@@ -380,8 +380,10 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
   }
 }
 
-/* Desktop: hide bottom nav */
-@media (min-width: 601px) {
+/* Landscape: hide bottom nav, show all columns */
+@media (orientation: landscape) {
+  .main { padding: 1.25rem; }
+  .nav { display: flex; }
   #bottom-nav { display: none !important; }
   .mob-col-tabs { display: none !important; }
   .mob-three-tabs { display: none !important; }
