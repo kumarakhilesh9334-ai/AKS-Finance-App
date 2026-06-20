@@ -612,6 +612,20 @@ function doPost(e) {
         } else {
           appendToLoggedEmi(ss, row);
           deleteFromSheet(ss, sheetName, id);
+          // Also remove any leftover 'approved' partial payment rows for the same EMI_ID
+          const emiKey = String(row[5] || '').trim();
+          if (emiKey) {
+            const partialSheet = ss.getSheetByName(UNAPP_EMI_SHEET);
+            const pData = partialSheet.getDataRange().getValues();
+            for (let i=1; i<pData.length; i++) {
+              if (String(pData[i][1]).toLowerCase()==='approved'
+                && String(pData[i][16]||'').toLowerCase()==='partial payment'
+                && String(pData[i][5]||'').trim() === emiKey) {
+                partialSheet.deleteRow(i+1);
+                break;
+              }
+            }
+          }
         }
       }
       try { CacheService.getScriptCache().remove('loans_slim'); } catch(e) {}

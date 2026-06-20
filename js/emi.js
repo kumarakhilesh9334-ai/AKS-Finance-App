@@ -135,16 +135,20 @@ function renderEmiColumns(query) {
     return p.loanId.toLowerCase().includes(q) || (p.customerName||'').toLowerCase().includes(q);
   });
 
+  $('col-all-count').textContent    = upcoming.length + overdue.length + partials.length;
   $('col-upcoming-count').textContent = upcoming.length;
   $('col-overdue-count').textContent  = overdue.length;
   $('col-partials-count').textContent = partials.length;
   // Sync mobile tab badges
-  ['upcoming','overdue','partials'].forEach(c => {
+  ['all','upcoming','overdue','partials'].forEach(c => {
     const colEl = $('col-' + c + '-count');
     const mobEl = $('mob-' + c + '-count');
     if (colEl && mobEl) mobEl.textContent = colEl.textContent;
   });
   const noDataMsg = (!S.sheetLoans || !S.sheetLoans.length) ? '<div class="emi-col-empty">Fetching from Sheets…</div>' : '';
+  $('col-all-list').innerHTML      = (upcoming.length + overdue.length + partials.length)
+    ? [...upcoming.map(l => emiCard(l, 'upcoming')), ...overdue.map(l => emiCard(l, 'overdue')), ...partials.map(p => partialCard(p))].join('')
+    : (noDataMsg || '<div class="emi-col-empty">No active loans</div>');
   $('col-upcoming-list').innerHTML = upcoming.length ? upcoming.map(l => emiCard(l, 'upcoming')).join('') : (noDataMsg || '<div class="emi-col-empty">No upcoming EMIs</div>');
   $('col-overdue-list').innerHTML  = overdue.length  ? overdue.map(l  => emiCard(l, 'overdue')).join('')  : (noDataMsg || '<div class="emi-col-empty">All clear ✓</div>');
   $('col-partials-list').innerHTML = partials.length ? partials.map(p => partialCard(p)).join('') : '<div class="emi-col-empty">No partial payments</div>';
@@ -687,12 +691,15 @@ function renderClosedDefaulted(query) {
   const fClosed    = closed.filter(match);
   const fDefaulted = defaulted.filter(match);
 
+  $('cd-all-count').textContent      = fRunning.length + fClosed.length + fDefaulted.length;
   $('cd-running-count').textContent   = fRunning.length;
   $('cd-closed-count').textContent    = fClosed.length;
   $('cd-defaulted-count').textContent = fDefaulted.length;
 
   const loading = '<div class="emi-col-empty" style="color:#534AB7">Loading…</div>';
   const cdNoData = (!S.sheetLoans || !S.sheetLoans.length);
+  const allCards = [...fRunning.map(l => cdCard(l, 'running')), ...fClosed.map(l => cdCard(l, 'closed')), ...fDefaulted.map(l => cdCard(l, 'defaulted'))];
+  $('cd-all-list').innerHTML       = allCards.length ? allCards.join('') : (cdNoData ? loading : '<div class="emi-col-empty">No loans</div>');
   $('cd-running-list').innerHTML   = fRunning.length   ? fRunning.map(l   => cdCard(l, 'running')).join('')   : (cdNoData ? loading : '<div class="emi-col-empty">No running loans</div>');
   $('cd-closed-list').innerHTML    = fClosed.length    ? fClosed.map(l    => cdCard(l, 'closed')).join('')    : (cdNoData ? loading : '<div class="emi-col-empty">No closed loans</div>');
   $('cd-defaulted-list').innerHTML = fDefaulted.length ? fDefaulted.map(l => cdCard(l, 'defaulted')).join('') : (cdNoData ? loading : '<div class="emi-col-empty">No defaulted loans</div>');

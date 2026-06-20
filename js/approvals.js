@@ -19,6 +19,9 @@ async function fetchPendingFromSheets() {
     console.warn('fetchPending error:', err.message);
     // Still re-render with whatever is in S.pending (may be empty)
     renderApprovals($('appr-search') ? $('appr-search').value : '');
+  } finally {
+    // Keep partials in sync
+    fetchApprovedPartials();
   }
 }
 

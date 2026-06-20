@@ -55,9 +55,9 @@ function goTo(pg) {
   const bb = $('bnav-' + pg); if (bb) bb.classList.add('active');
   $('alert-box').innerHTML = '';
   if (pg === 'new-loan')  initNewLoanPage();
-  if (pg === 'emi')       { populateEmiSelect(); mobSwitchEmiCol('upcoming'); }
+  if (pg === 'emi')       { populateEmiSelect(); mobSwitchEmiCol('all'); }
   if (pg === 'approvals') { renderApprovals($('appr-search') ? $('appr-search').value : ''); mobSwitchApprCol('loan'); }
-  if (pg === 'all-loans') { renderClosedDefaulted(''); mobSwitchCdCol('running'); }
+  if (pg === 'all-loans') { renderClosedDefaulted(''); mobSwitchCdCol('all'); }
   if (pg === 'my-subs')   renderMySubs();
   if (pg === 'emi-msgs')  initEmiMsgsPage();
   if (pg === 'users')     renderUsers();
@@ -67,27 +67,20 @@ function refreshNav() { buildNav(); }
 
 // ── Mobile column switchers ───────────────────────────────────────────────
 function mobSwitchEmiCol(col) {
-  // Show/hide columns
-  ['upcoming','overdue','partials'].forEach(c => {
+  ['all','upcoming','overdue','partials'].forEach(c => {
     const wrap = $('emi-col-' + c);
-    const tab  = $('mob-tab-' + c);
+    const tab  = $('mob-tab-emi-' + c);
     if (!wrap || !tab) return;
     const active = c === col;
     wrap.classList.toggle('mob-active', active);
     tab.classList.toggle('active', active);
   });
-  // Sync counts to mobile tab labels
-  ['upcoming','overdue','partials'].forEach(c => {
-    const colEl = $('col-' + c + '-count');
-    const mobEl = $('mob-' + c + '-count');
-    if (colEl && mobEl) mobEl.textContent = colEl.textContent;
-  });
 }
 
 function mobSwitchCdCol(col) {
-  ['running','closed','defaulted'].forEach(c => {
+  ['all','running','closed','defaulted'].forEach(c => {
     const wrap = $('cd-col-' + c);
-    const tab  = $('mob-tab-' + c);
+    const tab  = $('mob-tab-cd-' + c);
     if (!wrap || !tab) return;
     const active = c === col;
     wrap.classList.toggle('mob-active', active);

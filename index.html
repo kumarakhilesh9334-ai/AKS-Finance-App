@@ -144,18 +144,17 @@
       </div>
       <!-- Mobile: tab switcher -->
       <div class="mob-col-tabs">
-        <button class="mob-col-tab active" id="mob-tab-upcoming" onclick="mobSwitchEmiCol('upcoming')">
-          🟢 Upcoming <span id="mob-upcoming-count" class="emi-section-count">0</span>
-        </button>
-        <button class="mob-col-tab" id="mob-tab-overdue" onclick="mobSwitchEmiCol('overdue')">
-          🔴 Overdue <span id="mob-overdue-count" class="emi-section-count">0</span>
-        </button>
-        <button class="mob-col-tab" id="mob-tab-partials" onclick="mobSwitchEmiCol('partials')">
-          📋 Partials <span id="mob-partials-count" class="emi-section-count">0</span>
-        </button>
+        <button class="mob-col-tab active" id="mob-tab-emi-all" onclick="mobSwitchEmiCol('all')">🔵 All</button>
+        <button class="mob-col-tab" id="mob-tab-emi-upcoming" onclick="mobSwitchEmiCol('upcoming')">🟢 Upcoming</button>
+        <button class="mob-col-tab" id="mob-tab-emi-overdue" onclick="mobSwitchEmiCol('overdue')">🔴 Overdue</button>
+        <button class="mob-col-tab" id="mob-tab-emi-partials" onclick="mobSwitchEmiCol('partials')">📋 Partials</button>
       </div>
       <div class="emi-two-col">
-        <div class="emi-col-wrap mob-active" id="emi-col-upcoming">
+        <div class="emi-col-wrap mob-active" id="emi-col-all">
+          <div class="emi-col-hd" style="background:#534AB7;color:#fff"><span>🔵 All</span><span class="emi-section-count" id="col-all-count">0</span></div>
+          <div class="emi-col-body" id="col-all-list"><div class="emi-col-empty">Loading…</div></div>
+        </div>
+        <div class="emi-col-wrap" id="emi-col-upcoming">
           <div class="emi-col-hd upcoming-hd"><span>🟢 Upcoming</span><span class="emi-section-count" id="col-upcoming-count">0</span></div>
           <div class="emi-col-body" id="col-upcoming-list"><div class="emi-col-empty">Loading…</div></div>
         </div>
@@ -259,12 +258,17 @@
       </div>
       <!-- Mobile: tab switcher -->
       <div class="mob-three-tabs">
-        <button class="mob-three-tab active" id="mob-tab-running"   onclick="mobSwitchCdCol('running')">🔵 Running</button>
-        <button class="mob-three-tab"        id="mob-tab-closed"    onclick="mobSwitchCdCol('closed')">⚪ Closed</button>
-        <button class="mob-three-tab"        id="mob-tab-defaulted" onclick="mobSwitchCdCol('defaulted')">⚠️ Defaulted</button>
+        <button class="mob-three-tab active" id="mob-tab-cd-all"     onclick="mobSwitchCdCol('all')">🔵 All</button>
+        <button class="mob-three-tab"        id="mob-tab-cd-running"   onclick="mobSwitchCdCol('running')">🔵 Running</button>
+        <button class="mob-three-tab"        id="mob-tab-cd-closed"    onclick="mobSwitchCdCol('closed')">⚪ Closed</button>
+        <button class="mob-three-tab"        id="mob-tab-cd-defaulted" onclick="mobSwitchCdCol('defaulted')">⚠️ Defaulted</button>
       </div>
       <div class="emi-three-col">
-        <div class="emi-col-wrap mob-active" id="cd-col-running">
+        <div class="emi-col-wrap mob-active" id="cd-col-all">
+          <div class="emi-col-hd" style="background:#534AB7;color:#fff"><span>🔵 All</span><span class="emi-section-count" id="cd-all-count">0</span></div>
+          <div class="emi-col-body" id="cd-all-list"><div class="emi-col-empty">Loading…</div></div>
+        </div>
+        <div class="emi-col-wrap" id="cd-col-running">
           <div class="emi-col-hd running-hd"><span>🔵 Running</span><span class="emi-section-count" id="cd-running-count">0</span></div>
           <div class="emi-col-body" id="cd-running-list"><div class="emi-col-empty">Loading…</div></div>
         </div>

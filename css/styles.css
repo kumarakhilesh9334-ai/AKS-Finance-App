@@ -125,7 +125,7 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 .emi-late-pill{font-size:11px;background:#FAEEDA;color:#633806;border-radius:20px;padding:1px 8px}
 
 /* ── TWO-COLUMN EMI LAYOUT ────────────────────────────────────────────── */
-.emi-two-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem;margin-bottom:0.75rem}
+.emi-two-col{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.75rem;margin-bottom:0.75rem}
 .emi-col-wrap{background:#fff;border:0.5px solid #ddd;border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
 .emi-col-hd{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;font-size:12px;font-weight:600;letter-spacing:0.3px}
 .upcoming-hd{background:#E1F5EE;color:#085041}
@@ -195,7 +195,7 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 .emi-card.upcoming .emi-card-date-big{color:#0F6E56}
 
 /* ── THREE-COLUMN LAYOUT ─────────────────────────────────────────────── */
-.emi-three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem;margin-bottom:0.75rem}
+.emi-three-col{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.75rem;margin-bottom:0.75rem}
 @media(max-width:700px){.emi-three-col{grid-template-columns:1fr}}
 .running-hd{background:#E8F0FE;color:#1a56db}
 
@@ -286,18 +286,16 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
   }
   .mob-col-tab {
     flex: 1;
-    padding: 10px 8px;
+    padding: 9px 4px;
     border: none;
     background: none;
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 500;
     cursor: pointer;
     font-family: inherit;
     color: #888;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
+    text-align: center;
+    white-space: nowrap;
   }
   .mob-col-tab.active { background: #534AB7; color: #fff; }
 
