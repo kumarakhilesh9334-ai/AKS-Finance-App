@@ -379,7 +379,9 @@ async function selectEmiLoan(loanId) {
 
     const detail = $('emi-detail');
     detail.style.display = 'block';
-    detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if ($('emi-detail-ph')) $('emi-detail-ph').style.display = 'none';
+    if (window.matchMedia('(orientation: portrait)').matches)
+      detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
   const akPct  = Math.round((loan.akShare  || 0) * 100);
   const aksPct = Math.round((loan.aksShare || 0) * 100);
@@ -547,6 +549,7 @@ async function selectEmiLoan(loanId) {
 // ── Diff check ────────────────────────────────────────────────────────────
 function closeEmiDetail() {
   $('emi-detail').style.display = 'none';
+  if ($('emi-detail-ph')) $('emi-detail-ph').style.display = '';
   S.selectedEmiLoanId = null;
   document.querySelectorAll('.emi-card').forEach(r => r.classList.remove('selected'));
 }
@@ -865,12 +868,15 @@ async function openCdDetail(loanId) {
 
   const panel = $('cd-detail-panel');
   panel.style.display = 'block';
-  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  if ($('cd-detail-ph')) $('cd-detail-ph').style.display = 'none';
+  if (window.matchMedia('(orientation: portrait)').matches)
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } finally { hideLoader(); }
 }
 
 function closeCdDetail() {
   $('cd-detail-panel').style.display = 'none';
+  if ($('cd-detail-ph')) $('cd-detail-ph').style.display = '';
   document.querySelectorAll('#page-closed-defaulted .emi-card').forEach(c => c.classList.remove('selected'));
 }
 

@@ -380,16 +380,72 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
   }
 }
 
-/* Landscape: hide bottom nav, show all columns */
+/* Landscape: master-detail layout (left: cards, right: detail) */
 @media (orientation: landscape) {
   .main { padding: 1.25rem; }
   .nav { display: flex; }
   #bottom-nav { display: none !important; }
   .mob-col-tabs { display: none !important; }
   .mob-three-tabs { display: none !important; }
-  .emi-two-col .emi-col-wrap { display: flex !important; }
-  .emi-three-col .emi-col-wrap { display: flex !important; }
+
+  /* Master-detail container */
+  .landscape-wrap { display: flex; gap: 0.75rem; align-items: flex-start; }
+  .ls-left { width: 50%; min-width: 0; }
+  .ls-right { width: 50%; min-width: 0; position: sticky; top: 90px; max-height: calc(100vh - 120px); overflow-y: auto; }
+
+  /* Left panel: show mobile tabs + one column at a time (like portrait) */
+  .ls-left .mob-col-tabs,
+  .ls-left .mob-three-tabs {
+    display: flex !important;
+    background: #e8e8e6;
+    border: none;
+    border-radius: 8px;
+    padding: 3px;
+    gap: 2px;
+    margin-bottom: 0.75rem;
+  }
+  .ls-left .mob-col-tab,
+  .ls-left .mob-three-tab {
+    flex: 1;
+    padding: 8px 6px;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    color: #666;
+    background: transparent;
+    text-align: center;
+    white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
+  }
+  .ls-left .mob-col-tab.active,
+  .ls-left .mob-three-tab.active { background: #534AB7; color: #fff; }
+  .ls-left .mob-col-tab:hover:not(.active),
+  .ls-left .mob-three-tab:hover:not(.active) { background: #d5d5d3; }
+  .ls-left .emi-two-col { display: block; }
+  .ls-left .emi-two-col .emi-col-wrap { display: none; }
+  .ls-left .emi-two-col .emi-col-wrap.mob-active { display: flex; }
+  .ls-left .emi-three-col { display: block; }
+  .ls-left .emi-three-col .emi-col-wrap { display: none; }
+  .ls-left .emi-three-col .emi-col-wrap.mob-active { display: flex; }
+  .ls-left .emi-col-body { max-height: calc(100vh - 260px); overflow-y: auto; }
+
+  /* Right panel: detail card */
+  .ls-right #emi-detail,
+  .ls-right #cd-detail-panel { margin-top: 0; }
+
+  /* Placeholder */
+  .ls-placeholder {
+    background: #fafafa; border: 1px dashed #ccc; border-radius: 12px;
+    padding: 3rem 2rem; text-align: center; color: #aaa; font-size: 14px;
+    min-height: 300px; display: flex; align-items: center; justify-content: center;
+  }
 }
+
+/* ── LANDSCAPE PLACEHOLDER (hidden in portrait) ──────────────────────────── */
+.ls-placeholder { display: none; }
 
 /* ── APPROVALS TWO-COLUMN ─────────────────────────────────────────────── */
 .approvals-two-col{display:grid;grid-template-columns:1fr 1fr;gap:0.85rem;align-items:start}
