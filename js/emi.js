@@ -842,7 +842,7 @@ async function openCdDetail(loanId) {
   let emiTableHtml = '';
   const slots2 = l.slots || [];
   if (slots2.length) {
-    emiTableHtml = '<div style="margin-top:0.75rem"><div style="font-size:12px;font-weight:600;color:#534AB7;margin-bottom:6px">EMI Schedule</div><table class="emi-table"><thead><tr><th>EMI</th><th>Received</th><th>Due Date</th><th>Rcvd Date</th><th>Misc</th><th>Cashflow</th></tr></thead><tbody>';
+    emiTableHtml = '<div><div style="font-size:12px;font-weight:600;color:#534AB7;margin-bottom:6px">EMI Schedule</div><table class="emi-table"><thead><tr><th>EMI</th><th>Received</th><th>Due Date</th><th>Rcvd Date</th><th>Misc</th><th>Cashflow</th></tr></thead><tbody>';
     slots2.forEach((s,i) => {
       emiTableHtml += `<tr class="emi-tr${s.received?' rcvd':''}"><td>${i+1}</td><td>${Bool(s.received)}</td><td>${s.scheduledDate?fmtDisplayDate(s.scheduledDate):'—'}</td><td>${s.receivedDate?fmtDisplayDate(s.receivedDate):'—'}</td><td>${s.misc?M(s.misc):'—'}</td><td>${s.cashflow?M(s.cashflow):'—'}</td></tr>`;
     });
@@ -861,10 +861,11 @@ async function openCdDetail(loanId) {
 
   $('cd-detail-loanid').textContent = l.loanId;
   $('cd-detail-sub').textContent    = l.customerName + (l.phone ? ' · ' + l.phone : '') + (l.model ? ' · ' + l.model : '');
+  $('cd-emi-schedule').innerHTML = emiTableHtml;
   $('cd-detail-kv').innerHTML = rows
     .filter(([label]) => !HIDDEN_LABELS.has(label))
     .map(([label, val]) => `<span class="kv-l">${label}</span><span class="kv-v">${val}</span>`
-  ).join('') + emiTableHtml;
+  ).join('');
 
   const panel = $('cd-detail-panel');
   panel.style.display = 'block';

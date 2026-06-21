@@ -181,9 +181,7 @@
               <button class="btn btn-sm" onclick="closeEmiDetail()">✕ Close</button>
             </div>
             <div class="divider" style="margin-bottom:0.75rem"></div>
-            <div class="kv" id="emi-kv" style="margin-bottom:0.75rem"></div>
               <div id="emi-slots-wrap">
-                <div class="divider"></div>
                 <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:6px">EMI history</div>
                 <div id="emi-slots"></div>
               </div>
@@ -197,6 +195,8 @@
               <div class="fg fg-2">
               <div><label>Amount received (₹)</label><input type="number" id="emi-amt" placeholder="0" oninput="checkEmiDiff()"></div>
               <div><label>Payment date</label><input type="date" id="emi-date"></div>
+            </div>
+            <div class="fg fg-3" style="margin-bottom:0.75rem">
               <div><label>Received</label>
                 <select id="emi-received">
                   <option value="true">TRUE</option>
@@ -206,6 +206,10 @@
               <div><label>Payment mode</label>
                 <select id="emi-mode"><option>Cash</option><option>UPI</option><option>Bank transfer</option><option>Other</option></select>
               </div>
+              <div><label>Notes</label>
+                <input type="text" id="emi-notes" placeholder="Any remarks" style="height:28px;padding:4px 8px;border:0.5px solid #ccc;border-radius:6px;font-size:12px;width:100%;box-sizing:border-box">
+              </div>
+            </div>
               <div id="emi-reason-wrap" style="display:none"><label>Reason for difference <span style="color:#A32D2D">*</span></label>
                 <select id="emi-reason">
                   <option value="">— Select reason —</option>
@@ -214,12 +218,12 @@
                 </select>
               </div>
               <div class="full" id="emi-diff-warn" style="display:none"><div class="diff-warn" id="emi-diff-msg"></div></div>
-              <div class="full"><label>Notes</label><textarea id="emi-notes" placeholder="Any additional remarks..."></textarea></div>
-            </div>
             <div class="submit-row">
               <button class="btn" onclick="closeEmiDetail()">Cancel</button>
               <button id="emi-submit-btn" class="btn btn-primary" onclick="submitEmi()">Submit for approval</button>
             </div>
+              <div class="divider"></div>
+              <div class="kv" id="emi-kv" style="margin-bottom:0.75rem;font-size:12px"></div>
           </div>
           <div class="ls-placeholder" id="emi-detail-ph">Select a loan to view details</div>
         </div>
@@ -301,6 +305,7 @@
               <button class="btn btn-sm" onclick="closeCdDetail()">✕ Close</button>
             </div>
             <div class="divider" style="margin-bottom:0.75rem"></div>
+            <div id="cd-emi-schedule" style="margin-bottom:0.75rem"></div>
             <div class="kv" id="cd-detail-kv" style="font-size:12px"></div>
           </div>
           <div class="ls-placeholder" id="cd-detail-ph">Select a loan to view details</div>
