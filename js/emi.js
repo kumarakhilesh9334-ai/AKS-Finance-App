@@ -425,17 +425,12 @@ async function selectEmiLoan(loanId) {
     for (let i = 0; i < duration && i < 8; i++) {
       const slot = slots[i] || { num:i+1, received:false, scheduledDate:'', receivedDate:'', misc:0, cashflow:0 };
       const scheduledTxt = slot.scheduledDate ? fmtDisplayDate(slot.scheduledDate) : '—';
-      const receivedTxt  = slot.receivedDate  ? fmtDisplayDate(slot.receivedDate)  : '—';
+      const lateEmi = wasLateEmi(slot);
+      const receivedTxt  = slot.receivedDate  ? fmtDisplayDate(slot.receivedDate) + (lateEmi ? ' <span style="color:#BA7517;font-size:11px" title="Received late">⚠️ late</span>' : '') : '—';
       let statusHtml, rowClass = '';
       if (slot.received) {
         statusHtml = '<span class="badge b-approved">Received</span>';
-        rowClass = ' rcvd';
-      } else {
-        const isNext = i === loan.numReceivedEmi;
-        const isOvd  = slot.scheduledDate && new Date(slot.scheduledDate) < today2;
-        if (isNext) { statusHtml = '<span class="badge b-pending">Next due</span>'; rowClass = ' next'; }
-        else if (isOvd) { statusHtml = '<span style="color:#A32D2D;font-weight:500">⚠ Overdue</span>'; rowClass = ' ovd'; }
-        else { statusHtml = '<span style="color:#888">Pending</span>'; }
+        rowClass = ' rcvd' + (lateEmi ? ' late' : '');
       }
       if (pendingEmiSet.has(i+1)) statusHtml += ' <span class="badge b-pending" style="font-size:10px">⏳ Pending</span>';
       const miscTxt = slot.misc !== 0 ? fmtAmt(slot.misc) : '—';
@@ -844,7 +839,8 @@ async function openCdDetail(loanId) {
   if (slots2.length) {
     emiTableHtml = '<div><div style="font-size:12px;font-weight:600;color:#534AB7;margin-bottom:6px">EMI Schedule</div><table class="emi-table"><thead><tr><th>EMI</th><th>Received</th><th>Due Date</th><th>Rcvd Date</th><th>Misc</th><th>Cashflow</th></tr></thead><tbody>';
     slots2.forEach((s,i) => {
-      emiTableHtml += `<tr class="emi-tr${s.received?' rcvd':''}"><td>${i+1}</td><td>${Bool(s.received)}</td><td>${s.scheduledDate?fmtDisplayDate(s.scheduledDate):'—'}</td><td>${s.receivedDate?fmtDisplayDate(s.receivedDate):'—'}</td><td>${s.misc?M(s.misc):'—'}</td><td>${s.cashflow?M(s.cashflow):'—'}</td></tr>`;
+      const late2 = wasLateEmi(s);
+      emiTableHtml += `<tr class="emi-tr${s.received?' rcvd':''}${late2?' late':''}"><td>${i+1}</td><td>${Bool(s.received)}</td><td>${s.scheduledDate?fmtDisplayDate(s.scheduledDate):'—'}</td><td>${s.receivedDate?fmtDisplayDate(s.receivedDate):'—'}${late2?' <span style="color:#BA7517;font-size:11px" title="Received late">⚠️ late</span>':''}</td><td>${s.misc?M(s.misc):'—'}</td><td>${s.cashflow?M(s.cashflow):'—'}</td></tr>`;
     });
     emiTableHtml += '</tbody></table></div>';
   }
@@ -879,6 +875,13 @@ function closeCdDetail() {
   $('cd-detail-panel').style.display = 'none';
   if ($('cd-detail-ph')) $('cd-detail-ph').style.display = '';
   document.querySelectorAll('#page-closed-defaulted .emi-card').forEach(c => c.classList.remove('selected'));
+}
+
+function wasLateEmi(slot) {
+  if (!slot || !slot.received || !slot.receivedDate || !slot.scheduledDate) return false;
+  const sd = parseSheetDate(slot.scheduledDate);
+  const rd = parseSheetDate(slot.receivedDate);
+  return sd && rd && rd > sd;
 }
 
 // ── Formatting helpers ────────────────────────────────────────────────────
