@@ -12,7 +12,7 @@
 <body>
 <script>document.documentElement.className='s'</script>
 <style>.s #auth-screen{display:none!important}.s #app{display:block!important}</style>
-<script>(function(){try{if(!localStorage.getItem('aks_user'))document.documentElement.className=''}catch(e){document.documentElement.className=''}})()</script>
+<script>(function(){try{if(!localStorage.getItem('aks_cu')&&!localStorage.getItem('aks_token'))document.documentElement.className=''}catch(e){document.documentElement.className=''}})()</script>
 
 <!-- ── AUTH SCREEN ─────────────────────────────────────────────────────── -->
 <div id="auth-screen">

@@ -31,6 +31,7 @@ async function doLogin() {
     return;
   }
   localStorage.setItem('aks_user', user.username);
+  localStorage.setItem('aks_cu', JSON.stringify(user));
   completeLogin(user);
 }
 
@@ -56,6 +57,7 @@ function completeLogin(user) {
 function doLogout() {
   localStorage.removeItem('aks_user');
   localStorage.removeItem('aks_token');
+  localStorage.removeItem('aks_cu');
   clearCache();
   S.cu = null;
   S.sheetLoans = [];
@@ -77,24 +79,38 @@ function defPage() {
 
 document.addEventListener('DOMContentLoaded', async () => {
   $('l-pin').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
-  await fetchUsersFromSheets();
 
-  // Try restoring session from token (no PIN re-entry needed)
-  const token = localStorage.getItem('aks_token');
-  if (token) {
-    const res = await gasPost({ action: 'restoreSession', token });
+  // 1. Instant restore from cached user (no network) — renders skeleton + cached cards immediately
+  let cachedUser = null;
+  try { const s = localStorage.getItem('aks_cu'); if (s) cachedUser = JSON.parse(s); } catch(e) {}
+  if (cachedUser && cachedUser.id && cachedUser.pin) {
+    completeLogin(cachedUser);
+    // Verify session token in background — if invalid, log out
+    const token = localStorage.getItem('aks_token');
+    if (token) {
+      gasPost({ action: 'restoreSession', token }).then(res => {
+        if (!res.ok || !res.user) { showAlert('Session expired. Please login again.', 'e'); doLogout(); }
+      });
+    }
+    // Refresh users in background
+    fetchUsersFromSheets();
+    return;
+  }
+
+  // 2. No cached user — try token restore (backward compat for existing sessions)
+  const token2 = localStorage.getItem('aks_token');
+  if (token2) {
+    const res = await gasPost({ action: 'restoreSession', token2 });
     if (res.ok && res.user) {
+      localStorage.setItem('aks_cu', JSON.stringify(res.user));
       completeLogin(res.user);
+      fetchUsersFromSheets();
       return;
     }
-    // Token expired or invalid — clear it and show login
     localStorage.removeItem('aks_token');
   }
 
-  // Fallback: restore from saved username (only if user has PIN cached locally)
-  const saved = localStorage.getItem('aks_user');
-  if (saved) {
-    const user = S.users.find(x => x.username === saved);
-    if (user && user.pin) completeLogin(user);
-  }
+  // 3. Show auth screen
+  document.documentElement.className = '';
+  fetchUsersFromSheets();
 });
