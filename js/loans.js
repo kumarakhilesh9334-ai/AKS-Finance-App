@@ -115,7 +115,7 @@ function onGuarantorInput() {
     const name   = (l.customerName || '').toLowerCase().trim();
     const aadhar = (l.aadhaarPan || '').toLowerCase().replace(/\s/g, '');
     const custId = (l.customerId || '').toLowerCase().trim();
-    if (name.includes(q) || aadhar.includes(q) || custId.includes(q)) {
+    if (name.includes(q) || aadhar.includes(q) || custId.includes(q) || (l.phone||'').includes(q) || (l.guarantor||'').toLowerCase().includes(q)) {
       const key = l.customerId || l.customerName || l.aadhaarPan;
       if (key && !seen[key]) seen[key] = l;
     }
