@@ -110,7 +110,7 @@ function renderEmiColumns(query) {
   const active = source.filter(l => !l.isDefaulted && !l.emiCompleted && l.status !== 'Closed');
 
   const filtered = q
-    ? active.filter(l => l.loanId.toLowerCase().includes(q) || l.customerName.toLowerCase().includes(q) || (l.phone||'').includes(q) || (l.guarantor||'').toLowerCase().includes(q))
+    ? active.filter(l => l.loanId.toLowerCase().includes(q) || l.customerName.toLowerCase().includes(q) || (l.phone||'').includes(q) || (l.guarantor||'').toLowerCase().includes(q) || (l.model||'').toLowerCase().includes(q) || (l.aadhaarPan||'').toLowerCase().includes(q))
     : active;
 
   const upcoming = [], overdue = [];
@@ -687,7 +687,7 @@ function renderClosedDefaulted(query) {
   const closed    = source.filter(l => !l.isDefaulted && (l.emiCompleted || l.status === 'Closed'));
   const defaulted = source.filter(l => l.isDefaulted);
 
-  const match = l => !q || l.loanId.toLowerCase().includes(q) || (l.customerName||'').toLowerCase().includes(q) || (l.phone||'').includes(q) || (l.guarantor||'').toLowerCase().includes(q);
+  const match = l => !q || l.loanId.toLowerCase().includes(q) || (l.customerName||'').toLowerCase().includes(q) || (l.phone||'').includes(q) || (l.guarantor||'').toLowerCase().includes(q) || (l.model||'').toLowerCase().includes(q) || (l.aadhaarPan||'').toLowerCase().includes(q);
   const fRunning   = running.filter(match);
   const fClosed    = closed.filter(match);
   const fDefaulted = defaulted.filter(match);
