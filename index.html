@@ -130,17 +130,14 @@
 
     <!-- ── LOG EMI ────────────────────────────────────────────────────── -->
     <div class="page" id="page-emi">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
-        <span style="font-size:15px;font-weight:500">Log EMI payment</span>
-        <div style="display:flex;align-items:center;gap:10px">
-          <button class="pill-toggle" id="revised-view-toggle" onclick="toggleRevisedView()" style="font-size:11px;padding:4px 10px;border-radius:12px;border:1px solid #D4A017;background:none;color:#D4A017;cursor:pointer">Revised Date Cards</button>
-          <button class="btn btn-sm" onclick="fetchLoansFromSheets(true)" title="Refresh">↻ Refresh</button>
-        </div>
-      </div>
       <div class="emi-fetch-status" id="emi-fetch-status"></div>
-      <div class="emi-search-wrap">
-        <span class="emi-search-icon">🔍</span>
-        <input type="text" id="emi-search" placeholder="Search Loan ID or customer…" oninput="renderEmiColumns(this.value)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:0.75rem">
+        <div class="emi-search-wrap" style="flex:1;margin-bottom:0">
+          <span class="emi-search-icon">🔍</span>
+          <input type="text" id="emi-search" placeholder="Search Loan ID or customer…" oninput="renderEmiColumns(this.value)">
+        </div>
+        <button class="pill-toggle" id="revised-view-toggle" onclick="toggleRevisedView()" style="font-size:11px;padding:4px 10px;border-radius:12px;border:1px solid #D4A017;background:none;color:#D4A017;cursor:pointer;white-space:nowrap">Revised Date Cards</button>
+        <button class="btn btn-sm" onclick="fetchLoansFromSheets(true)" title="Refresh">↻ Refresh</button>
       </div>
       <div class="landscape-wrap">
         <div class="ls-left">
@@ -259,13 +256,12 @@
 
     <!-- ── CLOSED & DEFAULTED (admin only) ───────────────────────────── -->
     <div class="page" id="page-all-loans">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
-        <span style="font-size:15px;font-weight:500">All Loans</span>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:0.75rem">
+        <div class="emi-search-wrap" style="flex:1;margin-bottom:0">
+          <span class="emi-search-icon">🔍</span>
+          <input type="text" id="cd-search" placeholder="Search Loan ID or customer…" oninput="renderClosedDefaulted(this.value)">
+        </div>
         <button class="btn btn-sm" onclick="fetchLoansFromSheets(true)" title="Refresh">↻ Refresh</button>
-      </div>
-      <div class="emi-search-wrap">
-        <span class="emi-search-icon">🔍</span>
-        <input type="text" id="cd-search" placeholder="Search Loan ID or customer…" oninput="renderClosedDefaulted(this.value)">
       </div>
       <div class="landscape-wrap">
         <div class="ls-left">
