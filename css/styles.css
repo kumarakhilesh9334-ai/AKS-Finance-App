@@ -151,6 +151,7 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 .emi-card-name{font-size:13px;color:#1a1a1a;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .emi-card-meta{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:3px}
 .emi-card-date{font-size:11px;color:#888}
+.emi-card-partial{text-align:right;margin-top:4px;font-size:10px;color:#A32D2D;font-weight:500}
 
 /* ── DAY LABELS ───────────────────────────────────────────────────────── */
 .emi-days{font-size:10px;border-radius:20px;padding:1px 7px;font-weight:500}

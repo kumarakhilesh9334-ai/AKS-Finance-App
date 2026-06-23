@@ -193,7 +193,7 @@ function revisedBadgeHtml(loan) {
 }
 
 function emiCard(l, type) {
-  const dueTxt  = l.nextEmiDate ? fmtDisplayDate(l.nextEmiDate) : '—';
+  const dueTxt  = l.nextEmiDate ? 'Due: ' + fmtDisplayDate(l.nextEmiDate) : '—';
   const lateTxt = l.lateEmis ? l.lateEmis + '/' + l.numReceivedEmi + ' late' : '';
   const billTxt = l.billDate ? fmtDisplayDate(l.billDate) : '';
 
@@ -238,13 +238,22 @@ function emiCard(l, type) {
       ${overdueLabel ? `<span style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.85);flex-shrink:0">${overdueLabel}</span>` : ''}
     </div>
     <div class="emi-card-meta">
-      ${billTxt ? `<span style="font-size:11px;color:${subColor}">Bill: ${billTxt}</span>` : ''}
+      <span class="emi-amt-pill" style="${pillStyle}">${billTxt ? 'Bill: '+billTxt : '—'}</span>
       <span class="emi-amt-pill" style="${pillStyle}">${fmtAmt(l.monthlyEmi)}/mo</span>
       ${l.model ? `<span class="emi-model-pill" style="${pillStyle}">${l.model}</span>` : ''}
       ${lateTxt ? `<span class="emi-late-pill" style="${pillStyle}">&#9888; ${lateTxt}</span>` : ''}
       ${hasPendingEmi ? `<span class="emi-late-pill" style="${pillStyle}">⏳ Pending</span>` : ''}
+      ${partialIndicator(l, subColor)}
     </div>
   </div>`;
+}
+
+function partialIndicator(l, subColor) {
+  const pts = S.approvedPartials || [];
+  const items = pts.filter(p => p.loanId === l.loanId);
+  if (!items.length) return '';
+  const total = items.reduce((s, p) => s + Number(p.amount || 0), 0);
+  return `<span style="font-size:12px;font-weight:700;color:${subColor||'#888'};margin-left:auto;flex-shrink:0">${fmtAmt(total)} already received</span>`;
 }
 
 function partialCard(p) {
@@ -707,38 +716,53 @@ function renderClosedDefaulted(query) {
 }
 
 function cdCard(l, type) {
-  const lastDate = l.lastEmiDate ? fmtDisplayDate(l.lastEmiDate) : '—';
   const today = new Date(); today.setHours(0,0,0,0);
-  let bg = '', border = '', tc = '#1a1a1a', sc = '#888', flag = '', bottomTxt = '';
+  const billTxt = l.billDate ? fmtDisplayDate(l.billDate) : '';
+  const lateTxt = l.lateEmis ? l.lateEmis + '/' + l.numReceivedEmi + ' late' : '';
+  let bg = '', border = '', tc = '#1a1a1a', sc = '#888', overdueLabel = '';
+  let rightDate = '';
 
-  if (type === 'running' && l.nextEmiDate) {
-    const due = new Date(l.nextEmiDate); due.setHours(0,0,0,0);
-    const days = Math.round((today - due) / 86400000);
-    const df = fmtDisplayDate(l.nextEmiDate);
-    bottomTxt = 'Due Date: ' + df;
-    if (days > 90)        { bg='#000';border='#000';tc='#fff';sc='rgba(255,255,255,0.75)';flag='90+ days overdue'; }
-    else if (days > 30)   { bg='#980000';border='#980000';tc='#fff';sc='rgba(255,255,255,0.75)';flag='30+ days overdue'; }
-    else if (days > 0)    { bg='#dd7e6b';border='#dd7e6b';tc='#fff';sc='rgba(255,255,255,0.75)';flag=days+'d overdue'; }
-    else if (due.getTime()===today.getTime()) { bg='#ff9900';border='#ff9900';tc='#fff';sc='rgba(255,255,255,0.75)';flag='Due today'; }
+  if (type === 'running') {
+    if (l.nextEmiDate) {
+      const due = new Date(l.nextEmiDate); due.setHours(0,0,0,0);
+      const days = Math.round((today - due) / 86400000);
+      rightDate = 'Due: ' + fmtDisplayDate(l.nextEmiDate);
+      if (days > 90)        { bg='#000';border='#000';tc='#fff';sc='rgba(255,255,255,0.75)';overdueLabel='90+ days overdue'; }
+      else if (days > 30)   { bg='#980000';border='#980000';tc='#fff';sc='rgba(255,255,255,0.75)';overdueLabel='30+ days overdue'; }
+      else if (days > 0)    { bg='#dd7e6b';border='#dd7e6b';tc='#fff';sc='rgba(255,255,255,0.75)';overdueLabel=days+'d overdue'; }
+      else if (due.getTime()===today.getTime()) { bg='#ff9900';border='#ff9900';tc='#fff';sc='rgba(255,255,255,0.75)';overdueLabel='Due today'; }
+    } else {
+      rightDate = '—';
+    }
+  } else if (type === 'closed') {
+    rightDate = '✓ Closed';
+    tc = '#27500A';
+  } else {
+    rightDate = '⚠️ Defaulted';
+    tc = '#A32D2D';
   }
 
-  const cs = bg ? `background:${bg} !important;border-left-color:${border} !important;border-color:${border} !important` : '';
-  const ps = bg ? 'background:rgba(255,255,255,0.2);color:#fff' : '';
+  const cardStyle = bg ? `background:${bg};border-left-color:${border};border-color:${border}` : '';
+  const pillStyle = bg ? 'background:rgba(255,255,255,0.2);color:#fff' : '';
 
-  return `<div class="emi-card ${type}" data-loanid="${l.loanId}" data-type="${type}" onclick="openCdDetail('${l.loanId}')" style="cursor:pointer;${cs}">
+  return `<div class="emi-card ${type}" data-loanid="${l.loanId}" data-type="${type}" onclick="openCdDetail('${l.loanId}')" style="cursor:pointer;${cardStyle}">
     ${revisedBadgeHtml(l)}
     <div class="emi-card-top">
       <span class="emi-card-id" style="color:${tc}">${l.loanId}</span>
-      <span class="badge ${type==='running'?'b-active':type==='closed'?'b-closed':'b-defaulted'}">${type}</span>
+      <div style="text-align:right">
+        <div class="emi-card-date-big" style="color:${tc}">${rightDate}</div>
+      </div>
     </div>
-    <div class="emi-card-name" style="color:${tc}">${l.customerName}</div>
+    <div class="emi-card-name" style="display:flex;justify-content:space-between;align-items:center;color:${tc};gap:8px">
+      <span>${l.customerName}</span>
+      ${overdueLabel ? `<span style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.85);flex-shrink:0">${overdueLabel}</span>` : ''}
+    </div>
     <div class="emi-card-meta">
-      <span class="emi-amt-pill" style="${ps}">${fmtAmt(l.monthlyEmi)}/mo</span>
-      ${l.model?`<span class="emi-model-pill" style="${ps}">${l.model}</span>`:''}
-    </div>
-    <div class="emi-card-date" style="color:${sc}${flag?';display:flex;justify-content:space-between':''}">
-      <span>${type==='running' ? bottomTxt : type==='closed' ? 'Last EMI: '+lastDate : (l.defaultComment||'Defaulted')}</span>
-      ${flag?`<span style="font-size:9px;font-weight:600;color:rgba(255,255,255,0.85)">${flag}</span>`:''}
+      <span class="emi-amt-pill" style="${pillStyle}">${billTxt ? 'Bill: '+billTxt : '—'}</span>
+      <span class="emi-amt-pill" style="${pillStyle}">${fmtAmt(l.monthlyEmi)}/mo</span>
+      ${l.model ? `<span class="emi-model-pill" style="${pillStyle}">${l.model}</span>` : ''}
+      ${lateTxt ? `<span class="emi-late-pill" style="${pillStyle}">&#9888; ${lateTxt}</span>` : ''}
+      ${partialIndicator(l, sc)}
     </div>
   </div>`;
 }
