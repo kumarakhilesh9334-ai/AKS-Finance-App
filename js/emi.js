@@ -509,22 +509,6 @@ async function selectEmiLoan(loanId) {
   let labelTxt = nextNum > duration ? 'All EMIs collected!'
     : `Recording: EMI ${nextNum} of ${duration} · Standard EMI: ${fmtAmt(loan.monthlyEmi)}${extraReceived ? ' · Expected to collect: ' + fmtAmt(expectedAmt) : ''}`;
   $('emi-next-label').textContent = labelTxt;
-  // Check scheduled EMI date vs today — confirm if >10 days away
-  if (nextNum <= duration && loan.emiStartDate) {
-    const parts = String(loan.emiStartDate).match(/(\d{1,2})[\-\/](\w{3})[\-\/](\d{2,4})/);
-    if (parts) {
-      const months = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
-      const sd = new Date(parseInt(parts[3])<100?2000+parseInt(parts[3]):parseInt(parts[3]), months[parts[2].toLowerCase()], parseInt(parts[1]));
-      sd.setMonth(sd.getMonth() + (nextNum - 1));
-      const today = new Date(); today.setHours(0,0,0,0);
-      const diff = Math.round((sd - today) / (1000*60*60*24));
-      if (diff > 10) {
-        if (!confirm('Scheduled date for EMI ' + nextNum + ' is ' + diff + ' days from now. Are you sure?')) {
-          closeEmiDetail(); return;
-        }
-      }
-    }
-  }
 
   // Prefill with full monthly EMI (agent types what they actually received)
   $('emi-amt').value  = loan.monthlyEmi || '';
@@ -1078,6 +1062,7 @@ function renderAllOverview(query) {
     : S.loans.map(l => ({
         loanId: l.loanId, customerName: l.data.customerName,
         monthlyEmi: l.data.monthlyEmi, nextEmiDate: '',
+        billDate: l.data.billDate, lastEmiDate: l.data.lastEmiDate,
         status: l.closed ? 'Closed' : 'Active',
         isDefaulted: false, emiCompleted: l.closed,
         model: l.data.model, akShare: l.data.akShare / 100,
@@ -1149,8 +1134,14 @@ function renderAllOverview(query) {
     const diff = new Date(a.nextEmiDate||'9999') - new Date(b.nextEmiDate||'9999');
     return diff !== 0 ? diff : a.loanId.localeCompare(b.loanId);
   });
-  closed.sort((a, b) => b.loanId.localeCompare(a.loanId));
-  defaulted.sort((a, b) => b.loanId.localeCompare(a.loanId));
+  closed.sort((a, b) => {
+    const diff = new Date(b.lastEmiDate||'0') - new Date(a.lastEmiDate||'0');
+    return diff !== 0 ? diff : a.loanId.localeCompare(b.loanId);
+  });
+  defaulted.sort((a, b) => {
+    const diff = new Date(b.billDate||'0') - new Date(a.billDate||'0');
+    return diff !== 0 ? diff : a.loanId.localeCompare(b.loanId);
+  });
 
   $('ov-all-count').textContent = upcoming.length + overdue.length + closed.length + defaulted.length;
   $('ov-upcoming-count').textContent  = upcoming.length;
@@ -1159,7 +1150,7 @@ function renderAllOverview(query) {
   $('ov-defaulted-count').textContent = defaulted.length;
 
   const noDataMsg = (!S.sheetLoans || !S.sheetLoans.length) ? '<div class="emi-col-empty">Fetching from Sheets…</div>' : '';
-  const allCards = [...upcoming.map(l => overviewCard(l, 'upcoming')), ...overdue.map(l => overviewCard(l, 'overdue')), ...closed.map(l => overviewCard(l, 'closed')), ...defaulted.map(l => overviewCard(l, 'defaulted'))];
+  const allCards = [...overdue.map(l => overviewCard(l, 'overdue')), ...upcoming.map(l => overviewCard(l, 'upcoming')), ...defaulted.map(l => overviewCard(l, 'defaulted')), ...closed.map(l => overviewCard(l, 'closed'))];
   $('ov-all-list').innerHTML       = allCards.length ? allCards.join('') : (noDataMsg || '<div class="emi-col-empty">No loans</div>');
   $('ov-upcoming-list').innerHTML  = upcoming.length  ? upcoming.map(l  => overviewCard(l, 'upcoming')).join('')  : (noDataMsg || '<div class="emi-col-empty">No upcoming EMIs</div>');
   $('ov-overdue-list').innerHTML   = overdue.length   ? overdue.map(l   => overviewCard(l, 'overdue')).join('')   : (noDataMsg || '<div class="emi-col-empty">All clear ✓</div>');
@@ -1387,23 +1378,6 @@ async function selectOverviewLoan(loanId) {
       : `Recording: EMI ${nextNum} of ${duration} · Standard EMI: ${fmtAmt(loan.monthlyEmi)}${extraReceived ? ' · Expected to collect: ' + fmtAmt(expectedAmt) : ''}`;
     $('ov-next-label').textContent = labelTxt;
 
-    // Check scheduled date gap
-    if (nextNum <= duration && loan.emiStartDate) {
-      const parts = String(loan.emiStartDate).match(/(\d{1,2})[\-\/](\w{3})[\-\/](\d{2,4})/);
-      if (parts) {
-        const months = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
-        const sd = new Date(parseInt(parts[3])<100?2000+parseInt(parts[3]):parseInt(parts[3]), months[parts[2].toLowerCase()], parseInt(parts[1]));
-        sd.setMonth(sd.getMonth() + (nextNum - 1));
-        const td = new Date(); td.setHours(0,0,0,0);
-        const diff = Math.round((sd - td) / (1000*60*60*24));
-        if (diff > 10) {
-          if (!confirm('Scheduled date for EMI ' + nextNum + ' is ' + diff + ' days from now. Are you sure?')) {
-            closeOverviewDetail(); return;
-          }
-        }
-      }
-    }
-
     // Prefill
     $('ov-emi-amt').value  = loan.monthlyEmi || '';
     $('ov-emi-date').value = new Date().toISOString().split('T')[0];
@@ -1604,6 +1578,23 @@ async function submitOverviewEmi() {
   const amt  = parseFloat($('ov-emi-amt').value) || 0;
   const date = $('ov-emi-date') ? $('ov-emi-date').value : '';
   if (!amt || !date) { showAlert('Please enter amount and payment date.', 'e'); return; }
+
+  // Warn if scheduled date is far in the future
+  const nextNum = (loan.numReceivedEmi || 0) + 1;
+  if (nextNum <= (loan.emiDuration || 0) && loan.emiStartDate) {
+    const parts = String(loan.emiStartDate).match(/(\d{1,2})[\-\/](\w{3})[\-\/](\d{2,4})/);
+    if (parts) {
+      const months = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+      const sd = new Date(parseInt(parts[3])<100?2000+parseInt(parts[3]):parseInt(parts[3]), months[parts[2].toLowerCase()], parseInt(parts[1]));
+      sd.setMonth(sd.getMonth() + (nextNum - 1));
+      const td = new Date(); td.setHours(0,0,0,0);
+      const diff = Math.round((sd - td) / (1000*60*60*24));
+      if (diff > 10) {
+        if (!confirm('Scheduled date for EMI ' + nextNum + ' is ' + diff + ' days from now. Are you sure?')) return;
+      }
+    }
+  }
+
   const extraRcv = loan.extraEmiReceived || 0;
   const stdEmi   = loan.monthlyEmi || 0;
   const expected = Math.max(0, stdEmi - extraRcv);
