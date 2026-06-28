@@ -9,9 +9,9 @@ async function renderUsers() {
   $('users-list').innerHTML = S.users.map(u => {
     const perms = [];
     if (u.perms.loan)      perms.push('New Loan');
-    if (u.perms.emi)       perms.push('Log EMI');
     if (u.perms.allLoans)  perms.push('All Loans');
     if (u.perms.approvals) perms.push('Approvals');
+    if (u.perms.submit)    perms.push('Submit');
     const isBlocked = blockedUsers.includes(u.username);
     return `<div class="user-row">
       <div class="avatar">${u.name.slice(0, 2).toUpperCase()}</div>
@@ -50,7 +50,6 @@ async function addUser() {
     role,
     perms: {
       loan:      $('p-loan').checked,
-      emi:       $('p-emi').checked,
       allLoans:  $('p-allLoans').checked,
       approvals: $('p-approvals').checked,
     },
@@ -90,6 +89,7 @@ async function syncUsersFromSheet() {
     const data = await gasGet('readUsers');
     if (data.ok && Array.isArray(data.users)) {
       S.users = data.users;
+      migrateUserPerms();
       saveUsers();
     }
   } catch(e) {

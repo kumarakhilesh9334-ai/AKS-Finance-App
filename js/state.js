@@ -19,6 +19,19 @@ function saveUsers() {
   localStorage.setItem('aks_users', JSON.stringify(S.users.map(({ pin, ...u }) => u)));
 }
 
+// Ensure all users have the submit permission (default: admins=true, others=false)
+function migrateUserPerms() {
+  S.users = S.users.map(u => {
+    if (!u.perms) u.perms = {};
+    if (u.perms.submit === undefined) u.perms.submit = u.role === 'admin';
+    return u;
+  });
+  if (S.cu) {
+    if (!S.cu.perms) S.cu.perms = {};
+    if (S.cu.perms.submit === undefined) S.cu.perms.submit = S.cu.role === 'admin';
+  }
+}
+
 async function fetchUsersFromSheets() {
   if (!S.sheetsUrl) return;
   try {
@@ -26,6 +39,7 @@ async function fetchUsersFromSheets() {
     const data = await res.json();
     if (data.ok && Array.isArray(data.users)) {
       S.users = data.users;
+      migrateUserPerms();
       saveUsers();
     }
   } catch(e) {
@@ -73,6 +87,8 @@ const S = {
   selectedEmiLoanId: null,
   revisedDates: [],
   showRevisedView: false,
+  showOverviewRevised: false,
+  showOverviewPartials: false,
   _fullLoaded: false,
   _submittedEmis: {}, // local-only: { loanId_emiNum: true }
 };

@@ -231,6 +231,7 @@ function calcLoan() {
 
 // ── Submit ────────────────────────────────────────────────────────────────
 async function submitLoan() {
+  if (S.cu.role !== 'admin' && !S.cu.perms.submit) { showAlert('Permission denied. You do not have submit for approval access.', 'e'); return; }
   const cname      = v('f-cname'), idnum = v('f-idnum'), phone = v('f-phone');
   const model      = v('f-model');
   const billDate   = v('f-billdate');

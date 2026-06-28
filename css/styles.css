@@ -200,6 +200,14 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 @media(orientation:portrait){.emi-three-col{grid-template-columns:1fr}}
 .running-hd{background:#E8F0FE;color:#1a56db}
 
+/* ── FIVE-COLUMN LAYOUT (Overview tab) ──────────────────────────── */
+.emi-five-col{display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:0.75rem;margin-bottom:0.75rem}
+@media(orientation:portrait){.emi-five-col{grid-template-columns:1fr}}
+.ov-header{display:flex;flex-direction:column;gap:6px;margin-bottom:0.5rem;margin-top:-0.75rem}
+.ov-row1{display:flex;align-items:center;gap:6px;width:100%;flex-wrap:wrap;min-height:30px}
+.ov-row2{display:flex;align-items:center;width:100%;min-height:30px}
+@media(orientation:portrait){.ov-sticky{position:sticky;top:41px;z-index:5;background:#f5f5f3;padding-bottom:4px}.ov-sticky .ov-row2{background:#fff;padding:6px 8px;border-radius:10px;margin-bottom:0.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.06)}.ov-sticky .ov-row2 input{min-height:28px;padding:2px 8px 2px 32px;font-size:12px;box-sizing:border-box}.ov-sticky .ov-row2 .btn-sm{min-height:28px;padding:2px 8px;font-size:12px;box-sizing:border-box}}
+
 /* ═══════════════════════════════════════════════════════════════════════
    MOBILE RESPONSIVE — Android Chrome (≤600px)
    Best-practice approach:
@@ -327,6 +335,33 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
   }
   .mob-three-tab.active { background: #534AB7; color: #fff; }
 
+  /* All Overview: five-tab switcher */
+  .emi-five-col { display: block; }
+  .emi-five-col .emi-col-wrap { display: none; }
+  .emi-five-col .emi-col-wrap.mob-active { display: flex; }
+  .mob-five-tabs {
+    display: flex;
+    background: #fff;
+    border: 0.5px solid #ddd;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 0.75rem;
+  }
+  .mob-five-tab {
+    flex: 1;
+    padding: 9px 2px;
+    border: none;
+    background: none;
+    font-size: 10px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    color: #888;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .mob-five-tab.active { background: #534AB7; color: #fff; }
+
   /* ── EMI card columns: full height on mobile ─────────────────────── */
   .emi-col-body { max-height: none; overflow-y: visible; padding: 6px; }
 
@@ -379,6 +414,19 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
     z-index: 90;
     margin: 0;
   }
+  /* Overview detail panel: same bottom sheet on mobile */
+  #ov-detail {
+    position: fixed;
+    bottom: 56px;
+    left: 0; right: 0;
+    max-height: 70vh;
+    overflow-y: auto;
+    border-radius: 16px 16px 0 0;
+    border: none;
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.15);
+    z-index: 90;
+    margin: 0;
+  }
 }
 
 /* Landscape: master-detail layout (left: cards, right: detail) */
@@ -388,6 +436,7 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
   #bottom-nav { display: none !important; }
   .mob-col-tabs { display: none !important; }
   .mob-three-tabs { display: none !important; }
+  .mob-five-tabs { display: none !important; }
 
   /* Master-detail container */
   .landscape-wrap { display: flex; gap: 0.75rem; align-items: flex-start; }
@@ -431,11 +480,42 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
   .ls-left .emi-three-col { display: block; }
   .ls-left .emi-three-col .emi-col-wrap { display: none; }
   .ls-left .emi-three-col .emi-col-wrap.mob-active { display: flex; }
+  /* Overview tab: show 5-tab switcher and single column */
+  .ls-left .emi-five-col { display: block; }
+  .ls-left .emi-five-col .emi-col-wrap { display: none; }
+  .ls-left .emi-five-col .emi-col-wrap.mob-active { display: flex; }
+  .ls-left .mob-five-tabs {
+    display: flex !important;
+    background: #e8e8e6;
+    border: none;
+    border-radius: 8px;
+    padding: 3px;
+    gap: 2px;
+    margin-bottom: 0.75rem;
+  }
+  .ls-left .mob-five-tab {
+    flex: 1;
+    padding: 8px 4px;
+    border: none;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    color: #666;
+    background: transparent;
+    text-align: center;
+    white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
+  }
+  .ls-left .mob-five-tab.active { background: #534AB7; color: #fff; }
+  .ls-left .mob-five-tab:hover:not(.active) { background: #d5d5d3; }
   .ls-left .emi-col-body { max-height: calc(100vh - 260px); overflow-y: auto; }
 
   /* Right panel: detail card */
   .ls-right #emi-detail,
-  .ls-right #cd-detail-panel { margin-top: 0; }
+  .ls-right #cd-detail-panel,
+  .ls-right #ov-detail { margin-top: 0; }
 
   /* Placeholder */
   .ls-placeholder {

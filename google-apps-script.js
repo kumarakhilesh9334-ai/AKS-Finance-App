@@ -490,13 +490,13 @@ function doPost(e) {
     // ── Add user ────────────────────────────────────────────────────────
     if (payload.action === 'addUser') {
       const { id, username, pin, name, role, perms } = payload;
-      const headers = ['ID','Username','PIN','Name','Role','loan','emi','allLoans','approvals'];
+      const headers = ['ID','Username','PIN','Name','Role','loan','allLoans','approvals','submit'];
       const sheet = ensureSheet(ss, USERS_SHEET, headers);
       sheet.appendRow([id, username, pin, name, role,
         perms.loan ? 'TRUE' : 'FALSE',
-        perms.emi ? 'TRUE' : 'FALSE',
         perms.allLoans ? 'TRUE' : 'FALSE',
         perms.approvals ? 'TRUE' : 'FALSE',
+        perms.submit ? 'TRUE' : 'FALSE',
       ]);
       return jsonResponse({ok:true, users:readAllUsers(ss)});
     }
@@ -973,7 +973,7 @@ function readAllUsers(ss) {
   const sheet = ss.getSheetByName(USERS_SHEET);
   if (!sheet || sheet.getLastRow() < 2) {
     return [{ id:'u1', username:'AKS', pin:'0000', name:'AKS (You)', role:'admin',
-      perms:{ loan:true, emi:true, allLoans:true, approvals:true } }];
+      perms:{ loan:true, allLoans:true, approvals:true, submit:true } }];
   }
   const raw = sheet.getRange(2, 1, sheet.getLastRow()-1, 9).getValues();
   const users = raw.filter(r => r[0] && String(r[0]).trim()).map(r => ({
@@ -984,15 +984,15 @@ function readAllUsers(ss) {
     role: String(r[4]).trim(),
     perms: {
       loan:      String(r[5]).toUpperCase() === 'TRUE',
-      emi:       String(r[6]).toUpperCase() === 'TRUE',
-      allLoans:  String(r[7]).toUpperCase() === 'TRUE',
-      approvals: String(r[8]).toUpperCase() === 'TRUE',
+      allLoans:  String(r[6]).toUpperCase() === 'TRUE',
+      approvals: String(r[7]).toUpperCase() === 'TRUE',
+      submit:    String(r[8]).toUpperCase() === 'TRUE',
     },
   }));
   // Ensure default admin is always present (even if not in the sheet)
   if (!users.some(u => u.id === 'u1')) {
     users.unshift({ id:'u1', username:'AKS', pin:'0000', name:'AKS (You)', role:'admin',
-      perms:{ loan:true, emi:true, allLoans:true, approvals:true } });
+      perms:{ loan:true, allLoans:true, approvals:true, submit:true } });
   }
   return users;
 }

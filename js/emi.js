@@ -45,9 +45,8 @@ async function fetchLoansFromSheets(force) {
 }
 
 function rerenderActiveTab() {
-  if (S.page === 'emi')        renderEmiColumns($('emi-search') ? $('emi-search').value : '');
-  if (S.page === 'all-loans')  renderClosedDefaulted($('cd-search') ? $('cd-search').value : '');
-  if (S.page === 'my-subs')    renderMySubs();
+  if (S.page === 'all-loans') renderAllOverview($('ov-search') ? $('ov-search').value : '');
+  if (S.page === 'my-subs')      renderMySubs();
 }
 
 // ── Page init ─────────────────────────────────────────────────────────────
@@ -351,15 +350,6 @@ function renderRevisedView() {
 }
 
 // ── Loan selection ────────────────────────────────────────────────────────
-// Event delegation for emi-card clicks in Log EMI tab only
-document.addEventListener('click', function(e) {
-  const card = e.target.closest('#page-emi .emi-card[data-loanid]');
-  if (card) {
-    const loanId = card.dataset.loanid;
-    if (!card.classList.contains('no-action')) selectEmiLoan(loanId);
-  }
-});
-
 async function selectEmiLoan(loanId) {
   showLoader();
   try {
@@ -449,6 +439,16 @@ async function selectEmiLoan(loanId) {
     tableHtml += '</tbody></table>';
     $('emi-slots').innerHTML = tableHtml;
     $('emi-slots-wrap').style.display = 'block';
+    // Show late payment fine & extra EMI received
+    const fineEl = $('emi-fine-extra');
+    if (fineEl) {
+      const fine = loan.latePaymentFine || 0;
+      const extra = loan.extraEmiReceived || 0;
+      fineEl.innerHTML = (fine || extra) ? `<div style="display:flex;gap:16px;flex-wrap:wrap">
+        ${fine ? `<span style="color:#A32D2D;font-weight:500">Late fine: ${fmtAmt(fine)}</span>` : ''}
+        ${extra ? `<span style="color:#0F6E56;font-weight:500">Extra EMI: ${fmtAmt(extra)}</span>` : ''}
+      </div>` : '';
+    }
   } else {
     $('emi-slots').innerHTML = '';
     $('emi-slots-wrap').style.display = 'none';
@@ -547,7 +547,36 @@ async function selectEmiLoan(loanId) {
     subBtn.style.opacity = '';
     subBtn.style.cursor = '';
   }
+
+  // Show revised date field for next EMI if this loan has revised dates
+  const revWrap = $('emi-revised-next-wrap');
+  const revDt   = $('emi-next-revised-date');
+  if (revWrap && revDt) {
+    const hasRevDates = (S.revisedDates||[]).some(d => d.loanId === loanId);
+    if (hasRevDates && nextNum < duration) {
+      revWrap.style.display = 'block';
+      // Default = latest revised date + 1 month
+      const loanRevs = (S.revisedDates||[]).filter(d => d.loanId === loanId && d.revisedDate);
+      let latest = null;
+      loanRevs.forEach(d => { const dt = parseSheetDate(d.revisedDate); if (dt && (!latest || dt > latest)) latest = dt; });
+      if (latest) {
+        const next = new Date(latest);
+        next.setMonth(next.getMonth() + 1);
+        revDt.value = next.getFullYear() + '-' + String(next.getMonth()+1).padStart(2,'0') + '-' + String(next.getDate()).padStart(2,'0');
+      } else {
+        revDt.value = '';
+      }
+    } else {
+      revWrap.style.display = 'none';
+      revDt.value = '';
+    }
+  }
   } finally { hideLoader(); }
+}
+
+function clearRevisedDateField() {
+  const dt = $('emi-next-revised-date');
+  if (dt) dt.value = '';
 }
 
 // ── Diff check ────────────────────────────────────────────────────────────
@@ -630,6 +659,16 @@ async function submitEmi() {
       if (res.ok) {
         S._submittedEmis[loanId + '_' + emiNum] = true;
         if (res.pending) S.pending = res.pending;
+        // Submit revised date for next EMI directly (no approval)
+        const revDt = $('emi-next-revised-date');
+        if (revDt && revDt.value && emiNum < (sheetLoan ? sheetLoan.emiDuration : 0)) {
+          const nextNum2 = emiNum + 1;
+          const nextAmt = sheetLoan ? sheetLoan.monthlyEmi : 0;
+          const revRes = await gasPost({ action: 'setRevisedDate', loanId, emiNum: nextNum2, revisedDate: revDt.value, amount: nextAmt || 0, note: '' });
+          if (revRes.ok) {
+            try { const rd2 = await gasGet('readRevisedDates'); if (rd2.ok) S.revisedDates = rd2.dates; } catch(e) {}
+          }
+        }
         refreshNav();
         rerenderActiveTab();
         showAlert('EMI payment submitted for approval.');
@@ -721,6 +760,8 @@ function cdCard(l, type) {
   const lateTxt = l.lateEmis ? l.lateEmis + '/' + l.numReceivedEmi + ' late' : '';
   let bg = '', border = '', tc = '#1a1a1a', sc = '#888', overdueLabel = '';
   let rightDate = '';
+  const hasPendingEmi = (S.pending && S.pending.some(p => p.type==='emi' && p.data.loanId===l.loanId && p.status==='pending'))
+    || Object.keys(S._submittedEmis || {}).some(k => k.startsWith(l.loanId + '_'));
 
   if (type === 'running') {
     if (l.nextEmiDate) {
@@ -762,39 +803,32 @@ function cdCard(l, type) {
       <span class="emi-amt-pill" style="${pillStyle}">${fmtAmt(l.monthlyEmi)}/mo</span>
       ${l.model ? `<span class="emi-model-pill" style="${pillStyle}">${l.model}</span>` : ''}
       ${lateTxt ? `<span class="emi-late-pill" style="${pillStyle}">&#9888; ${lateTxt}</span>` : ''}
+      ${hasPendingEmi ? `<span class="emi-late-pill" style="${pillStyle}">⏳ Pending</span>` : ''}
       ${partialIndicator(l, sc)}
     </div>
   </div>`;
 }
 
-function cdFmt(n) { return (n==null||n===''||n===0) ? '—' : '₹'+Number(n).toLocaleString('en-IN'); }
-
 async function openCdDetail(loanId) {
   showLoader();
   try {
-    // Highlight selected card
-    document.querySelectorAll('#page-closed-defaulted .emi-card').forEach(c => c.classList.remove('selected'));
-    document.querySelectorAll(`#page-closed-defaulted .emi-card[data-loanid="${loanId}"]`).forEach(c => c.classList.add('selected'));
+  let l = S.sheetLoans && S.sheetLoans.find(x => x.loanId === loanId);
+  if (!l) return;
 
-    let l = S.sheetLoans && S.sheetLoans.find(x => x.loanId === loanId);
-    if (!l) return;
+  if (!S._fullLoaded && l._slim) {
+    try {
+      const data = await gasGet('readLoanDetail', { loanId });
+      if (data.ok && data.loan) {
+        const idx = S.sheetLoans.findIndex(x => x.loanId === loanId);
+        if (idx !== -1) S.sheetLoans[idx] = data.loan;
+        l = data.loan;
+      }
+    } catch(e) { console.warn('Could not load detail:', e.message); }
+  }
 
-    // If full data not yet loaded and card is slim, fetch detail on click
-    if (!S._fullLoaded && l._slim) {
-      try {
-        const data = await gasGet('readLoanDetail', { loanId });
-        if (data.ok && data.loan) {
-          const idx = S.sheetLoans.findIndex(x => x.loanId === loanId);
-          if (idx !== -1) S.sheetLoans[idx] = data.loan;
-          l = data.loan;
-        }
-      } catch(e) { console.warn('Could not load detail:', e.message); }
-    }
-
-    const akPct  = l.akShare  != null ? Math.round((l.akShare  <= 1 ? l.akShare  * 100 : l.akShare))  : 0;
+  const akPct  = l.akShare  != null ? Math.round((l.akShare  <= 1 ? l.akShare  * 100 : l.akShare))  : 0;
   const aksPct = l.aksShare != null ? Math.round((l.aksShare <= 1 ? l.aksShare * 100 : l.aksShare)) : 0;
 
-  // All 87 columns — show every field, blank shown as '—'
   const D = (v) => (v === 'Invalid Date') ? '—' : (v || '—');
   const M = (v) => (v == null || v === '') ? '—' : '₹' + Number(v).toLocaleString('en-IN');
   const Dt = (v) => v ? fmtDisplayDate(v) : '—';
@@ -857,7 +891,6 @@ async function openCdDetail(loanId) {
     ['Down Payment %',               D(l.downPaymentPct)],
   ];
 
-  // Build EMI slots table separately
   let emiTableHtml = '';
   const slots2 = l.slots || [];
   if (slots2.length) {
@@ -882,6 +915,15 @@ async function openCdDetail(loanId) {
   $('cd-detail-loanid').textContent = l.loanId;
   $('cd-detail-sub').textContent    = l.customerName + (l.phone ? ' · ' + l.phone : '') + (l.model ? ' · ' + l.model : '');
   $('cd-emi-schedule').innerHTML = emiTableHtml;
+  const cdfEl = $('cd-fine-extra');
+  if (cdfEl) {
+    const fine = l.latePaymentFine || 0;
+    const extra = l.extraEmiReceived || 0;
+    cdfEl.innerHTML = (fine || extra) ? `<div style="display:flex;gap:16px;flex-wrap:wrap">
+      ${fine ? `<span style="color:#A32D2D;font-weight:500">Late fine: ${fmtAmt(fine)}</span>` : ''}
+      ${extra ? `<span style="color:#0F6E56;font-weight:500">Extra EMI: ${fmtAmt(extra)}</span>` : ''}
+    </div>` : '';
+  }
   $('cd-detail-kv').innerHTML = rows
     .filter(([label]) => !HIDDEN_LABELS.has(label))
     .map(([label, val]) => `<span class="kv-l">${label}</span><span class="kv-v">${val}</span>`
@@ -894,7 +936,6 @@ async function openCdDetail(loanId) {
     panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } finally { hideLoader(); }
 }
-
 function closeCdDetail() {
   $('cd-detail-panel').style.display = 'none';
   if ($('cd-detail-ph')) $('cd-detail-ph').style.display = '';
@@ -1020,6 +1061,684 @@ async function submitRevisedDate() {
       showAlert('Failed to save revised date: ' + (res.error || 'Unknown error'), 'e');
     }
   } finally { hideLoader(); }
+}
+
+// ── OVERVIEW TAB (merged view) ────────────────────────────────────────────
+const _ovViewCollapsed = { upcoming: false, overdue: false };
+S.showOverviewRevised = false;
+S.showOverviewPartials = false;
+
+function renderAllOverview(query) {
+  try {
+  if (!S.showOverviewRevised && !S.showOverviewPartials) {
+    const a = $('ov-allcards-toggle'); if (a) { a.style.background='#534AB7'; a.style.color='#fff'; }
+  }
+  console.log('renderAllOverview called, sheetLoans length:', S.sheetLoans ? S.sheetLoans.length : 0);
+  const source = (S.sheetLoans && S.sheetLoans.length) ? S.sheetLoans
+    : S.loans.map(l => ({
+        loanId: l.loanId, customerName: l.data.customerName,
+        monthlyEmi: l.data.monthlyEmi, nextEmiDate: '',
+        status: l.closed ? 'Closed' : 'Active',
+        isDefaulted: false, emiCompleted: l.closed,
+        model: l.data.model, akShare: l.data.akShare / 100,
+        aksShare: l.data.aksShare / 100, emiDuration: l.data.tenure,
+        slots: [], numReceivedEmi: l.emis.length, lateEmis: 0, latePaymentFine: 0,
+      }));
+
+  // Show/hide revised view
+  if (S.showOverviewRevised) {
+    const tc = document.querySelector('.emi-five-col');
+    if (tc) tc.style.display = 'none';
+    const mt = $('ov-tabs');
+    if (mt) mt.style.display = 'none';
+    const rv = $('ov-revised-view');
+    if (rv) rv.style.display = 'block';
+    const pv = $('ov-partials-view');
+    if (pv) pv.style.display = 'none';
+    renderOverviewRevised();
+    return;
+  } else {
+    const tc = document.querySelector('.emi-five-col');
+    if (tc) tc.style.display = '';
+    const mt = $('ov-tabs');
+    if (mt) mt.style.display = '';
+    const rv = $('ov-revised-view');
+    if (rv) rv.style.display = 'none';
+  }
+
+  // Show/hide partials view
+  if (S.showOverviewPartials) {
+    const tc = document.querySelector('.emi-five-col');
+    if (tc) tc.style.display = 'none';
+    const mt = $('ov-tabs');
+    if (mt) mt.style.display = 'none';
+    const pv = $('ov-partials-view');
+    if (pv) pv.style.display = 'block';
+    const rv = $('ov-revised-view');
+    if (rv) rv.style.display = 'none';
+    renderOverviewPartials();
+    return;
+  } else {
+    const pv = $('ov-partials-view');
+    if (pv && !S.showOverviewRevised) pv.style.display = 'none';
+  }
+
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const q = (query || '').toLowerCase();
+
+  const filtered = q ? source.filter(l => l.loanId.toLowerCase().includes(q) || (l.customerName||'').toLowerCase().includes(q) || (l.phone||'').includes(q) || (l.guarantor||'').toLowerCase().includes(q) || (l.model||'').toLowerCase().includes(q) || (l.aadhaarPan||'').toLowerCase().includes(q)) : source;
+
+  const upcoming  = [];
+  const overdue   = [];
+  const closed    = [];
+  const defaulted = [];
+
+  filtered.forEach(l => {
+    if (l.isDefaulted) { defaulted.push(l); return; }
+    if (l.emiCompleted || l.status === 'Closed') { closed.push(l); return; }
+    if (!l.nextEmiDate) { upcoming.push(l); return; }
+    const due = new Date(l.nextEmiDate); due.setHours(0,0,0,0);
+    if (due < today) overdue.push(l); else upcoming.push(l);
+  });
+
+  overdue.sort((a, b) => {
+    const diff = new Date(b.nextEmiDate||'0') - new Date(a.nextEmiDate||'0');
+    return diff !== 0 ? diff : a.loanId.localeCompare(b.loanId);
+  });
+  upcoming.sort((a, b) => {
+    const diff = new Date(a.nextEmiDate||'9999') - new Date(b.nextEmiDate||'9999');
+    return diff !== 0 ? diff : a.loanId.localeCompare(b.loanId);
+  });
+  closed.sort((a, b) => b.loanId.localeCompare(a.loanId));
+  defaulted.sort((a, b) => b.loanId.localeCompare(a.loanId));
+
+  $('ov-all-count').textContent = upcoming.length + overdue.length + closed.length + defaulted.length;
+  $('ov-upcoming-count').textContent  = upcoming.length;
+  $('ov-overdue-count').textContent   = overdue.length;
+  $('ov-closed-count').textContent    = closed.length;
+  $('ov-defaulted-count').textContent = defaulted.length;
+
+  const noDataMsg = (!S.sheetLoans || !S.sheetLoans.length) ? '<div class="emi-col-empty">Fetching from Sheets…</div>' : '';
+  const allCards = [...upcoming.map(l => overviewCard(l, 'upcoming')), ...overdue.map(l => overviewCard(l, 'overdue')), ...closed.map(l => overviewCard(l, 'closed')), ...defaulted.map(l => overviewCard(l, 'defaulted'))];
+  $('ov-all-list').innerHTML       = allCards.length ? allCards.join('') : (noDataMsg || '<div class="emi-col-empty">No loans</div>');
+  $('ov-upcoming-list').innerHTML  = upcoming.length  ? upcoming.map(l  => overviewCard(l, 'upcoming')).join('')  : (noDataMsg || '<div class="emi-col-empty">No upcoming EMIs</div>');
+  $('ov-overdue-list').innerHTML   = overdue.length   ? overdue.map(l   => overviewCard(l, 'overdue')).join('')   : (noDataMsg || '<div class="emi-col-empty">All clear ✓</div>');
+  $('ov-closed-list').innerHTML    = closed.length    ? closed.map(l    => overviewCard(l, 'closed')).join('')    : (noDataMsg || '<div class="emi-col-empty">No closed loans</div>');
+  $('ov-defaulted-list').innerHTML = defaulted.length ? defaulted.map(l => overviewCard(l, 'defaulted')).join('') : (noDataMsg || '<div class="emi-col-empty">No defaulted loans</div>');
+} catch(e) { console.error('renderAllOverview error:', e); }
+}
+
+function overviewCard(l, type) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const billTxt = l.billDate ? fmtDisplayDate(l.billDate) : '';
+  const lateTxt = l.lateEmis ? l.lateEmis + '/' + l.numReceivedEmi + ' late' : '';
+  const hasPendingEmi = (S.pending && S.pending.some(p => p.type==='emi' && p.data.loanId===l.loanId && p.status==='pending'))
+    || Object.keys(S._submittedEmis || {}).some(k => k.startsWith(l.loanId + '_'));
+  let bg = '', border = '', tc = '#1a1a1a', sc = '#888', overdueLabel = '';
+  let rightDate = '';
+
+  if (type === 'upcoming' || type === 'overdue') {
+    if (l.nextEmiDate) {
+      const due = new Date(l.nextEmiDate); due.setHours(0,0,0,0);
+      const days = Math.round((today - due) / 86400000);
+      rightDate = 'Due: ' + fmtDisplayDate(l.nextEmiDate);
+      if (days > 90)        { bg='#000';border='#000';tc='#fff';sc='rgba(255,255,255,0.75)';overdueLabel='90+ days overdue'; }
+      else if (days > 30)   { bg='#980000';border='#980000';tc='#fff';sc='rgba(255,255,255,0.75)';overdueLabel='30+ days overdue'; }
+      else if (days > 0)    { bg='#dd7e6b';border='#dd7e6b';tc='#fff';sc='rgba(255,255,255,0.75)';overdueLabel=days+'d overdue'; }
+      else if (due.getTime()===today.getTime()) { bg='#ff9900';border='#ff9900';tc='#fff';sc='rgba(255,255,255,0.75)';overdueLabel='Due today'; }
+    } else {
+      rightDate = '—';
+    }
+  } else if (type === 'closed') {
+    rightDate = '✓ Closed';
+    tc = '#27500A';
+  } else {
+    rightDate = '⚠️ Defaulted';
+    tc = '#A32D2D';
+  }
+
+  const cardStyle = bg ? `background:${bg};border-left-color:${border};border-color:${border}` : '';
+  const pillStyle = bg ? 'background:rgba(255,255,255,0.2);color:#fff' : '';
+
+  return `<div class="emi-card ${type}" data-loanid="${l.loanId}" style="cursor:pointer;${cardStyle}">
+    ${revisedBadgeHtml(l)}
+    <div class="emi-card-top">
+      <span class="emi-card-id" style="color:${tc}">${l.loanId}</span>
+      <div style="text-align:right">
+        <div class="emi-card-date-big" style="color:${tc}">${rightDate}</div>
+      </div>
+    </div>
+    <div class="emi-card-name" style="display:flex;justify-content:space-between;align-items:center;color:${tc};gap:8px">
+      <span>${l.customerName}</span>
+      ${overdueLabel ? `<span style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.85);flex-shrink:0">${overdueLabel}</span>` : ''}
+    </div>
+    <div class="emi-card-meta">
+      <span class="emi-amt-pill" style="${pillStyle}">${billTxt ? 'Bill: '+billTxt : '—'}</span>
+      <span class="emi-amt-pill" style="${pillStyle}">${fmtAmt(l.monthlyEmi)}/mo</span>
+      ${l.model ? `<span class="emi-model-pill" style="${pillStyle}">${l.model}</span>` : ''}
+      ${lateTxt ? `<span class="emi-late-pill" style="${pillStyle}">&#9888; ${lateTxt}</span>` : ''}
+      ${partialIndicator(l, sc)}
+    </div>
+  </div>`;
+}
+
+// Click handler for overview cards
+document.addEventListener('click', function(e) {
+  const card = e.target.closest('#page-all-loans .emi-card[data-loanid]');
+  if (card) {
+    const loanId = card.dataset.loanid;
+    selectOverviewLoan(loanId);
+  }
+});
+
+async function selectOverviewLoan(loanId) {
+  showLoader();
+  try {
+    document.querySelectorAll('#page-all-loans .emi-card').forEach(r => r.classList.remove('selected'));
+    document.querySelectorAll(`#page-all-loans .emi-card[data-loanid="${loanId}"]`).forEach(r => r.classList.add('selected'));
+    S.selectedEmiLoanId = loanId;
+
+    let loan = (S.sheetLoans && S.sheetLoans.find(l => l.loanId === loanId))
+      || (() => { const l = S.loans.find(l => l.loanId === loanId); return l ? { ...l.data, status:'Active', slots:l.emis||[], numReceivedEmi: (l.emis||[]).length } : null; })();
+    if (!loan) return;
+
+    if (!S._fullLoaded && loan._slim) {
+      try {
+        const data = await gasGet('readLoanDetail', { loanId });
+        if (data.ok && data.loan) {
+          const idx = S.sheetLoans.findIndex(l => l.loanId === loanId);
+          if (idx !== -1) S.sheetLoans[idx] = data.loan;
+          loan = data.loan;
+        }
+      } catch(e) { console.warn('Could not load detail:', e.message); }
+    }
+
+    $('ov-detail-loanid').textContent = loanId;
+    $('ov-detail-sub').textContent    = loan.customerName || '';
+
+    const detail = $('ov-detail');
+    detail.style.display = 'block';
+    if ($('ov-detail-ph')) $('ov-detail-ph').style.display = 'none';
+    if (window.matchMedia('(orientation: portrait)').matches)
+      detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    const akPct  = Math.round((loan.akShare  || 0) * 100);
+    const aksPct = Math.round((loan.aksShare || 0) * 100);
+
+    $('ov-detail-kv').innerHTML = `
+      <span class="kv-l">Loan ID</span>       <span class="kv-v" style="color:#534AB7">${loan.loanId}</span>
+      <span class="kv-l">Customer</span>      <span class="kv-v">${loan.customerName}${loan.phone ? ' · '+loan.phone : ''}</span>
+      ${loan.model ? `<span class="kv-l">Model</span><span class="kv-v">${loan.model}${loan.deviceType ? ' ('+loan.deviceType+')' : ''}</span>` : ''}
+      <span class="kv-l">Monthly EMI</span>   <span class="kv-v">${fmtAmt(loan.monthlyEmi)}</span>
+      <span class="kv-l">Tenure</span>        <span class="kv-v">${loan.emiDuration} months</span>
+      <span class="kv-l">EMIs received</span> <span class="kv-v">${loan.numReceivedEmi} of ${loan.emiDuration}</span>
+      ${loan.nextEmiDate ? `<span class="kv-l">Next EMI date</span><span class="kv-v">${fmtDisplayDate(loan.nextEmiDate)}</span>` : ''}
+      ${loan.totalPending   ? `<span class="kv-l">Total pending</span><span class="kv-v" style="color:#A32D2D">${fmtAmt(loan.totalPending)}</span>` : ''}
+      ${loan.lateEmis       ? `<span class="kv-l">Late EMIs</span><span class="kv-v" style="color:#BA7517">${loan.lateEmis}</span>` : ''}
+      ${loan.latePaymentFine? `<span class="kv-l">Late fine</span><span class="kv-v">${fmtAmt(loan.latePaymentFine)}</span>` : ''}
+      <span class="kv-l">AK / AKS</span>      <span class="kv-v">${akPct}% / ${aksPct}%</span>
+      ${loan.guarantor ? `<span class="kv-l">Guarantor</span><span class="kv-v">${loan.guarantor}</span>` : ''}
+    `;
+
+    // EMI history — tabular
+    const duration = loan.emiDuration || 0;
+    const slots    = loan.slots || [];
+    const today2 = new Date(); today2.setHours(0,0,0,0);
+    const pendingSet = new Set(
+      S.pending.filter(p => p.type==='emi' && p.data.loanId===loanId && p.status==='pending')
+        .map(p => Number(p.data.emiNum))
+    );
+    Object.keys(S._submittedEmis || {}).forEach(k => {
+      if (k.startsWith(loanId + '_')) pendingSet.add(parseInt(k.split('_')[1]));
+    });
+    [...pendingSet].forEach(n => {
+      if (loan.slots && loan.slots[n-1] && loan.slots[n-1].received) {
+        delete S._submittedEmis[loanId + '_' + n];
+        pendingSet.delete(n);
+      }
+    });
+    if (duration > 0) {
+      let tableHtml = '<table class="emi-table"><thead><tr><th>EMI</th><th>Status</th><th>Due Date</th><th>Rcvd Date</th><th>Amount</th><th>Misc</th><th>Reason</th></tr></thead><tbody>';
+      for (let i = 0; i < duration && i < 8; i++) {
+        const slot = slots[i] || { num:i+1, received:false, scheduledDate:'', receivedDate:'', misc:0, cashflow:0 };
+        const scheduledTxt = slot.scheduledDate ? fmtDisplayDate(slot.scheduledDate) : '—';
+        const lateEmi = wasLateEmi(slot);
+        const receivedTxt  = slot.receivedDate  ? fmtDisplayDate(slot.receivedDate) + (lateEmi ? ' <span style="color:#BA7517;font-size:11px" title="Received late">⚠️ late</span>' : '') : '—';
+        let statusHtml = '', rowClass = '';
+        if (slot.received) {
+          statusHtml = '<span class="badge b-approved">Received</span>';
+          rowClass = ' rcvd' + (lateEmi ? ' late' : '');
+        }
+        if (pendingSet.has(i+1)) statusHtml += ' <span class="badge b-pending" style="font-size:10px">⏳ Pending</span>';
+        const miscTxt = slot.misc !== 0 ? fmtAmt(slot.misc) : '—';
+        const reason = slot.miscType || (pendingSet.has(i+1) ? (S.pending.find(p => p.type==='emi' && p.data.loanId===loanId && p.status==='pending' && Number(p.data.emiNum)===i+1)?.data?.reason || '—') : '—');
+        tableHtml += `<tr class="emi-tr${rowClass}"><td>${i+1}</td><td>${statusHtml}</td><td>${scheduledTxt}</td><td>${receivedTxt}</td><td>${fmtAmt(slot.cashflow)}</td><td>${miscTxt}</td><td style="font-size:11px;color:#555">${reason}</td></tr>`;
+      }
+      tableHtml += '</tbody></table>';
+      $('ov-emi-slots').innerHTML = tableHtml;
+      $('ov-emi-slots-wrap').style.display = 'block';
+    } else {
+      $('ov-emi-slots').innerHTML = '';
+      $('ov-emi-slots-wrap').style.display = 'none';
+    }
+
+    // Late fine & extra EMI
+    const fineEl = $('ov-fine-extra');
+    if (fineEl) {
+      const fine = loan.latePaymentFine || 0;
+      const extra = loan.extraEmiReceived || 0;
+      fineEl.innerHTML = (fine || extra) ? `<div style="display:flex;gap:16px;flex-wrap:wrap">
+        ${fine ? `<span style="color:#A32D2D;font-weight:500">Late fine: ${fmtAmt(fine)}</span>` : ''}
+        ${extra ? `<span style="color:#0F6E56;font-weight:500">Extra EMI: ${fmtAmt(extra)}</span>` : ''}
+      </div>` : '';
+    }
+
+    // Partial banner
+    const bannerEl = $('ov-partial-banner');
+    if (bannerEl) {
+      const partialItems = S.approvedPartials.filter(p => p.loanId === loanId);
+      if (partialItems.length) {
+        let h = '<div style="font-size:12px;font-weight:500;color:#A32D2D;margin-bottom:6px">Approved Partial Payments</div>';
+        partialItems.forEach(p => {
+          const dateStr = p.receivedDate ? fmtDisplayDate(p.receivedDate) : '—';
+          h += `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;margin:6px 0;background:#fff5f5;border-radius:8px;border:0.5px solid #e8c8c8">
+            <div>
+              <div style="font-size:13px;font-weight:500">EMI ${p.emiNum} · ${fmtAmt(p.amount)} received</div>
+              <div style="font-size:11px;color:#888">Received on: ${dateStr}</div>
+            </div>
+          </div>`;
+        });
+        bannerEl.innerHTML = h;
+      } else {
+        bannerEl.innerHTML = '';
+      }
+    }
+
+    // Revised stats
+    const statsEl = $('ov-revised-stats');
+    const btnWrap = $('ov-revised-btn-wrap');
+    if (statsEl) {
+      const customerPrefix = loan.loanId.split('/')[0];
+      const dates = S.revisedDates || [];
+      const emiCount = dates.filter(d => d.loanId === loanId && d.emiNum === loan.numReceivedEmi + 1).length;
+      const loanCount = dates.filter(d => d.loanId === loanId).length;
+      const customerCount = dates.filter(d => d.loanId.split('/')[0] === customerPrefix).length;
+      if (loanCount > 0) {
+        statsEl.innerHTML = `<div style="display:flex;gap:12px;flex-wrap:wrap;padding:6px 0">
+          <span style="color:#399C9C;font-weight:500">Revised Date Revisions:</span>
+          <span>This EMI: <strong>${emiCount}</strong></span>
+          <span>This Loan: <strong>${loanCount}</strong></span>
+          <span>This Customer: <strong>${customerCount}</strong></span>
+        </div>`;
+      } else {
+        statsEl.innerHTML = '';
+      }
+    }
+    if (btnWrap) {
+      btnWrap.style.display = (loan.numReceivedEmi < duration) ? '' : 'none';
+      btnWrap.dataset.monthlyEmi = loan.monthlyEmi || '';
+      btnWrap.dataset.duration = duration;
+    }
+
+    const nextNum = loan.numReceivedEmi + 1;
+    const extraReceived = loan.extraEmiReceived || 0;
+    const expectedAmt   = Math.max(0, (loan.monthlyEmi || 0) - extraReceived);
+    let labelTxt = nextNum > duration ? 'All EMIs collected!'
+      : `Recording: EMI ${nextNum} of ${duration} · Standard EMI: ${fmtAmt(loan.monthlyEmi)}${extraReceived ? ' · Expected to collect: ' + fmtAmt(expectedAmt) : ''}`;
+    $('ov-next-label').textContent = labelTxt;
+
+    // Check scheduled date gap
+    if (nextNum <= duration && loan.emiStartDate) {
+      const parts = String(loan.emiStartDate).match(/(\d{1,2})[\-\/](\w{3})[\-\/](\d{2,4})/);
+      if (parts) {
+        const months = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+        const sd = new Date(parseInt(parts[3])<100?2000+parseInt(parts[3]):parseInt(parts[3]), months[parts[2].toLowerCase()], parseInt(parts[1]));
+        sd.setMonth(sd.getMonth() + (nextNum - 1));
+        const td = new Date(); td.setHours(0,0,0,0);
+        const diff = Math.round((sd - td) / (1000*60*60*24));
+        if (diff > 10) {
+          if (!confirm('Scheduled date for EMI ' + nextNum + ' is ' + diff + ' days from now. Are you sure?')) {
+            closeOverviewDetail(); return;
+          }
+        }
+      }
+    }
+
+    // Prefill
+    $('ov-emi-amt').value  = loan.monthlyEmi || '';
+    $('ov-emi-date').value = new Date().toISOString().split('T')[0];
+    $('ov-emi-notes').value  = '';
+    $('ov-emi-reason').value = '';
+    $('ov-emi-reason-wrap').style.display = 'none';
+    $('ov-emi-diff-warn').style.display   = 'none';
+
+    const subBtn = $('ov-emi-submit-btn');
+    if (pendingSet.has(nextNum)) {
+      subBtn.disabled = true;
+      subBtn.style.opacity = '0.5';
+      subBtn.style.cursor = 'not-allowed';
+      $('ov-next-label').textContent = '⚠ EMI ' + nextNum + ' already pending approval.';
+    } else {
+      subBtn.disabled = false;
+      subBtn.style.opacity = '';
+      subBtn.style.cursor = '';
+    }
+
+    // Revised date next field
+    const revWrap = $('ov-emi-revised-next-wrap');
+    const revDt   = $('ov-emi-next-revised-date');
+    if (revWrap && revDt) {
+      const hasRevDates = (S.revisedDates||[]).some(d => d.loanId === loanId);
+      if (hasRevDates && nextNum < duration) {
+        revWrap.style.display = 'block';
+        const loanRevs = (S.revisedDates||[]).filter(d => d.loanId === loanId && d.revisedDate);
+        let latest = null;
+        loanRevs.forEach(d => { const dt = parseSheetDate(d.revisedDate); if (dt && (!latest || dt > latest)) latest = dt; });
+        if (latest) {
+          const next = new Date(latest);
+          next.setMonth(next.getMonth() + 1);
+          revDt.value = next.getFullYear() + '-' + String(next.getMonth()+1).padStart(2,'0') + '-' + String(next.getDate()).padStart(2,'0');
+        } else {
+          revDt.value = '';
+        }
+      } else {
+        revWrap.style.display = 'none';
+        revDt.value = '';
+      }
+    }
+    // Loan Details — full 87 columns (same as All Loans tab)
+    const Df = (v) => (v === 'Invalid Date') ? '—' : (v || '—');
+    const Mf = (v) => (v == null || v === '') ? '—' : '₹' + Number(v).toLocaleString('en-IN');
+    const Dtf = (v) => v ? fmtDisplayDate(v) : '—';
+    const Pctf = (v) => v != null && v !== '' ? v + '%' : '—';
+    const Boolf = (v) => v === true ? 'Yes' : v === false ? 'No' : '—';
+
+    const fullRows = [
+      ['Bill Date',                    Dtf(loan.billDate)],
+      ['Loan ID',                      Df(loan.loanId)],
+      ['Customer Name',                Df(loan.customerName)],
+      ['Customer Mobile No',           Df(loan.phone)],
+      ['Customer AADHAR / PAN',        Df(loan.aadhaarPan)],
+      ['Mobile Model',                 Df(loan.model)],
+      ['Device Type',                  Df(loan.deviceType)],
+      ['Mobile Amount',                Mf(loan.mobileAmount)],
+      ['Down Payment',                 Mf(loan.downPayment)],
+      ['Processing Fee',               Mf(loan.processingFee)],
+      ['Interest',                     Mf(loan.interest)],
+      ['EMI Duration',                 loan.emiDuration ? loan.emiDuration + ' months' : '—'],
+      ['EMI Start Date',               Dtf(loan.emiStartDate)],
+      ['Total Amount',                 Mf(loan.totalAmount)],
+      ['Total EMI',                    Df(loan.totalEmi)],
+      ['Monthly EMI',                  Mf(loan.monthlyEmi)],
+      ['Customer ID',                  Df(loan.customerId)],
+      ['Guarantor / Alternate No',     Df(loan.guarantor)],
+      ['Max Interest Discount',        Mf(loan.maxInterestDiscount)],
+      ['Rate of Interest',             Pctf(loan.rateOfInterest)],
+      ['Finance Amount',               Mf(loan.financeAmount)],
+      ['App Lock Charge',              Mf(loan.appLockCharge)],
+      ['AK Share',                     akPct + '%'],
+      ['AKS Share',                    aksPct + '%'],
+      ['AK Amount',                    Mf(loan.akAmount)],
+      ['AK Paid to Kunal',             Mf(loan.akPaidToKunal)],
+      ['AKS Amount',                   Mf(loan.aksAmount)],
+      ['AKS Paid to Kunal',            Mf(loan.aksPaidToKunal)],
+      ['Next EMI Date',                Dtf(loan.nextEmiDate)],
+      ['Last EMI Date',                Dtf(loan.lastEmiDate)],
+      ['Remaining Principal',          Mf(loan.remainingPrincipal)],
+      ['Remaining Interest',           Mf(loan.remainingInterest)],
+      ['Total Pending',                Mf(loan.totalPending)],
+      ['Received Principal',           Mf(loan.receivedPrincipal)],
+      ['Received Interest',            Mf(loan.receivedInterest)],
+      ['Received Total',               Mf(loan.receivedTotal)],
+      ['Number of Received EMI',       Df(loan.numReceivedEmi)],
+      ['EMI Completed',                Boolf(loan.emiCompleted)],
+      ['Late EMIs',                    Df(loan.lateEmis)],
+      ['Late Payment Fine',            Mf(loan.latePaymentFine)],
+      ['Early Loan Closing Settlement',Mf(loan.earlyClosing)],
+      ['Extra EMI Received',           Mf(loan.extraEmiReceived)],
+      ['Recovery Charge',              Mf(loan.recoveryCharge)],
+      ['Welcome Message Sent',         Boolf(loan.welcomeMsg)],
+      ['Loan Closing Message Sent',    Boolf(loan.closingMsg)],
+      ['Lock App Removed',             Boolf(loan.lockRemoved)],
+      ['Defaulted',                    Boolf(loan.isDefaulted)],
+      ['Default Comment',              Df(loan.defaultComment)],
+      ['Final ROI',                    Pctf(loan.finalRoi)],
+      ['AK Share of EMI',              Mf(loan.akShareOfEmi)],
+      ['AKS Share of EMI',             Mf(loan.aksShareOfEmi)],
+      ['Drive Link',                   loan.driveLink ? '<a href="'+loan.driveLink+'" target="_blank" style="color:#534AB7">Open ↗</a>' : '—'],
+      ['Down Payment %',               Df(loan.downPaymentPct)],
+    ];
+
+    const HIDDEN_LABELS = new Set([
+      'Rate of Interest', 'App Lock Charge', 'AK Share', 'AKS Share',
+      'AK Amount', 'AK Paid to Kunal', 'AKS Amount', 'AKS Paid to Kunal',
+      'Remaining Principal', 'Remaining Interest', 'Received Principal', 'Received Interest',
+      'Late Payment Fine', 'Early Loan Closing Settlement', 'Extra EMI Received',
+      'Recovery Charge', 'Welcome Message Sent', 'Loan Closing Message Sent',
+      'Default Comment', 'Final ROI', 'AK Share of EMI', 'AKS Share of EMI',
+      'Drive Link', 'Down Payment %',
+    ]);
+
+    $('ov-detail-full').innerHTML = fullRows
+      .filter(([label]) => !HIDDEN_LABELS.has(label))
+      .map(([label, val]) => `<span class="kv-l">${label}</span><span class="kv-v">${val}</span>`
+    ).join('');
+  } finally { hideLoader(); }
+}
+
+function closeOverviewDetail() {
+  $('ov-detail').style.display = 'none';
+  if ($('ov-detail-ph')) $('ov-detail-ph').style.display = '';
+  S.selectedEmiLoanId = null;
+  document.querySelectorAll('#page-all-loans .emi-card').forEach(r => r.classList.remove('selected'));
+  if ($('ov-emi-received')) $('ov-emi-received').value = 'true';
+}
+
+function toggleOverviewAllCards() {
+  S.showOverviewRevised = false;
+  S.showOverviewPartials = false;
+  $('ov-allcards-toggle').style.background = '#534AB7';
+  $('ov-allcards-toggle').style.color = '#fff';
+  const rbtn = $('ov-revised-toggle');
+  if (rbtn) { rbtn.style.background = 'none'; rbtn.style.color = '#D4A017'; }
+  const pbtn = $('ov-partials-toggle');
+  if (pbtn) { pbtn.style.background = 'none'; pbtn.style.color = '#A32D2D'; }
+  renderAllOverview($('ov-search') ? $('ov-search').value : '');
+}
+
+function toggleOverviewRevised() {
+  S.showOverviewRevised = !S.showOverviewRevised;
+  S.showOverviewPartials = false;
+  const abtn = $('ov-allcards-toggle');
+  if (abtn) { abtn.style.background = S.showOverviewRevised ? 'none' : '#534AB7'; abtn.style.color = S.showOverviewRevised ? '#534AB7' : '#fff'; }
+  const btn = $('ov-revised-toggle');
+  if (btn) {
+    btn.style.background = S.showOverviewRevised ? '#D4A017' : 'none';
+    btn.style.color = S.showOverviewRevised ? '#fff' : '#D4A017';
+  }
+  const pbtn = $('ov-partials-toggle');
+  if (pbtn) { pbtn.style.background = 'none'; pbtn.style.color = '#A32D2D'; }
+  renderAllOverview($('ov-search') ? $('ov-search').value : '');
+}
+
+function toggleOverviewPartials() {
+  S.showOverviewPartials = !S.showOverviewPartials;
+  S.showOverviewRevised = false;
+  const abtn = $('ov-allcards-toggle');
+  if (abtn) { abtn.style.background = S.showOverviewPartials ? 'none' : '#534AB7'; abtn.style.color = S.showOverviewPartials ? '#534AB7' : '#fff'; }
+  const rbtn = $('ov-revised-toggle');
+  if (rbtn) { rbtn.style.background = 'none'; rbtn.style.color = '#D4A017'; }
+  const btn = $('ov-partials-toggle');
+  if (btn) {
+    btn.style.background = S.showOverviewPartials ? '#A32D2D' : 'none';
+    btn.style.color = S.showOverviewPartials ? '#fff' : '#A32D2D';
+  }
+  renderAllOverview($('ov-search') ? $('ov-search').value : '');
+}
+
+function checkOverviewEmiDiff() {
+  const loanId = S.selectedEmiLoanId; if (!loanId) return;
+  let loan = (S.sheetLoans && S.sheetLoans.find(l => l.loanId === loanId)) || S.loans.find(l => l.loanId === loanId);
+  if (!loan) return;
+  const stdEmi  = loan.monthlyEmi || loan?.data?.monthlyEmi || 0;
+  const got     = parseFloat($('ov-emi-amt').value) || 0;
+  if (!got) return;
+  const diff = got - stdEmi;
+  if (Math.abs(diff) > 1) {
+    $('ov-emi-reason-wrap').style.display = 'block';
+    $('ov-emi-diff-warn').style.display   = 'block';
+    $('ov-emi-diff-msg').textContent = `Differs from standard EMI ${fmtAmt(stdEmi)} by ${diff>0?'+':''}${fmtAmt(Math.abs(diff))}. Please select a reason.`;
+  } else {
+    $('ov-emi-reason-wrap').style.display = 'none';
+    $('ov-emi-diff-warn').style.display   = 'none';
+  }
+}
+
+async function submitOverviewEmi() {
+  if (S.cu.role !== 'admin' && !S.cu.perms.submit) { showAlert('Permission denied. You do not have submit for approval access.', 'e'); return; }
+  const loanId = S.selectedEmiLoanId;
+  if (!loanId) { showAlert('Please select a loan first.', 'e'); return; }
+  let loan = S.sheetLoans && S.sheetLoans.find(l => l.loanId === loanId);
+  if (!loan) loan = (() => { const l = S.loans.find(l => l.loanId === loanId); return l ? { ...l.data, status:'Active', slots:l.emis||[], numReceivedEmi: (l.emis||[]).length } : null; })();
+  if (!loan) { showAlert('Loan data not found.', 'e'); return; }
+  const amt  = parseFloat($('ov-emi-amt').value) || 0;
+  const date = $('ov-emi-date') ? $('ov-emi-date').value : '';
+  if (!amt || !date) { showAlert('Please enter amount and payment date.', 'e'); return; }
+  const extraRcv = loan.extraEmiReceived || 0;
+  const stdEmi   = loan.monthlyEmi || 0;
+  const expected = Math.max(0, stdEmi - extraRcv);
+  if (Math.abs(amt - stdEmi) > 1 && !v('ov-emi-reason')) { showAlert('Please select a reason for the amount difference.', 'e'); return; }
+  const numReceived = loan.numReceivedEmi || 0;
+  const emiNum       = numReceived + 1;
+  const emiStartDate = loan.emiStartDate || '';
+  let scheduledDate  = '';
+  if (emiStartDate) {
+    const parts = String(emiStartDate).match(/(\d{1,2})[\-\/](\w{3})[\-\/](\d{2,4})/);
+    if (parts) {
+      const months = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+      const mon = months[parts[2].toLowerCase()];
+      let yr = parseInt(parts[3]); if (yr<100) yr += yr<50?2000:1900;
+      const sd = new Date(yr, mon, parseInt(parts[1]));
+      sd.setMonth(sd.getMonth() + (emiNum - 1));
+      scheduledDate = sd.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}).replace(/ /g,'-');
+    }
+  }
+  const receivedVal = $('ov-emi-received') ? $('ov-emi-received').value !== 'false' : true;
+  const d = {
+    loanId,
+    customerName:   loan.customerName || '',
+    model:          loan.model || '',
+    emiNum,
+    amount:         amt, expectedAmount: stdEmi, misc: amt - stdEmi,
+    date, scheduledDate, emiStartDate,
+    received: receivedVal,
+    mode: $('ov-emi-mode') ? $('ov-emi-mode').value : 'Cash',
+    reason: $('ov-emi-reason') ? $('ov-emi-reason').value : '',
+    notes: $('ov-emi-notes') ? $('ov-emi-notes').value : '',
+    akShare:  Math.round((loan.akShare  || 0) * 100),
+    aksShare: Math.round((loan.aksShare || 0) * 100),
+  };
+  const emiItem = { id: nextPid(), type: 'emi', data: d, submittedBy: S.cu.id, submittedAt: new Date().toISOString(), status: 'pending', note: '' };
+  showAlert('Submitting…', 'w');
+  showLoader();
+  try {
+    if (S.sheetsUrl) {
+      const res = await gasPost({action:'saveEmi', item:emiItem});
+      if (res.ok) {
+        S._submittedEmis[loanId + '_' + emiNum] = true;
+        if (res.pending) S.pending = res.pending;
+        const revDt = $('ov-emi-next-revised-date');
+        if (revDt && revDt.value && emiNum < (loan.emiDuration || 0)) {
+          const nextNum2 = emiNum + 1;
+          const nextAmt = loan.monthlyEmi || 0;
+          const revRes = await gasPost({ action: 'setRevisedDate', loanId, emiNum: nextNum2, revisedDate: revDt.value, amount: nextAmt || 0, note: '' });
+          if (revRes.ok) {
+            try { const rd2 = await gasGet('readRevisedDates'); if (rd2.ok) S.revisedDates = rd2.dates; } catch(e) {}
+          }
+        }
+        refreshNav();
+        rerenderActiveTab();
+        showAlert('EMI payment submitted for approval.');
+      } else {
+        await fetchPendingFromSheets();
+        showAlert('Submission failed: ' + (res.error || 'Unknown error'), 'e');
+      }
+    }
+  } finally { hideLoader(); }
+  closeOverviewDetail();
+}
+
+function clearOverviewRevisedDateField() {
+  const dt = $('ov-emi-next-revised-date');
+  if (dt) dt.value = '';
+}
+
+window.__ovToggle = function(label) {
+  _ovViewCollapsed[label] = !_ovViewCollapsed[label];
+  renderOverviewRevised();
+};
+
+function renderOverviewRevised() {
+  const el = $('ov-revised-view');
+  if (!el) return;
+  const q = (($('ov-search') ? $('ov-search').value : '') || '').toLowerCase();
+  const source = (S.sheetLoans && S.sheetLoans.length) ? S.sheetLoans : [];
+  const filtered = q ? source.filter(l => l.loanId.toLowerCase().includes(q) || (l.customerName||'').toLowerCase().includes(q)) : source;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const hasRevDates = filtered.filter(l => {
+    const revs = S.revisedDates.filter(rd => rd.loanId === l.loanId);
+    return revs.some(rd => {
+      if (rd.note === 'Mobile Jabt') return true;
+      const slot = (l.slots || []).find(s => s.num === rd.emiNum);
+      return !slot || !slot.received;
+    });
+  });
+  const upcoming = [], overdue = [], mobileJabt = [];
+  hasRevDates.forEach(l => {
+    const hasJabt = S.revisedDates.some(rd => rd.loanId === l.loanId && rd.note === 'Mobile Jabt');
+    if (hasJabt) { mobileJabt.push(l); return; }
+    const dates = S.revisedDates.filter(rd => rd.loanId === l.loanId && rd.revisedDate);
+    let latest = null;
+    dates.forEach(d => { const dt = parseSheetDate(d.revisedDate); if (dt && (!latest || dt > latest)) latest = dt; });
+    if (!latest) { upcoming.push(l); return; }
+    if (latest >= today) upcoming.push(l); else overdue.push(l);
+  });
+  const getLastRev = (lid) => { let m = null; S.revisedDates.filter(rd => rd.loanId === lid && rd.revisedDate).forEach(d => { const dt = parseSheetDate(d.revisedDate); if (dt && (!m || dt > m)) m = dt; }); return m; };
+  const getFirstRev = (lid) => { let m = null; S.revisedDates.filter(rd => rd.loanId === lid && rd.revisedDate).forEach(d => { const dt = parseSheetDate(d.revisedDate); if (dt && (!m || dt < m)) m = dt; }); return m; };
+  overdue.sort((a, b) => { const da = getLastRev(a.loanId), db = getLastRev(b.loanId); if (!da && !db) return 0; if (!da) return 1; if (!db) return -1; return db - da; });
+  upcoming.sort((a, b) => { const da = getFirstRev(a.loanId), db = getFirstRev(b.loanId); if (!da && !db) return 0; if (!da) return 1; if (!db) return -1; return da - db; });
+  function sectionHtml(label, key, color, bg, icon, items) {
+    const collapsed = _ovViewCollapsed[key];
+    return `<div class="card" style="margin-bottom:0.5rem;padding:0;overflow:hidden">
+      <div onclick="window.__ovToggle('${key}')" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:${bg};user-select:none">
+        <span style="font-size:14px">${collapsed ? '\u25B6' : '\u25BC'}</span>
+        <span style="font-size:12px;font-weight:600;color:${color}">${icon} ${label}</span>
+        <span style="font-size:11px;color:#888;margin-left:auto">${items.length}</span>
+      </div>
+      ${collapsed ? '' : `<div style="padding:6px">${items.map(l => overviewCard(l, label==='Revised (Overdue)'?'overdue':'upcoming')).join('')}</div>`}
+    </div>`;
+  }
+  el.innerHTML = `<div style="font-size:12px;color:#888;margin-bottom:0.5rem">${hasRevDates.length} loan(s) with revised dates</div>`
+    + sectionHtml('Revised (Overdue)', 'overdue', '#c62828', '#ffebee', '\uD83D\uDD34', overdue)
+    + sectionHtml('Revised (Scheduled)', 'scheduled', '#2e7d32', '#e8f5e9', '\uD83D\uDFE2', upcoming)
+    + (mobileJabt.length ? sectionHtml('Mobile Jabt', 'mobile-jabt', '#000', '#f5f5f5', '\uD83D\uDCF1', mobileJabt) : '');
+}
+
+function renderOverviewPartials() {
+  const el = $('ov-partials-view');
+  if (!el) return;
+  const q = (($('ov-search') ? $('ov-search').value : '') || '').toLowerCase();
+  const pts = S.approvedPartials || [];
+  const partialLoanIds = new Set(pts.map(p => p.loanId));
+  const source = (S.sheetLoans && S.sheetLoans.length) ? S.sheetLoans : [];
+  let loans = source.filter(l => partialLoanIds.has(l.loanId));
+  if (q) loans = loans.filter(l => l.loanId.toLowerCase().includes(q) || (l.customerName||'').toLowerCase().includes(q));
+  if (!loans.length) {
+    el.innerHTML = '<div class="emi-col-empty">No loans with partial payments</div>';
+    return;
+  }
+  el.innerHTML = `<div style="font-size:12px;color:#888;margin-bottom:0.5rem">${loans.length} loan(s) with partial payments</div>
+    <div style="display:flex;flex-direction:column;gap:6px">${loans.map(l => overviewCard(l, l.isDefaulted ? 'defaulted' : (l.emiCompleted||l.status==='Closed') ? 'closed' : 'upcoming')).join('')}</div>`;
 }
 
 async function submitMobileJabt() {

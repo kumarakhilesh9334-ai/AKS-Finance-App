@@ -128,182 +128,125 @@
       </div>
     </div>
 
-    <!-- ── LOG EMI ────────────────────────────────────────────────────── -->
-    <div class="page" id="page-emi">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:0.75rem">
-        <div class="emi-search-wrap" style="flex:1;margin-bottom:0">
-          <span class="emi-search-icon">🔍</span>
-          <input type="text" id="emi-search" placeholder="Search Loan ID or customer…" oninput="renderEmiColumns(this.value)">
+    <!-- ── ALL LOANS (merged overview) ─────────────────────────────────── -->
+    <div class="page" id="page-all-loans">
+      <div class="ov-header">
+        <div class="ov-row1">
+          <button class="pill-toggle" id="ov-allcards-toggle" onclick="toggleOverviewAllCards()" style="font-size:11px;padding:4px 10px;border-radius:12px;border:1px solid #534AB7;background:#534AB7;color:#fff;cursor:pointer;white-space:nowrap">All Cards</button>
+          <button class="pill-toggle" id="ov-revised-toggle" onclick="toggleOverviewRevised()" style="font-size:11px;padding:4px 10px;border-radius:12px;border:1px solid #D4A017;background:none;color:#D4A017;cursor:pointer;white-space:nowrap">Revised Date Cards</button>
+          <button class="pill-toggle" id="ov-partials-toggle" onclick="toggleOverviewPartials()" style="font-size:11px;padding:4px 10px;border-radius:12px;border:1px solid #A32D2D;background:none;color:#A32D2D;cursor:pointer;white-space:nowrap">Partial Payments</button>
         </div>
-        <button class="pill-toggle" id="revised-view-toggle" onclick="toggleRevisedView()" style="font-size:11px;padding:4px 10px;border-radius:12px;border:1px solid #D4A017;background:none;color:#D4A017;cursor:pointer;white-space:nowrap">Revised Date Cards</button>
-        <button class="btn btn-sm" onclick="fetchLoansFromSheets(true)" title="Refresh">↻ Refresh</button>
       </div>
-      <div class="landscape-wrap">
+      <div class="landscape-wrap ov-wrap">
         <div class="ls-left">
-          <!-- Mobile: tab switcher -->
-          <div class="mob-col-tabs">
-            <button class="mob-col-tab active" id="mob-tab-emi-all" onclick="mobSwitchEmiCol('all')">🔵 All</button>
-            <button class="mob-col-tab" id="mob-tab-emi-upcoming" onclick="mobSwitchEmiCol('upcoming')">🟢 Upcoming</button>
-            <button class="mob-col-tab" id="mob-tab-emi-overdue" onclick="mobSwitchEmiCol('overdue')">🔴 Overdue</button>
-            <button class="mob-col-tab" id="mob-tab-emi-partials" onclick="mobSwitchEmiCol('partials')">📋 Partials</button>
+      <div class="ov-sticky">
+        <div class="ov-row2">
+          <div class="emi-search-wrap" style="flex:1;margin-bottom:0">
+            <span class="emi-search-icon">🔍</span>
+            <input type="text" id="ov-search" placeholder="Search Loan ID or customer…" oninput="renderAllOverview(this.value)">
           </div>
-          <div class="emi-two-col">
-            <div class="emi-col-wrap mob-active" id="emi-col-all">
-              <div class="emi-col-hd" style="background:#534AB7;color:#fff"><span>🔵 All</span><span class="emi-section-count" id="col-all-count">0</span></div>
-              <div class="emi-col-body" id="col-all-list"><div class="emi-col-empty">Loading…</div></div>
+          <button class="btn btn-sm" onclick="fetchLoansFromSheets(true)" title="Refresh">↻ Refresh</button>
+        </div>
+        <div class="mob-five-tabs" id="ov-tabs">
+            <button class="mob-five-tab active" id="mob-tab-ov-all"       onclick="mobSwitchOvCol('all')">🔵 All</button>
+            <button class="mob-five-tab"        id="mob-tab-ov-upcoming"  onclick="mobSwitchOvCol('upcoming')">🟢 Upcoming</button>
+            <button class="mob-five-tab"        id="mob-tab-ov-overdue"   onclick="mobSwitchOvCol('overdue')">🔴 Overdue</button>
+            <button class="mob-five-tab"        id="mob-tab-ov-closed"    onclick="mobSwitchOvCol('closed')">⚪ Closed</button>
+            <button class="mob-five-tab"        id="mob-tab-ov-defaulted" onclick="mobSwitchOvCol('defaulted')">⚠️ Defaulted</button>
+          </div>
+        </div>
+        <div class="emi-five-col">
+            <div class="emi-col-wrap mob-active" id="ov-col-all">
+              <div class="emi-col-hd" style="background:#534AB7;color:#fff"><span>🔵 All</span><span class="emi-section-count" id="ov-all-count">0</span></div>
+              <div class="emi-col-body" id="ov-all-list"><div class="emi-col-empty">Loading…</div></div>
             </div>
-            <div class="emi-col-wrap" id="emi-col-upcoming">
-              <div class="emi-col-hd upcoming-hd"><span>🟢 Upcoming</span><span class="emi-section-count" id="col-upcoming-count">0</span></div>
-              <div class="emi-col-body" id="col-upcoming-list"><div class="emi-col-empty">Loading…</div></div>
+            <div class="emi-col-wrap" id="ov-col-upcoming">
+              <div class="emi-col-hd upcoming-hd"><span>🟢 Upcoming</span><span class="emi-section-count" id="ov-upcoming-count">0</span></div>
+              <div class="emi-col-body" id="ov-upcoming-list"><div class="emi-col-empty">Loading…</div></div>
             </div>
-            <div class="emi-col-wrap" id="emi-col-overdue">
-              <div class="emi-col-hd overdue-hd"><span>🔴 Overdue</span><span class="emi-section-count" id="col-overdue-count">0</span></div>
-              <div class="emi-col-body" id="col-overdue-list"><div class="emi-col-empty">Loading…</div></div>
+            <div class="emi-col-wrap" id="ov-col-overdue">
+              <div class="emi-col-hd overdue-hd"><span>🔴 Overdue</span><span class="emi-section-count" id="ov-overdue-count">0</span></div>
+              <div class="emi-col-body" id="ov-overdue-list"><div class="emi-col-empty">Loading…</div></div>
             </div>
-            <div class="emi-col-wrap" id="emi-col-partials">
-              <div class="emi-col-hd partials-hd"><span>📋 Partial Payments</span><span class="emi-section-count" id="col-partials-count">0</span></div>
-              <div class="emi-col-body" id="col-partials-list"><div class="emi-col-empty">No partial payments</div></div>
+            <div class="emi-col-wrap" id="ov-col-closed">
+              <div class="emi-col-hd closed-hd"><span>⚪ Closed</span><span class="emi-section-count" id="ov-closed-count">0</span></div>
+              <div class="emi-col-body" id="ov-closed-list"><div class="emi-col-empty">Loading…</div></div>
+            </div>
+            <div class="emi-col-wrap" id="ov-col-defaulted">
+              <div class="emi-col-hd defaulted-hd"><span>⚠️ Defaulted</span><span class="emi-section-count" id="ov-defaulted-count">0</span></div>
+              <div class="emi-col-body" id="ov-defaulted-list"><div class="emi-col-empty">Loading…</div></div>
             </div>
           </div>
-          <div id="emi-revised-view" style="display:none;margin-top:0.75rem"></div>
+          <div id="ov-revised-view" style="display:none;margin-top:0.75rem"></div>
+          <div id="ov-partials-view" style="display:none;margin-top:0.75rem"></div>
         </div>
         <div class="ls-right">
-          <div class="card" id="emi-detail" style="display:none">
+          <div class="card" id="ov-detail" style="display:none">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
               <div>
-                <div style="font-size:14px;font-weight:600;color:#534AB7" id="emi-detail-loanid"></div>
-                <div style="font-size:12px;color:#888;margin-top:2px" id="emi-detail-sub"></div>
+                <div style="font-size:14px;font-weight:600;color:#534AB7" id="ov-detail-loanid"></div>
+                <div style="font-size:12px;color:#888;margin-top:2px" id="ov-detail-sub"></div>
               </div>
-              <button class="btn btn-sm" onclick="closeEmiDetail()">✕ Close</button>
+              <button class="btn btn-sm" onclick="closeOverviewDetail()">✕ Close</button>
             </div>
             <div class="divider" style="margin-bottom:0.75rem"></div>
-              <div id="emi-slots-wrap">
-                <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:6px">EMI history</div>
-                <div id="emi-slots"></div>
-              </div>
-              <div id="emi-partial-banner"></div>
-              <div id="emi-revised-stats" style="margin:8px 0;font-size:12px;color:#555"></div>
-              <div style="margin:8px 0;text-align:right" id="emi-revised-btn-wrap">
-                <button class="btn btn-sm" style="background:#399C9C;color:#fff;border:none;padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer" onclick="showRevisedDateForm()">Set Revised Date</button>
-              </div>
-              <div class="divider"></div>
-              <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px" id="emi-next-label"></div>
-              <div class="fg fg-2">
-              <div><label>Amount received (₹)</label><input type="number" id="emi-amt" placeholder="0" oninput="checkEmiDiff()"></div>
-              <div><label>Payment date</label><input type="date" id="emi-date"></div>
+            <div id="ov-emi-slots-wrap" style="margin-bottom:0.75rem">
+              <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:6px">EMI history</div>
+              <div id="ov-emi-slots"></div>
+            </div>
+            <div id="ov-partial-banner"></div>
+            <div id="ov-fine-extra" style="margin:6px 0;font-size:12px"></div>
+            <div id="ov-revised-stats" style="margin:8px 0;font-size:12px;color:#555"></div>
+            <div style="margin:8px 0;text-align:right" id="ov-revised-btn-wrap">
+              <button class="btn btn-sm" style="background:#399C9C;color:#fff;border:none;padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer" onclick="showRevisedDateForm()">Set Revised Date</button>
+            </div>
+            <div class="divider"></div>
+            <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px" id="ov-next-label"></div>
+            <div class="fg fg-2">
+              <div><label>Amount received (₹)</label><input type="number" id="ov-emi-amt" placeholder="0" oninput="checkOverviewEmiDiff()"></div>
+              <div><label>Payment date</label><input type="date" id="ov-emi-date"></div>
             </div>
             <div class="fg fg-3" style="margin-bottom:0.75rem">
               <div><label>Received</label>
-                <select id="emi-received">
+                <select id="ov-emi-received">
                   <option value="true">TRUE</option>
                   <option value="false">FALSE</option>
                 </select>
               </div>
               <div><label>Payment mode</label>
-                <select id="emi-mode"><option>Cash</option><option>UPI</option><option>Bank transfer</option><option>Other</option></select>
+                <select id="ov-emi-mode"><option>Cash</option><option>UPI</option><option>Bank transfer</option><option>Other</option></select>
               </div>
               <div><label>Notes</label>
-                <input type="text" id="emi-notes" placeholder="Any remarks" style="height:28px;padding:4px 8px;border:0.5px solid #ccc;border-radius:6px;font-size:12px;width:100%;box-sizing:border-box">
+                <input type="text" id="ov-emi-notes" placeholder="Any remarks" style="height:28px;padding:4px 8px;border:0.5px solid #ccc;border-radius:6px;font-size:12px;width:100%;box-sizing:border-box">
               </div>
             </div>
-              <div id="emi-reason-wrap" style="display:none"><label>Reason for difference <span style="color:#A32D2D">*</span></label>
-                <select id="emi-reason">
-                  <option value="">— Select reason —</option>
-                  <option>Late payment fine included</option><option>Extra EMI received</option>
-                  <option>Early loan closing settlement</option><option>Partial payment</option><option>Default Adjustment</option>
-                </select>
+            <div id="ov-emi-reason-wrap" style="display:none"><label>Reason for difference <span style="color:#A32D2D">*</span></label>
+              <select id="ov-emi-reason">
+                <option value="">— Select reason —</option>
+                <option>Late payment fine included</option><option>Extra EMI received</option>
+                <option>Early loan closing settlement</option><option>Partial payment</option><option>Default Adjustment</option>
+              </select>
+            </div>
+            <div class="full" id="ov-emi-diff-warn" style="display:none"><div class="diff-warn" id="ov-emi-diff-msg"></div></div>
+            <div id="ov-emi-revised-next-wrap" style="display:none;margin:0.5rem 0;padding:8px;background:#f5faf8;border:0.5px solid #b8d4cc;border-radius:8px">
+              <label style="font-size:12px;color:#399C9C;font-weight:500">Next EMI Revised Date</label>
+              <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+                <input type="date" id="ov-emi-next-revised-date" style="flex:1">
+                <button class="btn btn-sm" onclick="clearOverviewRevisedDateField()" style="white-space:nowrap">Clear</button>
               </div>
-              <div class="full" id="emi-diff-warn" style="display:none"><div class="diff-warn" id="emi-diff-msg"></div></div>
+            </div>
             <div class="submit-row">
-              <button class="btn" onclick="closeEmiDetail()">Cancel</button>
-              <button id="emi-submit-btn" class="btn btn-primary" onclick="submitEmi()">Submit for approval</button>
+              <button class="btn" onclick="closeOverviewDetail()">Cancel</button>
+              <button id="ov-emi-submit-btn" class="btn btn-primary" onclick="submitOverviewEmi()">Submit for approval</button>
             </div>
-              <div class="divider"></div>
-              <div class="kv" id="emi-kv" style="margin-bottom:0.75rem;font-size:12px"></div>
+            <div class="divider"></div>
+            <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px">Loan Summary</div>
+            <div class="kv" id="ov-detail-kv" style="font-size:12px"></div>
+            <div class="divider"></div>
+            <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px">Loan Details</div>
+            <div class="kv" id="ov-detail-full" style="font-size:12px"></div>
           </div>
-          <div class="ls-placeholder" id="emi-detail-ph">Select a loan to view details</div>
-        </div>
-      </div>
-      <!-- Revised Date modal -->
-      <div id="revised-date-modal" class="modal-overlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center" onclick="if(event.target===this)closeRevisedDateForm()">
-        <div class="card" style="width:90%;max-width:380px;margin:0;padding:16px" onclick="event.stopPropagation()">
-          <div style="font-size:14px;font-weight:600;color:#534AB7;margin-bottom:10px">Set Revised Date</div>
-          <div class="fg fg-2">
-            <div><label>EMI Number</label>
-              <select id="revised-emi-num"></select>
-            </div>
-            <div><label>Revised Date</label>
-              <input type="date" id="revised-date">
-            </div>
-            <div><label>Amount (₹)</label>
-              <input type="number" id="revised-amt" placeholder="Full EMI amount">
-            </div>
-            <div><label>Note</label>
-              <input type="text" id="revised-note" placeholder="Optional">
-            </div>
-          </div>
-          <div class="submit-row" style="margin-top:12px">
-            <button class="btn" onclick="closeRevisedDateForm()">Cancel</button>
-            <button class="btn btn-primary" onclick="submitRevisedDate()">Save</button>
-          </div>
-          <div class="divider" style="margin:12px 0"></div>
-          <div style="font-size:11px;color:#888;margin-bottom:6px">Or mark the device as seized:</div>
-          <button class="btn" style="width:100%;background:#000;color:#fff;border:none;padding:8px;border-radius:8px;font-size:12px;cursor:pointer" onclick="submitMobileJabt()">Mark as Mobile Jabt</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── CLOSED & DEFAULTED (admin only) ───────────────────────────── -->
-    <div class="page" id="page-all-loans">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:0.75rem">
-        <div class="emi-search-wrap" style="flex:1;margin-bottom:0">
-          <span class="emi-search-icon">🔍</span>
-          <input type="text" id="cd-search" placeholder="Search Loan ID or customer…" oninput="renderClosedDefaulted(this.value)">
-        </div>
-        <button class="btn btn-sm" onclick="fetchLoansFromSheets(true)" title="Refresh">↻ Refresh</button>
-      </div>
-      <div class="landscape-wrap">
-        <div class="ls-left">
-          <!-- Mobile: tab switcher -->
-          <div class="mob-three-tabs">
-            <button class="mob-three-tab active" id="mob-tab-cd-all"     onclick="mobSwitchCdCol('all')">🔵 All</button>
-            <button class="mob-three-tab"        id="mob-tab-cd-running"   onclick="mobSwitchCdCol('running')">🔵 Running</button>
-            <button class="mob-three-tab"        id="mob-tab-cd-closed"    onclick="mobSwitchCdCol('closed')">⚪ Closed</button>
-            <button class="mob-three-tab"        id="mob-tab-cd-defaulted" onclick="mobSwitchCdCol('defaulted')">⚠️ Defaulted</button>
-          </div>
-          <div class="emi-three-col">
-            <div class="emi-col-wrap mob-active" id="cd-col-all">
-              <div class="emi-col-hd" style="background:#534AB7;color:#fff"><span>🔵 All</span><span class="emi-section-count" id="cd-all-count">0</span></div>
-              <div class="emi-col-body" id="cd-all-list"><div class="emi-col-empty">Loading…</div></div>
-            </div>
-            <div class="emi-col-wrap" id="cd-col-running">
-              <div class="emi-col-hd running-hd"><span>🔵 Running</span><span class="emi-section-count" id="cd-running-count">0</span></div>
-              <div class="emi-col-body" id="cd-running-list"><div class="emi-col-empty">Loading…</div></div>
-            </div>
-            <div class="emi-col-wrap" id="cd-col-closed">
-              <div class="emi-col-hd closed-hd"><span>⚪ Closed</span><span class="emi-section-count" id="cd-closed-count">0</span></div>
-              <div class="emi-col-body" id="cd-closed-list"><div class="emi-col-empty">Loading…</div></div>
-            </div>
-            <div class="emi-col-wrap" id="cd-col-defaulted">
-              <div class="emi-col-hd defaulted-hd"><span>⚠️ Defaulted</span><span class="emi-section-count" id="cd-defaulted-count">0</span></div>
-              <div class="emi-col-body" id="cd-defaulted-list"><div class="emi-col-empty">Loading…</div></div>
-            </div>
-          </div>
-        </div>
-        <div class="ls-right">
-          <div class="card" id="cd-detail-panel" style="display:none">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
-              <div>
-                <div style="font-size:14px;font-weight:600;color:#534AB7" id="cd-detail-loanid"></div>
-                <div style="font-size:12px;color:#888;margin-top:2px" id="cd-detail-sub"></div>
-              </div>
-              <button class="btn btn-sm" onclick="closeCdDetail()">✕ Close</button>
-            </div>
-            <div class="divider" style="margin-bottom:0.75rem"></div>
-            <div id="cd-emi-schedule" style="margin-bottom:0.75rem"></div>
-            <div class="kv" id="cd-detail-kv" style="font-size:12px"></div>
-          </div>
-          <div class="ls-placeholder" id="cd-detail-ph">Select a loan to view details</div>
+          <div class="ls-placeholder" id="ov-detail-ph">Select a loan to view details</div>
         </div>
       </div>
     </div>
@@ -400,9 +343,12 @@
           <div class="full">
             <label style="margin-bottom:6px">Tab access</label>
             <label style="display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:13px"><input type="checkbox" id="p-loan" checked> New Loan</label>
-            <label style="display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:13px"><input type="checkbox" id="p-emi" checked> Log EMI</label>
             <label style="display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:13px"><input type="checkbox" id="p-allLoans" checked> All Loans</label>
             <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="p-approvals" checked> Approvals</label>
+          </div>
+          <div class="full" style="margin-top:8px">
+            <label style="margin-bottom:6px">Permissions</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="p-submit" checked> Submit for approval</label>
           </div>
         </div>
         <div class="submit-row"><button class="btn btn-primary" onclick="addUser()">Add user</button></div>
@@ -411,6 +357,34 @@
 
   </div><!-- /main -->
 </div><!-- /app -->
+
+<!-- Revised Date modal -->
+<div id="revised-date-modal" class="modal-overlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center" onclick="if(event.target===this)closeRevisedDateForm()">
+  <div class="card" style="width:90%;max-width:380px;margin:0;padding:16px" onclick="event.stopPropagation()">
+    <div style="font-size:14px;font-weight:600;color:#534AB7;margin-bottom:10px">Set Revised Date</div>
+    <div class="fg fg-2">
+      <div><label>EMI Number</label>
+        <select id="revised-emi-num"></select>
+      </div>
+      <div><label>Revised Date</label>
+        <input type="date" id="revised-date">
+      </div>
+      <div><label>Amount (₹)</label>
+        <input type="number" id="revised-amt" placeholder="Full EMI amount">
+      </div>
+      <div><label>Note</label>
+        <input type="text" id="revised-note" placeholder="Optional">
+      </div>
+    </div>
+    <div class="submit-row" style="margin-top:12px">
+      <button class="btn" onclick="closeRevisedDateForm()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitRevisedDate()">Save</button>
+    </div>
+    <div class="divider" style="margin:12px 0"></div>
+    <div style="font-size:11px;color:#888;margin-bottom:6px">Or mark the device as seized:</div>
+    <button class="btn" style="width:100%;background:#000;color:#fff;border:none;padding:8px;border-radius:8px;font-size:12px;cursor:pointer" onclick="submitMobileJabt()">Mark as Mobile Jabt</button>
+  </div>
+</div>
 
 <!-- ── SCRIPTS (order matters) ────────────────────────────────────────── -->
 <script src="js/state.js"></script>

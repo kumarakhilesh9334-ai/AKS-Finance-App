@@ -3,9 +3,8 @@
 // Tab definitions with icons for bottom nav
 const TAB_ICONS = {
   'new-loan':        { icon: '➕', label: 'New Loan' },
-  'emi':             { icon: '💰', label: 'Log EMI' },
-  'approvals':       { icon: '✅', label: 'Approvals' },
   'all-loans':       { icon: '📊', label: 'All Loans' },
+  'approvals':       { icon: '✅', label: 'Approvals' },
   'my-subs':         { icon: '📝', label: 'My Subs' },
   'users':           { icon: '👥', label: 'Users' },
   'emi-msgs':        { icon: '📱', label: 'EMI Msgs' },
@@ -16,12 +15,11 @@ function buildNav() {
   const pc = S.pending.filter(x => x.status === 'pending').length;
   let tabs = [];
   if (u.perms.loan)      tabs.push({ id: 'new-loan',   label: 'New loan' });
-  if (u.perms.emi)       tabs.push({ id: 'emi',         label: 'Log EMI' });
+  if (u.role === 'admin' || u.perms.allLoans)  tabs.push({ id: 'all-loans', label: 'All Loans' });
   const myCount = S.pending.filter(x => x.status === 'pending' && x.submittedBy === u.id).length;
-  if (u.role === 'admin' || u.perms.loan || u.perms.emi)
+  if (u.role === 'admin' || u.perms.loan)
     tabs.push({ id: 'my-subs', label: 'My Subs', badge: myCount||null });
   if (u.role === 'admin' || u.perms.approvals) tabs.push({ id: 'approvals', label: 'Approvals', badge: pc });
-  if (u.role === 'admin' || u.perms.allLoans)  tabs.push({ id: 'all-loans', label: 'All Loans' });
   if (u.role === 'admin') tabs.push({ id: 'emi-msgs', label: 'EMI Msgs' });
   if (u.role === 'admin') tabs.push({ id: 'users', label: 'Users' });
 
@@ -55,9 +53,8 @@ function goTo(pg) {
   const bb = $('bnav-' + pg); if (bb) bb.classList.add('active');
   $('alert-box').innerHTML = '';
   if (pg === 'new-loan')  initNewLoanPage();
-  if (pg === 'emi')       { populateEmiSelect(); mobSwitchEmiCol('all'); }
   if (pg === 'approvals') { renderApprovals($('appr-search') ? $('appr-search').value : ''); mobSwitchApprCol('loan'); }
-  if (pg === 'all-loans') { renderClosedDefaulted(''); mobSwitchCdCol('all'); }
+  if (pg === 'all-loans') { $('ov-detail').style.display = 'none'; if ($('ov-detail-ph')) $('ov-detail-ph').style.display = ''; S.showOverviewRevised = false; S.showOverviewPartials = false; renderAllOverview(''); mobSwitchOvCol('all'); fetchApprovedPartials(); }
   if (pg === 'my-subs')   renderMySubs();
   if (pg === 'emi-msgs')  initEmiMsgsPage();
   if (pg === 'users')     renderUsers();
@@ -102,4 +99,15 @@ function mobSwitchApprCol(col) {
   const mlc = $('mob-appr-loan-count'), mec = $('mob-appr-emi-count');
   if (lc && mlc) mlc.textContent = lc.textContent;
   if (ec && mec) mec.textContent = ec.textContent;
+}
+
+function mobSwitchOvCol(col) {
+  ['all','upcoming','overdue','closed','defaulted'].forEach(c => {
+    const wrap = $('ov-col-' + c);
+    const tab  = $('mob-tab-ov-' + c);
+    if (!wrap || !tab) return;
+    const active = c === col;
+    wrap.classList.toggle('mob-active', active);
+    tab.classList.toggle('active', active);
+  });
 }

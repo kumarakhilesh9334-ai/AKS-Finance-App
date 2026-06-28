@@ -3,25 +3,23 @@
 async function doLogin() {
   const u = v('l-user'), p = v('l-pin');
 
-  // Try local match (only works if user was previously cached with PIN from prior login)
-  let user = S.users.find(x => x.username === u && x.pin === p);
-
-  // Fallback: verify against server
+  let user = null;
   let serverErr = '';
-  if (!user && S.sheetsUrl) {
+
+  // Always fetch from server for fresh permissions
+  if (S.sheetsUrl) {
     const res = await gasPost({ action: 'login', username: u, pin: p });
     if (res.ok && res.user) {
       user = res.user;
-      // Store session token for auto-restore on page refresh
       if (res.token) localStorage.setItem('aks_token', res.token);
-      // Merge full user (with PIN) into S.users for future lookups
-      const idx = S.users.findIndex(x => x.id === user.id);
-      if (idx >= 0) S.users[idx] = user;
-      else S.users.push(user);
-      saveUsers();
     } else if (res && res.error) {
       serverErr = res.error;
     }
+  }
+
+  // Fallback: local match if server unavailable
+  if (!user) {
+    user = S.users.find(x => x.username === u && x.pin === p);
   }
 
   if (!user) {
@@ -30,6 +28,13 @@ async function doLogin() {
     setTimeout(() => $('l-err').style.display = 'none', 3000);
     return;
   }
+
+  // Merge into S.users and save
+  const idx = S.users.findIndex(x => x.id === user.id);
+  if (idx >= 0) S.users[idx] = user;
+  else S.users.push(user);
+  saveUsers();
+
   localStorage.setItem('aks_user', user.username);
   localStorage.setItem('aks_cu', JSON.stringify(user));
   completeLogin(user);
@@ -37,6 +42,7 @@ async function doLogin() {
 
 function completeLogin(user) {
   S.cu = user;
+  migrateUserPerms();
   $('auth-screen').style.display = 'none';
   $('app').style.display = 'block';
   $('hdr-name').textContent = user.name;
@@ -71,7 +77,6 @@ function doLogout() {
 
 function defPage() {
   if (S.cu.perms.allLoans)  return 'all-loans';
-  if (S.cu.perms.emi)       return 'emi';
   if (S.cu.perms.loan)      return 'new-loan';
   if (S.cu.perms.approvals) return 'approvals';
   return 'all-loans';
