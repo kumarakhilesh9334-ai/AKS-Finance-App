@@ -2,6 +2,15 @@
 // Log EMI tab: two-column layout — Upcoming (left) | Overdue (right)
 // Closed & Defaulted are on their own admin-only tab.
 
+const _debounceTimers = {};
+function debounced(fn, key, ms) {
+  clearTimeout(_debounceTimers[key]);
+  _debounceTimers[key] = setTimeout(fn, ms);
+}
+function onSearchInput(v) {
+  debounced(() => renderAllOverview(v), 'ov-search', 250);
+}
+
 // ── Fetch loans from Sheets on login ─────────────────────────────────────
 async function fetchLoansFromSheets(force) {
   if (!S.sheetsUrl) return;

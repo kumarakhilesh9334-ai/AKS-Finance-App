@@ -1,0 +1,5 @@
+In the log EMI tab, I'm not getting any loan IDs in overdue column. All the loanIds comes in upcoming column. I believe, this is due to the EMI scheduled date calculation. Please fix it.
+
+Also, when I click on any card in the log EMI tab, there are few errors, in the EMI history section, the receiving date for EMI which are already paid is not showing up correctly. 
+
+In the recording nth EMI out of 8 section, the expected amoutn should be monthly EMI amount - value in Extra EMI Received. The default payment date should be today.

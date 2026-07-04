@@ -314,7 +314,7 @@ function subCard(p, showActions, hideRoi) {
       <span class="kv-l">EMI start</span>    <span class="kv-v">${fmtDateDD(d.emiStart)}</span>
       <span class="kv-l">App lock</span>     <span class="kv-v">${fmt(d.appLockCharge)}</span>
       <span class="kv-l">AK share</span>     <span class="kv-v">${d.akShare}%</span>
-      ${!hideRoi ? `<span class="kv-l">Rate of interest</span><span class="kv-v" style="color:#BA7517">${Math.round(d.rateOfInterest * 100)}%</span>` : ''}
+      ${!hideRoi ? `<span class="kv-l">Rate of interest</span><span class="kv-v" style="color:#BA7517">${d.rateOfInterest}%</span>` : ''}
       ${d.guarantor?`<span class="kv-l">Guarantor</span><span class="kv-v">${d.guarantor}</span>`:''}
     </div>`;
   } else {

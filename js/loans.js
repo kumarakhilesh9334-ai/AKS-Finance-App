@@ -70,7 +70,7 @@ function selectCustomer(aadhaarPan) {
 
 function goToLoanDetail(loanId) {
   goTo('all-loans');
-  setTimeout(() => openCdDetail(loanId), 200);
+  setTimeout(() => selectOverviewLoan(loanId), 200);
 }
 
 function renderCustomerLoansPanel(loans) {
