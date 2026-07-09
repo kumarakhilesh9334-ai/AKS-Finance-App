@@ -1861,13 +1861,13 @@ function renderOverviewOverdue() {
         </div>
       </div>`;
     }
-    return `<div class="card" style="margin-bottom:0.5rem;padding:0;overflow:hidden">
+    return `<div class="card" style="margin-bottom:0.5rem;padding:0;overflow-x:auto;overflow-y:hidden">
       <div onclick="window.__ovOverdueToggle('${key}')" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:${bg};user-select:none">
         <span style="font-size:14px">${collapsed ? '\u25B6' : '\u25BC'}</span>
         <span style="font-size:12px;font-weight:600;color:${color}">${icon} ${label}</span>
         <span style="font-size:11px;color:#888;margin-left:auto">${items.length}</span>
       </div>
-      ${collapsed ? '' : `<div style="padding:6px">${cardHtml}</div>`}
+      ${collapsed ? '' : `<div style="padding:6px;min-width:max-content">${cardHtml}</div>`}
     </div>`;
   }
   el.innerHTML = `<div style="font-size:12px;color:#888;margin-bottom:0.5rem">${overdue.length} overdue loan(s)</div>`
