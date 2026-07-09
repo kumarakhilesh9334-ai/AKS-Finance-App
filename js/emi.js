@@ -1060,10 +1060,11 @@ async function submitRevisedDate() {
 const _ovViewCollapsed = { upcoming: false, overdue: false };
 S.showOverviewRevised = false;
 S.showOverviewPartials = false;
+S.showOverviewOverdue = false;
 
 function renderAllOverview(query) {
   try {
-  if (!S.showOverviewRevised && !S.showOverviewPartials) {
+  if (!S.showOverviewRevised && !S.showOverviewPartials && !S.showOverviewOverdue) {
     const a = $('ov-allcards-toggle'); if (a) { a.style.background='#534AB7'; a.style.color='#fff'; }
   }
   console.log('renderAllOverview called, sheetLoans length:', S.sheetLoans ? S.sheetLoans.length : 0);
@@ -1115,6 +1116,25 @@ function renderAllOverview(query) {
   } else {
     const pv = $('ov-partials-view');
     if (pv && !S.showOverviewRevised) pv.style.display = 'none';
+  }
+
+  // Show/hide overdue view
+  if (S.showOverviewOverdue) {
+    const tc = document.querySelector('.emi-five-col');
+    if (tc) tc.style.display = 'none';
+    const mt = $('ov-tabs');
+    if (mt) mt.style.display = 'none';
+    const rv = $('ov-revised-view');
+    if (rv) rv.style.display = 'none';
+    const pv = $('ov-partials-view');
+    if (pv) pv.style.display = 'none';
+    const ov = $('ov-overdue-view');
+    if (ov) ov.style.display = 'block';
+    renderOverviewOverdue();
+    return;
+  } else {
+    const ov = $('ov-overdue-view');
+    if (ov && !S.showOverviewRevised && !S.showOverviewPartials) ov.style.display = 'none';
   }
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -1381,30 +1401,36 @@ async function selectOverviewLoan(loanId) {
     }
 
     const nextNum = loan.numReceivedEmi + 1;
-    const extraReceived = loan.extraEmiReceived || 0;
-    const expectedAmt   = Math.max(0, (loan.monthlyEmi || 0) - extraReceived);
-    let labelTxt = nextNum > duration ? 'All EMIs collected!'
-      : `Recording: EMI ${nextNum} of ${duration} · Standard EMI: ${fmtAmt(loan.monthlyEmi)}${extraReceived ? ' · Expected to collect: ' + fmtAmt(expectedAmt) : ''}`;
-    $('ov-next-label').textContent = labelTxt;
+    const emiFormWrap = $('ov-emi-form-wrap');
 
-    // Prefill
-    $('ov-emi-amt').value  = loan.monthlyEmi || '';
-    $('ov-emi-date').value = new Date().toISOString().split('T')[0];
-    $('ov-emi-notes').value  = '';
-    $('ov-emi-reason').value = '';
-    $('ov-emi-reason-wrap').style.display = 'none';
-    $('ov-emi-diff-warn').style.display   = 'none';
-
-    const subBtn = $('ov-emi-submit-btn');
-    if (pendingSet.has(nextNum)) {
-      subBtn.disabled = true;
-      subBtn.style.opacity = '0.5';
-      subBtn.style.cursor = 'not-allowed';
-      $('ov-next-label').textContent = '⚠ EMI ' + nextNum + ' already pending approval.';
+    if (nextNum > duration) {
+      $('ov-next-label').textContent = 'All EMIs collected!';
+      if (emiFormWrap) emiFormWrap.style.display = 'none';
     } else {
-      subBtn.disabled = false;
-      subBtn.style.opacity = '';
-      subBtn.style.cursor = '';
+      if (emiFormWrap) emiFormWrap.style.display = '';
+      const extraReceived = loan.extraEmiReceived || 0;
+      const expectedAmt   = Math.max(0, (loan.monthlyEmi || 0) - extraReceived);
+      $('ov-next-label').textContent = `Recording: EMI ${nextNum} of ${duration} · Standard EMI: ${fmtAmt(loan.monthlyEmi)}${extraReceived ? ' · Expected to collect: ' + fmtAmt(expectedAmt) : ''}`;
+
+      // Prefill
+      $('ov-emi-amt').value  = loan.monthlyEmi || '';
+      $('ov-emi-date').value = new Date().toISOString().split('T')[0];
+      $('ov-emi-notes').value  = '';
+      $('ov-emi-reason').value = '';
+      $('ov-emi-reason-wrap').style.display = 'none';
+      $('ov-emi-diff-warn').style.display   = 'none';
+
+      const subBtn = $('ov-emi-submit-btn');
+      if (pendingSet.has(nextNum)) {
+        subBtn.disabled = true;
+        subBtn.style.opacity = '0.5';
+        subBtn.style.cursor = 'not-allowed';
+        $('ov-next-label').textContent = '⚠ EMI ' + nextNum + ' already pending approval.';
+      } else {
+        subBtn.disabled = false;
+        subBtn.style.opacity = '';
+        subBtn.style.cursor = '';
+      }
     }
 
     // Revised date next field
@@ -1520,18 +1546,22 @@ function closeOverviewDetail() {
 function toggleOverviewAllCards() {
   S.showOverviewRevised = false;
   S.showOverviewPartials = false;
+  S.showOverviewOverdue = false;
   $('ov-allcards-toggle').style.background = '#534AB7';
   $('ov-allcards-toggle').style.color = '#fff';
   const rbtn = $('ov-revised-toggle');
   if (rbtn) { rbtn.style.background = 'none'; rbtn.style.color = '#D4A017'; }
   const pbtn = $('ov-partials-toggle');
   if (pbtn) { pbtn.style.background = 'none'; pbtn.style.color = '#A32D2D'; }
+  const obtn = $('ov-overdue-toggle');
+  if (obtn) { obtn.style.background = 'none'; obtn.style.color = '#c62828'; }
   renderAllOverview($('ov-search') ? $('ov-search').value : '');
 }
 
 function toggleOverviewRevised() {
   S.showOverviewRevised = !S.showOverviewRevised;
   S.showOverviewPartials = false;
+  S.showOverviewOverdue = false;
   const abtn = $('ov-allcards-toggle');
   if (abtn) { abtn.style.background = S.showOverviewRevised ? 'none' : '#534AB7'; abtn.style.color = S.showOverviewRevised ? '#534AB7' : '#fff'; }
   const btn = $('ov-revised-toggle');
@@ -1541,12 +1571,15 @@ function toggleOverviewRevised() {
   }
   const pbtn = $('ov-partials-toggle');
   if (pbtn) { pbtn.style.background = 'none'; pbtn.style.color = '#A32D2D'; }
+  const obtn = $('ov-overdue-toggle');
+  if (obtn) { obtn.style.background = 'none'; obtn.style.color = '#c62828'; }
   renderAllOverview($('ov-search') ? $('ov-search').value : '');
 }
 
 function toggleOverviewPartials() {
   S.showOverviewPartials = !S.showOverviewPartials;
   S.showOverviewRevised = false;
+  S.showOverviewOverdue = false;
   const abtn = $('ov-allcards-toggle');
   if (abtn) { abtn.style.background = S.showOverviewPartials ? 'none' : '#534AB7'; abtn.style.color = S.showOverviewPartials ? '#534AB7' : '#fff'; }
   const rbtn = $('ov-revised-toggle');
@@ -1555,6 +1588,26 @@ function toggleOverviewPartials() {
   if (btn) {
     btn.style.background = S.showOverviewPartials ? '#A32D2D' : 'none';
     btn.style.color = S.showOverviewPartials ? '#fff' : '#A32D2D';
+  }
+  const obtn = $('ov-overdue-toggle');
+  if (obtn) { obtn.style.background = 'none'; obtn.style.color = '#c62828'; }
+  renderAllOverview($('ov-search') ? $('ov-search').value : '');
+}
+
+function toggleOverviewOverdue() {
+  S.showOverviewOverdue = !S.showOverviewOverdue;
+  S.showOverviewRevised = false;
+  S.showOverviewPartials = false;
+  const abtn = $('ov-allcards-toggle');
+  if (abtn) { abtn.style.background = S.showOverviewOverdue ? 'none' : '#534AB7'; abtn.style.color = S.showOverviewOverdue ? '#534AB7' : '#fff'; }
+  const rbtn = $('ov-revised-toggle');
+  if (rbtn) { rbtn.style.background = 'none'; rbtn.style.color = '#D4A017'; }
+  const pbtn = $('ov-partials-toggle');
+  if (pbtn) { pbtn.style.background = 'none'; pbtn.style.color = '#A32D2D'; }
+  const btn = $('ov-overdue-toggle');
+  if (btn) {
+    btn.style.background = S.showOverviewOverdue ? '#c62828' : 'none';
+    btn.style.color = S.showOverviewOverdue ? '#fff' : '#c62828';
   }
   renderAllOverview($('ov-search') ? $('ov-search').value : '');
 }
@@ -1584,13 +1637,14 @@ async function submitOverviewEmi() {
   let loan = S.sheetLoans && S.sheetLoans.find(l => l.loanId === loanId);
   if (!loan) loan = (() => { const l = S.loans.find(l => l.loanId === loanId); return l ? { ...l.data, status:'Active', slots:l.emis||[], numReceivedEmi: (l.emis||[]).length } : null; })();
   if (!loan) { showAlert('Loan data not found.', 'e'); return; }
+  const nextNum = (loan.numReceivedEmi || 0) + 1;
+  if (nextNum > (loan.emiDuration || 0)) { showAlert('All EMIs already collected for this loan.', 'e'); return; }
   const amt  = parseFloat($('ov-emi-amt').value) || 0;
   const date = $('ov-emi-date') ? $('ov-emi-date').value : '';
   if (!amt || !date) { showAlert('Please enter amount and payment date.', 'e'); return; }
 
   // Warn if scheduled date is far in the future
-  const nextNum = (loan.numReceivedEmi || 0) + 1;
-  if (nextNum <= (loan.emiDuration || 0) && loan.emiStartDate) {
+  if (loan.emiStartDate) {
     const parts = String(loan.emiStartDate).match(/(\d{1,2})[\-\/](\w{3})[\-\/](\d{2,4})/);
     if (parts) {
       const months = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
@@ -1706,7 +1760,15 @@ function renderOverviewRevised() {
   const getLastRev = (lid) => { let m = null; S.revisedDates.filter(rd => rd.loanId === lid && rd.revisedDate).forEach(d => { const dt = parseSheetDate(d.revisedDate); if (dt && (!m || dt > m)) m = dt; }); return m; };
   const getFirstRev = (lid) => { let m = null; S.revisedDates.filter(rd => rd.loanId === lid && rd.revisedDate).forEach(d => { const dt = parseSheetDate(d.revisedDate); if (dt && (!m || dt < m)) m = dt; }); return m; };
   overdue.sort((a, b) => { const da = getLastRev(a.loanId), db = getLastRev(b.loanId); if (!da && !db) return 0; if (!da) return 1; if (!db) return -1; return db - da; });
-  upcoming.sort((a, b) => { const da = getFirstRev(a.loanId), db = getFirstRev(b.loanId); if (!da && !db) return 0; if (!da) return 1; if (!db) return -1; return da - db; });
+  upcoming.sort((a, b) => {
+    const da = getLastRev(a.loanId), db = getLastRev(b.loanId);
+    if (da && db && da - db !== 0) return da - db;
+    if (!da && db) return -1; if (da && !db) return 1;
+    const aa = a.nextEmiDate ? parseSheetDate(a.nextEmiDate) : null, bb = b.nextEmiDate ? parseSheetDate(b.nextEmiDate) : null;
+    if (aa && bb && bb - aa !== 0) return bb - aa;
+    if (!aa && bb) return 1; if (aa && !bb) return -1;
+    return (a.customerName||'').localeCompare(b.customerName||'');
+  });
   function sectionHtml(label, key, color, bg, icon, items) {
     const collapsed = _ovViewCollapsed[key];
     return `<div class="card" style="margin-bottom:0.5rem;padding:0;overflow:hidden">
@@ -1739,6 +1801,79 @@ function renderOverviewPartials() {
   }
   el.innerHTML = `<div style="font-size:12px;color:#888;margin-bottom:0.5rem">${loans.length} loan(s) with partial payments</div>
     <div style="display:flex;flex-direction:column;gap:6px">${loans.map(l => overviewCard(l, l.isDefaulted ? 'defaulted' : (l.emiCompleted||l.status==='Closed') ? 'closed' : 'upcoming')).join('')}</div>`;
+}
+
+const _ovOverdueCollapsed = {};
+window.__ovOverdueToggle = function(key) {
+  _ovOverdueCollapsed[key] = !_ovOverdueCollapsed[key];
+  renderOverviewOverdue();
+};
+
+function renderOverviewOverdue() {
+  const el = $('ov-overdue-view');
+  if (!el) return;
+  const source = (S.sheetLoans && S.sheetLoans.length) ? S.sheetLoans : [];
+  const today = new Date(); today.setHours(0,0,0,0);
+  const overdue = source.filter(l => {
+    if (l.isDefaulted || l.emiCompleted || l.status === 'Closed') return false;
+    if (!l.nextEmiDate) return false;
+    const due = new Date(l.nextEmiDate); due.setHours(0,0,0,0);
+    return due < today;
+  });
+  const less30 = [], over30 = [], over90 = [];
+  overdue.forEach(l => {
+    const due = new Date(l.nextEmiDate); due.setHours(0,0,0,0);
+    const days = Math.round((today - due) / 86400000);
+    if (days > 90) over90.push(l);
+    else if (days > 30) over30.push(l);
+    else less30.push(l);
+  });
+  const sortSection = arr => arr.sort((a, b) => {
+    const da = new Date(a.nextEmiDate||0), db = new Date(b.nextEmiDate||0);
+    return db - da || (a.customerName||'').localeCompare(b.customerName||'');
+  });
+  sortSection(less30); sortSection(over30); sortSection(over90);
+
+  function sectionHtml(label, key, color, bg, icon, items) {
+    const collapsed = _ovOverdueCollapsed[key];
+    // Group contiguous items by due date
+    let cardHtml = '';
+    for (let i = 0; i < items.length; i++) {
+      const l = items[i];
+      const sameDate = i > 0 && l.nextEmiDate === items[i-1].nextEmiDate;
+      const nextEmi = (l.numReceivedEmi || 0) + 1;
+      const revDates = (S.revisedDates||[]).filter(rd => rd.loanId === l.loanId && rd.emiNum === nextEmi && rd.revisedDate);
+      const revDateStr = revDates.length ? fmtDisplayDate(revDates[revDates.length-1].revisedDate) : '';
+      const revPassed = revDates.length && parseSheetDate(revDates[revDates.length-1].revisedDate) < today;
+      const revBadge = revDateStr
+        ? `<span style="flex:0 0 172px;line-height:14px;text-align:center"><span style="font-size:10px;font-weight:600;color:${color};background:#fff;padding:0 6px;border-radius:8px;white-space:nowrap">${revPassed ? '❌ ' : ''}Rev: ${revDateStr}</span></span>`
+        : '<span style="flex:0 0 172px;line-height:14px"></span>';
+      const cardIndent = sameDate ? 'margin-left:16px' : '';
+      const rightShift = sameDate ? 'margin-left:-16px;' : '';
+      cardHtml += `<div class="emi-card overdue" data-loanid="${l.loanId}" style="cursor:pointer;background:${color};border-left:3px solid rgba(255,255,255,0.3);border:1px solid ${color};margin-bottom:4px;padding:8px 10px;${cardIndent}">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;height:14px">
+          <span style="font-size:11px;font-weight:500;color:#fff;flex:0 0 auto;white-space:nowrap;line-height:14px">${l.nextEmiDate ? fmtDisplayDate(l.nextEmiDate) : '—'}</span>
+          <div style="display:flex;flex:1;align-items:center;gap:8px;${rightShift}">
+            ${revBadge}
+            <span style="font-size:11px;color:rgba(255,255,255,0.75);text-align:left;flex:1 1 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:14px">${l.model || ''}</span>
+            <span style="font-weight:500;font-size:12px;color:#fff;flex:0 0 auto;line-height:14px">${l.customerName}</span>
+          </div>
+        </div>
+      </div>`;
+    }
+    return `<div class="card" style="margin-bottom:0.5rem;padding:0;overflow:hidden">
+      <div onclick="window.__ovOverdueToggle('${key}')" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:${bg};user-select:none">
+        <span style="font-size:14px">${collapsed ? '\u25B6' : '\u25BC'}</span>
+        <span style="font-size:12px;font-weight:600;color:${color}">${icon} ${label}</span>
+        <span style="font-size:11px;color:#888;margin-left:auto">${items.length}</span>
+      </div>
+      ${collapsed ? '' : `<div style="padding:6px">${cardHtml}</div>`}
+    </div>`;
+  }
+  el.innerHTML = `<div style="font-size:12px;color:#888;margin-bottom:0.5rem">${overdue.length} overdue loan(s)</div>`
+    + sectionHtml('Less than 30 days', 'less30', '#dd7e6b', '#fdf0ed', '\uD83D\uDD34', less30)
+    + sectionHtml('30+ days', 'over30', '#980000', '#fcebeb', '\uD83D\uDD34', over30)
+    + sectionHtml('90+ days', 'over90', '#000', '#f0f0f0', '\uD83D\uDD34', over90);
 }
 
 async function submitMobileJabt() {

@@ -135,6 +135,7 @@
           <button class="pill-toggle" id="ov-allcards-toggle" onclick="toggleOverviewAllCards()" style="font-size:11px;padding:4px 10px;border-radius:12px;border:1px solid #534AB7;background:#534AB7;color:#fff;cursor:pointer;white-space:nowrap">All Cards</button>
           <button class="pill-toggle" id="ov-revised-toggle" onclick="toggleOverviewRevised()" style="font-size:11px;padding:4px 10px;border-radius:12px;border:1px solid #D4A017;background:none;color:#D4A017;cursor:pointer;white-space:nowrap">Revised Date Cards</button>
           <button class="pill-toggle" id="ov-partials-toggle" onclick="toggleOverviewPartials()" style="font-size:11px;padding:4px 10px;border-radius:12px;border:1px solid #A32D2D;background:none;color:#A32D2D;cursor:pointer;white-space:nowrap">Partial Payments</button>
+          <button class="pill-toggle" id="ov-overdue-toggle" onclick="toggleOverviewOverdue()" style="font-size:11px;padding:4px 10px;border-radius:12px;border:1px solid #c62828;background:none;color:#c62828;cursor:pointer;white-space:nowrap">Overdue List</button>
         </div>
       </div>
       <div class="landscape-wrap ov-wrap">
@@ -179,6 +180,7 @@
           </div>
           <div id="ov-revised-view" style="display:none;margin-top:0.75rem"></div>
           <div id="ov-partials-view" style="display:none;margin-top:0.75rem"></div>
+          <div id="ov-overdue-view" style="display:none;margin-top:0.75rem"></div>
         </div>
         <div class="ls-right">
           <div class="card" id="ov-detail" style="display:none">
@@ -202,6 +204,7 @@
             </div>
             <div class="divider"></div>
             <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px" id="ov-next-label"></div>
+            <div id="ov-emi-form-wrap">
             <div class="fg fg-2">
               <div><label>Amount received (₹)</label><input type="number" id="ov-emi-amt" placeholder="0" oninput="checkOverviewEmiDiff()"></div>
               <div><label>Payment date</label><input type="date" id="ov-emi-date"></div>
@@ -238,6 +241,7 @@
             <div class="submit-row">
               <button class="btn" onclick="closeOverviewDetail()">Cancel</button>
               <button id="ov-emi-submit-btn" class="btn btn-primary" onclick="submitOverviewEmi()">Submit for approval</button>
+            </div>
             </div>
             <div class="divider"></div>
             <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px">Loan Summary</div>
