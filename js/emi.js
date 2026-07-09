@@ -1855,8 +1855,8 @@ function renderOverviewOverdue() {
           <span style="font-size:11px;font-weight:500;color:#fff;flex:0 0 auto;white-space:nowrap;line-height:14px">${l.nextEmiDate ? fmtDisplayDate(l.nextEmiDate) : '—'}</span>
           <div style="display:flex;flex:1;align-items:center;gap:8px;${rightShift}">
             ${revBadge}
-            <span style="font-size:11px;color:rgba(255,255,255,0.75);text-align:left;flex:1 1 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:14px">${l.model || ''}</span>
             <span style="font-weight:500;font-size:12px;color:#fff;flex:0 0 auto;line-height:14px">${l.customerName}</span>
+            <span style="font-size:11px;color:rgba(255,255,255,0.75);text-align:left;flex:1 1 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:14px">${l.model || ''}</span>
           </div>
         </div>
       </div>`;
