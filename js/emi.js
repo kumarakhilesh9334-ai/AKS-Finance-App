@@ -167,12 +167,13 @@ function renderEmiColumns(query) {
 // ── Revised badge helper (used by both emiCard and cdCard) ──────────────
 function revisedBadgeHtml(loan) {
   const loanId = loan.loanId;
-  const revDates = S.revisedDates.filter(rd => rd.loanId === loanId);
+  const nextEmiNum = (loan.numReceivedEmi || 0) + 1;
+  const revDates = S.revisedDates.filter(rd => rd.loanId === loanId && rd.emiNum === nextEmiNum);
   if (!revDates.length) return '';
   const jabtRecord = revDates.find(rd => rd.note === 'Mobile Jabt');
   // Find unreceived revised EMIs (skip those already paid)
   const unpaidRevisions = revDates.filter(rd => {
-    if (rd.note === 'Mobile Jabt') return false; // handled separately
+    if (rd.note === 'Mobile Jabt') return false;
     const slot = (loan.slots || []).find(s => s.num === rd.emiNum);
     return !slot || !slot.received;
   });
@@ -180,6 +181,25 @@ function revisedBadgeHtml(loan) {
   if (jabtRecord) {
     return `<div style="text-align:center;margin-bottom:2px"><span style="display:inline-block;font-size:12px;font-weight:600;color:#000;background:#fff;padding:1px 10px;border-radius:8px;border:1px solid #ddd">Mobile Jabt</span></div>`;
   }
+  if (!unpaidRevisions.length) return '';
+  const latest = unpaidRevisions.reduce((a, b) => {
+    const da = parseSheetDate(a.revisedDate);
+    const db = parseSheetDate(b.revisedDate);
+    if (!da) return b; if (!db) return a;
+    return da > db ? a : b;
+  });
+  const revDateStr = latest.revisedDate ? fmtDisplayDate(latest.revisedDate) : '';
+  const revDt = parseSheetDate(latest.revisedDate);
+  let prefix = '';
+  if (revDt) {
+    const t = new Date(); t.setHours(0,0,0,0);
+    const diff = Math.round((revDt - t) / 86400000);
+    if (diff === 0) prefix = '⚠️ ';
+    else if (diff < 0) prefix = '❌ ';
+  }
+  const text = `${prefix}Revised: ${revDateStr}`;
+  return `<div style="text-align:center;margin-bottom:2px"><span style="display:inline-block;font-size:12px;font-weight:600;color:#000;background:#fff;padding:1px 10px;border-radius:8px;border:1px solid #ddd">${text}</span></div>`;
+}
   if (!unpaidRevisions.length) return '';
   const latest = unpaidRevisions.reduce((a, b) => {
     const da = parseSheetDate(a.revisedDate);
@@ -541,12 +561,12 @@ async function selectEmiLoan(loanId) {
     subBtn.style.cursor = '';
   }
 
-  // Show revised date field for next EMI if this loan has revised dates
+  // Show revised date field for next EMI if this loan has a revised date for the current EMI
   const revWrap = $('emi-revised-next-wrap');
   const revDt   = $('emi-next-revised-date');
   if (revWrap && revDt) {
-    const hasRevDates = (S.revisedDates||[]).some(d => d.loanId === loanId);
-    if (hasRevDates && nextNum < duration) {
+    const hasRevForCurrEmi = (S.revisedDates||[]).some(d => d.loanId === loanId && d.emiNum === nextNum);
+    if (hasRevForCurrEmi && nextNum < duration) {
       revWrap.style.display = 'block';
       // Default = latest revised date + 1 month
       const loanRevs = (S.revisedDates||[]).filter(d => d.loanId === loanId && d.revisedDate);
@@ -1090,6 +1110,8 @@ function renderAllOverview(query) {
     if (rv) rv.style.display = 'block';
     const pv = $('ov-partials-view');
     if (pv) pv.style.display = 'none';
+    const ov = $('ov-overdue-view');
+    if (ov) ov.style.display = 'none';
     renderOverviewRevised();
     return;
   } else {
@@ -1111,6 +1133,8 @@ function renderAllOverview(query) {
     if (pv) pv.style.display = 'block';
     const rv = $('ov-revised-view');
     if (rv) rv.style.display = 'none';
+    const ov = $('ov-overdue-view');
+    if (ov) ov.style.display = 'none';
     renderOverviewPartials();
     return;
   } else {
@@ -1134,7 +1158,7 @@ function renderAllOverview(query) {
     return;
   } else {
     const ov = $('ov-overdue-view');
-    if (ov && !S.showOverviewRevised && !S.showOverviewPartials) ov.style.display = 'none';
+    if (ov) ov.style.display = 'none';
   }
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -1437,8 +1461,8 @@ async function selectOverviewLoan(loanId) {
     const revWrap = $('ov-emi-revised-next-wrap');
     const revDt   = $('ov-emi-next-revised-date');
     if (revWrap && revDt) {
-      const hasRevDates = (S.revisedDates||[]).some(d => d.loanId === loanId);
-      if (hasRevDates && nextNum < duration) {
+      const hasRevForCurrEmi = (S.revisedDates||[]).some(d => d.loanId === loanId && d.emiNum === nextNum);
+      if (hasRevForCurrEmi && nextNum < duration) {
         revWrap.style.display = 'block';
         const loanRevs = (S.revisedDates||[]).filter(d => d.loanId === loanId && d.revisedDate);
         let latest = null;
