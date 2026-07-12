@@ -200,25 +200,6 @@ function revisedBadgeHtml(loan) {
   const text = `${prefix}Revised: ${revDateStr}`;
   return `<div style="text-align:center;margin-bottom:2px"><span style="display:inline-block;font-size:12px;font-weight:600;color:#000;background:#fff;padding:1px 10px;border-radius:8px;border:1px solid #ddd">${text}</span></div>`;
 }
-  if (!unpaidRevisions.length) return '';
-  const latest = unpaidRevisions.reduce((a, b) => {
-    const da = parseSheetDate(a.revisedDate);
-    const db = parseSheetDate(b.revisedDate);
-    if (!da) return b; if (!db) return a;
-    return da > db ? a : b;
-  });
-  const revDateStr = latest.revisedDate ? fmtDisplayDate(latest.revisedDate) : '';
-  const revDt = parseSheetDate(latest.revisedDate);
-  let prefix = '';
-  if (revDt) {
-    const t = new Date(); t.setHours(0,0,0,0);
-    const diff = Math.round((revDt - t) / 86400000);
-    if (diff === 0) prefix = '⚠️ ';
-    else if (diff < 0) prefix = '❌ ';
-  }
-  const text = `${prefix}Revised: ${revDateStr}`;
-  return `<div style="text-align:center;margin-bottom:2px"><span style="display:inline-block;font-size:12px;font-weight:600;color:#000;background:#fff;padding:1px 10px;border-radius:8px;border:1px solid #ddd">${text}</span></div>`;
-}
 
 function emiCard(l, type) {
   const dueTxt  = l.nextEmiDate ? 'Due: ' + fmtDisplayDate(l.nextEmiDate) : '—';
