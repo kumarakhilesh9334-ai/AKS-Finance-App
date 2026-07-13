@@ -10,6 +10,10 @@ function debounced(fn, key, ms) {
 function onSearchInput(v) {
   debounced(() => renderAllOverview(v), 'ov-search', 250);
 }
+function clearOverviewSearch() {
+  const inp = $('ov-search');
+  if (inp) { inp.value = ''; renderAllOverview(''); inp.focus(); }
+}
 
 // ── Fetch loans from Sheets on login ─────────────────────────────────────
 async function fetchLoansFromSheets(force) {
@@ -1062,10 +1066,11 @@ const _ovViewCollapsed = { upcoming: false, overdue: false };
 S.showOverviewRevised = false;
 S.showOverviewPartials = false;
 S.showOverviewOverdue = false;
+S.showOverviewLoans = false;
 
 function renderAllOverview(query) {
   try {
-  if (!S.showOverviewRevised && !S.showOverviewPartials && !S.showOverviewOverdue) {
+  if (!S.showOverviewRevised && !S.showOverviewPartials && !S.showOverviewOverdue && !S.showOverviewLoans) {
     const a = $('ov-allcards-toggle'); if (a) { a.style.background='#534AB7'; a.style.color='#fff'; }
   }
   console.log('renderAllOverview called, sheetLoans length:', S.sheetLoans ? S.sheetLoans.length : 0);
@@ -1121,6 +1126,27 @@ function renderAllOverview(query) {
   } else {
     const pv = $('ov-partials-view');
     if (pv && !S.showOverviewRevised) pv.style.display = 'none';
+  }
+
+  // Show/hide loans view
+  if (S.showOverviewLoans) {
+    const tc = document.querySelector('.emi-five-col');
+    if (tc) tc.style.display = 'none';
+    const mt = $('ov-tabs');
+    if (mt) mt.style.display = 'none';
+    const rv = $('ov-revised-view');
+    if (rv) rv.style.display = 'none';
+    const pv = $('ov-partials-view');
+    if (pv) pv.style.display = 'none';
+    const ov = $('ov-overdue-view');
+    if (ov) ov.style.display = 'none';
+    const lv = $('ov-loans-view');
+    if (lv) lv.style.display = 'block';
+    renderOverviewLoans();
+    return;
+  } else {
+    const lv = $('ov-loans-view');
+    if (lv) lv.style.display = 'none';
   }
 
   // Show/hide overdue view
@@ -1552,6 +1578,7 @@ function toggleOverviewAllCards() {
   S.showOverviewRevised = false;
   S.showOverviewPartials = false;
   S.showOverviewOverdue = false;
+  S.showOverviewLoans = false;
   $('ov-allcards-toggle').style.background = '#534AB7';
   $('ov-allcards-toggle').style.color = '#fff';
   const rbtn = $('ov-revised-toggle');
@@ -1560,6 +1587,8 @@ function toggleOverviewAllCards() {
   if (pbtn) { pbtn.style.background = 'none'; pbtn.style.color = '#A32D2D'; }
   const obtn = $('ov-overdue-toggle');
   if (obtn) { obtn.style.background = 'none'; obtn.style.color = '#c62828'; }
+  const lbtn = $('ov-loans-toggle');
+  if (lbtn) { lbtn.style.background = 'none'; lbtn.style.color = '#0F6E56'; }
   renderAllOverview($('ov-search') ? $('ov-search').value : '');
 }
 
@@ -1567,6 +1596,7 @@ function toggleOverviewRevised() {
   S.showOverviewRevised = !S.showOverviewRevised;
   S.showOverviewPartials = false;
   S.showOverviewOverdue = false;
+  S.showOverviewLoans = false;
   const abtn = $('ov-allcards-toggle');
   if (abtn) { abtn.style.background = S.showOverviewRevised ? 'none' : '#534AB7'; abtn.style.color = S.showOverviewRevised ? '#534AB7' : '#fff'; }
   const btn = $('ov-revised-toggle');
@@ -1578,6 +1608,8 @@ function toggleOverviewRevised() {
   if (pbtn) { pbtn.style.background = 'none'; pbtn.style.color = '#A32D2D'; }
   const obtn = $('ov-overdue-toggle');
   if (obtn) { obtn.style.background = 'none'; obtn.style.color = '#c62828'; }
+  const lbtn = $('ov-loans-toggle');
+  if (lbtn) { lbtn.style.background = 'none'; lbtn.style.color = '#0F6E56'; }
   renderAllOverview($('ov-search') ? $('ov-search').value : '');
 }
 
@@ -1585,6 +1617,7 @@ function toggleOverviewPartials() {
   S.showOverviewPartials = !S.showOverviewPartials;
   S.showOverviewRevised = false;
   S.showOverviewOverdue = false;
+  S.showOverviewLoans = false;
   const abtn = $('ov-allcards-toggle');
   if (abtn) { abtn.style.background = S.showOverviewPartials ? 'none' : '#534AB7'; abtn.style.color = S.showOverviewPartials ? '#534AB7' : '#fff'; }
   const rbtn = $('ov-revised-toggle');
@@ -1596,6 +1629,8 @@ function toggleOverviewPartials() {
   }
   const obtn = $('ov-overdue-toggle');
   if (obtn) { obtn.style.background = 'none'; obtn.style.color = '#c62828'; }
+  const lbtn = $('ov-loans-toggle');
+  if (lbtn) { lbtn.style.background = 'none'; lbtn.style.color = '#0F6E56'; }
   renderAllOverview($('ov-search') ? $('ov-search').value : '');
 }
 
@@ -1603,6 +1638,7 @@ function toggleOverviewOverdue() {
   S.showOverviewOverdue = !S.showOverviewOverdue;
   S.showOverviewRevised = false;
   S.showOverviewPartials = false;
+  S.showOverviewLoans = false;
   const abtn = $('ov-allcards-toggle');
   if (abtn) { abtn.style.background = S.showOverviewOverdue ? 'none' : '#534AB7'; abtn.style.color = S.showOverviewOverdue ? '#534AB7' : '#fff'; }
   const rbtn = $('ov-revised-toggle');
@@ -1614,7 +1650,68 @@ function toggleOverviewOverdue() {
     btn.style.background = S.showOverviewOverdue ? '#c62828' : 'none';
     btn.style.color = S.showOverviewOverdue ? '#fff' : '#c62828';
   }
+  const lbtn = $('ov-loans-toggle');
+  if (lbtn) { lbtn.style.background = 'none'; lbtn.style.color = '#0F6E56'; }
   renderAllOverview($('ov-search') ? $('ov-search').value : '');
+}
+
+function toggleOverviewLoans() {
+  S.showOverviewLoans = !S.showOverviewLoans;
+  S.showOverviewRevised = false;
+  S.showOverviewPartials = false;
+  S.showOverviewOverdue = false;
+  const abtn = $('ov-allcards-toggle');
+  if (abtn) { abtn.style.background = S.showOverviewLoans ? 'none' : '#534AB7'; abtn.style.color = S.showOverviewLoans ? '#534AB7' : '#fff'; }
+  const rbtn = $('ov-revised-toggle');
+  if (rbtn) { rbtn.style.background = 'none'; rbtn.style.color = '#D4A017'; }
+  const pbtn = $('ov-partials-toggle');
+  if (pbtn) { pbtn.style.background = 'none'; pbtn.style.color = '#A32D2D'; }
+  const obtn = $('ov-overdue-toggle');
+  if (obtn) { obtn.style.background = 'none'; obtn.style.color = '#c62828'; }
+  const btn = $('ov-loans-toggle');
+  if (btn) {
+    btn.style.background = S.showOverviewLoans ? '#0F6E56' : 'none';
+    btn.style.color = S.showOverviewLoans ? '#fff' : '#0F6E56';
+  }
+  renderAllOverview($('ov-search') ? $('ov-search').value : '');
+}
+
+function renderOverviewLoans() {
+  const el = $('ov-loans-view');
+  if (!el) return;
+  const source = (S.sheetLoans && S.sheetLoans.length) ? S.sheetLoans : [];
+  const q = ($('ov-search') ? $('ov-search').value : '').toLowerCase();
+  let loans = q ? source.filter(l => l.loanId.toLowerCase().includes(q) || (l.customerName||'').toLowerCase().includes(q)) : source;
+  loans = [...loans]; // copy
+  loans.sort((a, b) => {
+    const da = a.billDate ? new Date(a.billDate) : new Date(0);
+    const db = b.billDate ? new Date(b.billDate) : new Date(0);
+    return db - da || (a.customerName||'').localeCompare(b.customerName||'');
+  });
+  if (!loans.length) {
+    el.innerHTML = '<div class="emi-col-empty">No loans</div>';
+    return;
+  }
+  let cardHtml = '';
+  for (let i = 0; i < loans.length; i++) {
+    const l = loans[i];
+    const sameDate = i > 0 && l.billDate === loans[i-1].billDate;
+    const amtTxt = l.monthlyEmi ? fmtAmt(l.monthlyEmi) : '—';
+    const cardIndent = sameDate ? 'margin-left:16px' : '';
+    const rightShift = sameDate ? 'margin-left:-16px;' : '';
+    cardHtml += `<div class="emi-card" data-loanid="${l.loanId}" style="cursor:pointer;background:#0F6E56;border-left:3px solid rgba(255,255,255,0.3);border:1px solid #0F6E56;margin-bottom:4px;padding:8px 10px;${cardIndent}">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;height:14px">
+        <span style="font-size:11px;font-weight:500;color:#fff;flex:0 0 auto;white-space:nowrap;line-height:14px">${l.billDate ? fmtDisplayDate(l.billDate) : '—'}</span>
+        <div style="display:flex;flex:1;align-items:center;gap:8px;${rightShift}">
+          <span style="flex:0 0 172px;line-height:14px;text-align:center"><span style="font-size:10px;font-weight:600;color:#0F6E56;background:#fff;padding:0 6px;border-radius:8px;white-space:nowrap">${amtTxt}/mo</span></span>
+          <span style="font-weight:500;font-size:12px;color:#fff;flex:0 0 auto;line-height:14px">${l.customerName}</span>
+          <span style="font-size:11px;color:rgba(255,255,255,0.75);text-align:right;flex:1 1 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:14px">${l.model || ''}</span>
+        </div>
+      </div>
+    </div>`;
+  }
+  el.innerHTML = `<div style="font-size:12px;color:#888;margin-bottom:0.5rem">${loans.length} loan(s) sorted by bill date ▼</div>
+    <div style="overflow-x:auto;overflow-y:hidden"><div style="min-width:max-content">${cardHtml}</div></div>`;
 }
 
 function checkOverviewEmiDiff() {

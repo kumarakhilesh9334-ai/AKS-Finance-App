@@ -136,6 +136,7 @@
           <button class="pill-toggle" id="ov-revised-toggle" onclick="toggleOverviewRevised()" style="font-size:11px;padding:4px 10px;border-radius:12px;border:1px solid #D4A017;background:none;color:#D4A017;cursor:pointer;white-space:nowrap">Revised Date</button>
           <button class="pill-toggle" id="ov-partials-toggle" onclick="toggleOverviewPartials()" style="font-size:11px;padding:4px 10px;border-radius:12px;border:1px solid #A32D2D;background:none;color:#A32D2D;cursor:pointer;white-space:nowrap">Partial Payment</button>
           <button class="pill-toggle" id="ov-overdue-toggle" onclick="toggleOverviewOverdue()" style="font-size:11px;padding:4px 10px;border-radius:12px;border:1px solid #c62828;background:none;color:#c62828;cursor:pointer;white-space:nowrap">Overdues</button>
+          <button class="pill-toggle" id="ov-loans-toggle" onclick="toggleOverviewLoans()" style="font-size:11px;padding:4px 10px;border-radius:12px;border:1px solid #0F6E56;background:none;color:#0F6E56;cursor:pointer;white-space:nowrap">Loans</button>
         </div>
       </div>
       <div class="landscape-wrap ov-wrap">
@@ -146,6 +147,7 @@
             <span class="emi-search-icon">🔍</span>
             <input type="text" id="ov-search" placeholder="Search Loan ID or customer…" oninput="onSearchInput(this.value)">
           </div>
+          <button class="btn btn-sm" onclick="clearOverviewSearch()" title="Clear search" style="flex-shrink:0">Clear</button>
           <button class="btn btn-sm" onclick="fetchLoansFromSheets(true)" title="Refresh">↻ Refresh</button>
         </div>
         <div class="mob-five-tabs" id="ov-tabs">
@@ -181,6 +183,7 @@
           <div id="ov-revised-view" style="display:none;margin-top:0.75rem"></div>
           <div id="ov-partials-view" style="display:none;margin-top:0.75rem"></div>
           <div id="ov-overdue-view" style="display:none;margin-top:0.75rem"></div>
+          <div id="ov-loans-view" style="display:none;margin-top:0.75rem"></div>
         </div>
         <div class="ls-right">
           <div class="card" id="ov-detail" style="display:none">
