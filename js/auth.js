@@ -94,7 +94,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const token = localStorage.getItem('aks_token');
     if (token) {
       gasPost({ action: 'restoreSession', token }).then(res => {
-        if (!res.ok || !res.user) { showAlert('Session expired. Please login again.', 'e'); doLogout(); }
+        if (res && !res.ok && res.error === 'Invalid or expired session') doLogout();
       });
     }
     // Refresh users in background
@@ -105,7 +105,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 2. No cached user — try token restore (backward compat for existing sessions)
   const token2 = localStorage.getItem('aks_token');
   if (token2) {
-    const res = await gasPost({ action: 'restoreSession', token2 });
+    const res = await gasPost({ action: 'restoreSession', token: token2 });
     if (res.ok && res.user) {
       localStorage.setItem('aks_cu', JSON.stringify(res.user));
       completeLogin(res.user);
