@@ -171,20 +171,19 @@ function renderEmiColumns(query) {
 // ── Revised badge helper (used by both emiCard and cdCard) ──────────────
 function revisedBadgeHtml(loan) {
   const loanId = loan.loanId;
-  const nextEmiNum = (loan.numReceivedEmi || 0) + 1;
-  const revDates = S.revisedDates.filter(rd => rd.loanId === loanId && rd.emiNum === nextEmiNum);
-  if (!revDates.length) return '';
-  const jabtRecord = revDates.find(rd => rd.note === 'Mobile Jabt');
-  // Find unreceived revised EMIs (skip those already paid)
-  const unpaidRevisions = revDates.filter(rd => {
-    if (rd.note === 'Mobile Jabt') return false;
-    const slot = (loan.slots || []).find(s => s.num === rd.emiNum);
-    return !slot || !slot.received;
-  });
-  // Mobile Jabt takes priority over unpaid revisions
+  // Mobile Jabt takes priority — check across ALL emiNums (Jabt uses emiNum=0 sentinel)
+  const jabtRecord = (S.revisedDates||[]).find(rd => rd.loanId === loanId && rd.note === 'Mobile Jabt');
   if (jabtRecord) {
     return `<div style="text-align:center;margin-bottom:2px"><span style="display:inline-block;font-size:12px;font-weight:600;color:#000;background:#fff;padding:1px 10px;border-radius:8px;border:1px solid #ddd">Mobile Jabt</span></div>`;
   }
+  const nextEmiNum = (loan.numReceivedEmi || 0) + 1;
+  const revDates = S.revisedDates.filter(rd => rd.loanId === loanId && rd.emiNum === nextEmiNum);
+  if (!revDates.length) return '';
+  // Find unreceived revised EMIs (skip those already paid)
+  const unpaidRevisions = revDates.filter(rd => {
+    const slot = (loan.slots || []).find(s => s.num === rd.emiNum);
+    return !slot || !slot.received;
+  });
   if (!unpaidRevisions.length) return '';
   const latest = unpaidRevisions.reduce((a, b) => {
     const da = parseSheetDate(a.revisedDate);
@@ -1944,12 +1943,18 @@ function renderOverviewOverdue() {
       const l = items[i];
       const sameDate = i > 0 && l.nextEmiDate === items[i-1].nextEmiDate;
       const nextEmi = (l.numReceivedEmi || 0) + 1;
-      const revDates = (S.revisedDates||[]).filter(rd => rd.loanId === l.loanId && rd.emiNum === nextEmi && rd.revisedDate);
-      const revDateStr = revDates.length ? fmtDisplayDate(revDates[revDates.length-1].revisedDate) : '';
-      const revPassed = revDates.length && parseSheetDate(revDates[revDates.length-1].revisedDate) < today;
-      const revBadge = revDateStr
-        ? `<span style="flex:0 0 172px;line-height:14px;text-align:center"><span style="font-size:10px;font-weight:600;color:${color};background:#fff;padding:0 6px;border-radius:8px;white-space:nowrap">${revPassed ? '❌ ' : ''}Rev: ${revDateStr}</span></span>`
-        : '<span style="flex:0 0 172px;line-height:14px"></span>';
+      const jabtRecord = (S.revisedDates||[]).find(rd => rd.loanId === l.loanId && rd.note === 'Mobile Jabt');
+      let revBadge;
+      if (jabtRecord) {
+        revBadge = `<span style="flex:0 0 172px;line-height:14px;text-align:center"><span style="font-size:10px;font-weight:600;color:${color};background:#fff;padding:0 6px;border-radius:8px;white-space:nowrap">Mobile Jabt</span></span>`;
+      } else {
+        const revDates = (S.revisedDates||[]).filter(rd => rd.loanId === l.loanId && rd.emiNum === nextEmi && rd.revisedDate);
+        const revDateStr = revDates.length ? fmtDisplayDate(revDates[revDates.length-1].revisedDate) : '';
+        const revPassed = revDates.length && parseSheetDate(revDates[revDates.length-1].revisedDate) < today;
+        revBadge = revDateStr
+          ? `<span style="flex:0 0 172px;line-height:14px;text-align:center"><span style="font-size:10px;font-weight:600;color:${color};background:#fff;padding:0 6px;border-radius:8px;white-space:nowrap">${revPassed ? '❌ ' : ''}Rev: ${revDateStr}</span></span>`
+          : '<span style="flex:0 0 172px;line-height:14px"></span>';
+      }
       const cardIndent = sameDate ? 'margin-left:16px' : '';
       const rightShift = sameDate ? 'margin-left:-16px;' : '';
       cardHtml += `<div class="emi-card overdue" data-loanid="${l.loanId}" style="cursor:pointer;background:${color};border-left:3px solid rgba(255,255,255,0.3);border:1px solid ${color};margin-bottom:4px;padding:8px 10px;${cardIndent}">
@@ -1958,6 +1963,7 @@ function renderOverviewOverdue() {
           <div style="display:flex;flex:1;align-items:center;gap:8px;${rightShift}">
             ${revBadge}
             <span style="font-weight:500;font-size:12px;color:#fff;flex:0 0 auto;line-height:14px">${l.customerName}</span>
+            <span style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.6);flex:0 0 auto;line-height:14px;white-space:nowrap">${l.billDate ? fmtDisplayDate(l.billDate) : ''}</span>
             <span style="font-size:11px;color:rgba(255,255,255,0.75);text-align:right;flex:1 1 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:14px">${l.model || ''}</span>
           </div>
         </div>
