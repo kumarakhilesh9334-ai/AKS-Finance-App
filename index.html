@@ -8,6 +8,22 @@
 <link rel="apple-touch-icon" href="LOGO.jpeg">
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="css/styles.css?v=2">
+<style>
+  #install-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:99999;align-items:center;justify-content:center}
+  #install-overlay.show{display:flex}
+  #install-banner{background:#fff;border-radius:16px;padding:24px;width:90%;max-width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.25);text-align:center;animation:ibSlideUp .3s ease-out}
+  @keyframes ibSlideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+  #install-banner .ib-icon{width:56px;height:56px;border-radius:14px;background:#534AB7;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:24px;color:#fff;font-weight:600}
+  #install-banner h3{font-size:16px;font-weight:600;margin-bottom:4px}
+  #install-banner .ib-desc{font-size:13px;color:#666;margin-bottom:16px;line-height:1.4}
+  #install-banner .ib-btns{display:flex;gap:10px;justify-content:center}
+  #install-banner .ib-btns button{flex:1;padding:10px 0;border-radius:10px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer;border:none;transition:background .15s}
+  #install-banner .ib-install{background:#534AB7;color:#fff}
+  #install-banner .ib-install:hover{background:#3C3489}
+  #install-banner .ib-dismiss{background:#f0f0f0;color:#555}
+  #install-banner .ib-dismiss:hover{background:#e0e0e0}
+  #install-banner .ib-sub{font-size:11px;color:#aaa;margin-top:12px}
+</style>
 </head>
 <body>
 <script>document.documentElement.className='s'</script>
@@ -404,5 +420,57 @@
 <script src="js/emi-messages.js"></script>
 <script src="js/records.js"></script>
 <script src="js/users.js"></script>
+
+<!-- ── Install Banner ─────────────────────────────────────────────────── -->
+<div id="install-overlay">
+  <div id="install-banner">
+    <div class="ib-icon">₹</div>
+    <h3>Install AKS Finance</h3>
+    <div class="ib-desc">Add to your home screen for quick access — works just like an app.</div>
+    <div class="ib-btns">
+      <button class="ib-dismiss" id="ib-dismiss">Not now</button>
+      <button class="ib-install" id="ib-install">Install</button>
+    </div>
+    <div class="ib-sub">AKS Finance App</div>
+  </div>
+</div>
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+
+(function() {
+  if (localStorage.getItem('aks_install_dismissed')) return;
+  if (window.matchMedia('(display-mode: standalone)').matches) return;
+  if (navigator.userAgent.includes('iPhone') || navigator.userAgent.includes('iPad')) return;
+
+  let deferred;
+  window.addEventListener('beforeinstallprompt', function(e) {
+    e.preventDefault();
+    deferred = e;
+    setTimeout(function() {
+      if (deferred && !localStorage.getItem('aks_install_dismissed'))
+        document.getElementById('install-overlay').classList.add('show');
+    }, 3000);
+  });
+
+  document.getElementById('ib-install').addEventListener('click', function() {
+    if (!deferred) return;
+    deferred.prompt();
+    deferred.userChoice.then(function() {
+      deferred = null;
+      document.getElementById('install-overlay').classList.remove('show');
+    });
+  });
+
+  document.getElementById('ib-dismiss').addEventListener('click', function() {
+    localStorage.setItem('aks_install_dismissed', 'true');
+    document.getElementById('install-overlay').classList.remove('show');
+  });
+
+  window.addEventListener('appinstalled', function() {
+    document.getElementById('install-overlay').classList.remove('show');
+    deferred = null;
+  });
+})();
+</script>
 </body>
 </html>

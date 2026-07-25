@@ -121,18 +121,23 @@ async function generateMessages() {
         }
 
         if (loan.revisedDateData && loan.revisedDateMsg) {
-          const revs = revisedLookup[li] || [];
-          // Skip if all revised EMIs have been received
-          const anyUnreceived = revs.some(r => {
-            if (r.note === 'Mobile Jabt') return false;
-            if (r.note === 'Foreclosure') return false;
-            const slot = (loan.slots || []).find(s => s.num === r.emiNum);
-            return slot && !slot.received;
-          });
-          if (anyUnreceived || revs.length === 0) {
-            const emiLabels = revs.map(r => r.note === 'Mobile Jabt' ? 'Mobile Jabt' : r.emiNum).filter(v => v != null);
-            const emiLabel = emiLabels.length ? emiLabels.join(', ') : '';
-            addIfInRange('Revised Date', loan.revisedDateData, { amount: loan.monthlyEmi, emiNum: emiLabel || undefined });
+          const revDt = parseSheetDate(loan.revisedDateData);
+          const todayMs = parseDate(ymd(new Date())).getTime();
+          // Skip if revised date has already passed — no point sending reminder for a past date
+          if (!revDt || revDt.getTime() >= todayMs) {
+            const revs = revisedLookup[li] || [];
+            // Skip if all revised EMIs have been received
+            const anyUnreceived = revs.some(r => {
+              if (r.note === 'Mobile Jabt') return false;
+              if (r.note === 'Foreclosure') return false;
+              const slot = (loan.slots || []).find(s => s.num === r.emiNum);
+              return slot && !slot.received;
+            });
+            if (anyUnreceived || revs.length === 0) {
+              const emiLabels = revs.map(r => r.note === 'Mobile Jabt' ? 'Mobile Jabt' : r.emiNum).filter(v => v != null);
+              const emiLabel = emiLabels.length ? emiLabels.join(', ') : '';
+              addIfInRange('Revised Date', loan.revisedDateData, { amount: loan.monthlyEmi, emiNum: emiLabel || undefined });
+            }
           }
         }
       }
