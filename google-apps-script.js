@@ -11,6 +11,11 @@ const INPUT_SHEET      = 'Input';
 const LOGGED_EMI_SHEET     = 'logged EMI';
 const USERS_SHEET          = 'Users';
 const REVISED_DATES_SHEET  = 'Revised_Dates';
+const STOCK_SHEET_ID   = '1HXvWKCy8F5xVgPlnB4R0zq9ufMUaqnx69OqGXjRXLDA';
+const STOCK_SHEET_TAB  = 'Data';
+
+// Build marker — change this to prove which code a deployment is running
+const BUILD = 'stock-ss-fix-v2';
 
 // Column map for Data tab (0-based, column A = 0)
 const C = {
@@ -39,6 +44,9 @@ const C = {
 // ── GET ───────────────────────────────────────────────────────────────────
 function doGet(e) {
   const action = (e && e.parameter && e.parameter.action) || '';
+
+  // Debug: identify which code build a deployment is serving
+  if (action === 'build') return jsonResponse({ok:true, build: BUILD});
 
   // ── Auth check: all actions except readUsers require PIN verification ──
   if (action !== 'readUsers') {
@@ -299,6 +307,54 @@ function doGet(e) {
         ? Utilities.formatDate(val, 'IST', 'yyyy-MM-dd')
         : String(val || '');
       return jsonResponse({ok:true, lastMessageSent});
+    } catch(err){ return jsonResponse({ok:false, error:err.message}); }
+  }
+
+  // ── Read Stock data from external spreadsheet (admin only) ─────────
+  if (action === 'readStock') {
+    try {
+      const ss     = SpreadsheetApp.openById(SPREADSHEET_ID);
+      const userId = (e && e.parameter && e.parameter._userId) || '';
+      const pin    = (e && e.parameter && e.parameter._pin) || '';
+      const users = readAllUsers(ss);
+      const u = users.find(x => String(x.id) === String(userId) && String(x.pin) === String(pin));
+      if (!u || u.role !== 'admin') return jsonResponse({ok:false, error:'Unauthorized'});
+
+      const cache  = CacheService.getScriptCache();
+      const cached = cache.get('stock_data_t');
+      if (cached) return jsonResponse({ok:true, stock: JSON.parse(cached)});
+
+      const sss   = SpreadsheetApp.openById(STOCK_SHEET_ID);
+      const sheet = sss.getSheetByName(STOCK_SHEET_TAB);
+      if (!sheet || sheet.getLastRow() < 1) return jsonResponse({ok:true, stock:{headers:[],rows:[]}});
+
+      // Read only through column T (20 cols); stop at the first empty cell in column A
+      const MAX_COLS = 20;
+      const aCol = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues().map(r => r[0]);
+      let lastDataRow = 0;
+      for (let i = 0; i < aCol.length; i++) {
+        if (aCol[i] === null || aCol[i] === undefined || String(aCol[i]).trim() === '') break;
+        lastDataRow = i + 1;
+      }
+      if (lastDataRow < 1) return jsonResponse({ok:true, stock:{headers:[],rows:[]}});
+
+      const all     = sheet.getRange(1, 1, lastDataRow, MAX_COLS).getValues();
+      const headers = all[0].map(h => String(h||'').trim());
+      const dateCols = {};
+      headers.forEach((h,i) => {
+        const lh = String(h||'').toLowerCase();
+        if (lh === 'month sold') dateCols[i] = 'm';
+        else if (lh === 'order date' || lh === 'delivery date' || lh === 'selling date' || lh === 'billing date') dateCols[i] = 'd';
+      });
+      const rows = all.slice(1).map(r => r.map((c,i) => {
+        if (c instanceof Date && !isNaN(c)) {
+          return dateCols[i] === 'm' ? Utilities.formatDate(c, 'IST', 'MMM yy') : fmtDate(c);
+        }
+        return (typeof c === 'string') ? c.trim() : c;
+      }));
+      const stock = { headers, rows };
+      cache.put('stock_data_t', JSON.stringify(stock), 21600); // 6h TTL (within-the-day freshness)
+      return jsonResponse({ok:true, stock});
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
 

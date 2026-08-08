@@ -8,6 +8,7 @@ const TAB_ICONS = {
   'my-subs':         { icon: '📝', label: 'My Subs' },
   'users':           { icon: '👥', label: 'Users' },
   'emi-msgs':        { icon: '📱', label: 'EMI Msgs' },
+  'stock':           { icon: '📦', label: 'Stock' },
 };
 
 function buildNav() {
@@ -21,6 +22,7 @@ function buildNav() {
     tabs.push({ id: 'my-subs', label: 'My Subs', badge: myCount||null });
   if (u.role === 'admin' || u.perms.approvals) tabs.push({ id: 'approvals', label: 'Approvals', badge: pc });
   if (u.role === 'admin') tabs.push({ id: 'emi-msgs', label: 'EMI Msgs' });
+  if (u.role === 'admin') tabs.push({ id: 'stock', label: 'Stock' });
   if (u.role === 'admin') tabs.push({ id: 'users', label: 'Users' });
 
   // Desktop top nav
@@ -57,6 +59,7 @@ function goTo(pg) {
   if (pg === 'all-loans') { $('ov-detail').style.display = 'none'; if ($('ov-detail-ph')) $('ov-detail-ph').style.display = ''; S.showOverviewRevised = false; S.showOverviewPartials = false; S.showOverviewOverdue = false; S.showOverviewLoans = false; renderAllOverview(''); mobSwitchOvCol('all'); fetchApprovedPartials(); }
   if (pg === 'my-subs')   renderMySubs();
   if (pg === 'emi-msgs')  initEmiMsgsPage();
+  if (pg === 'stock')     initStockPage();
   if (pg === 'users')     renderUsers();
 }
 

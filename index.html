@@ -7,7 +7,7 @@
 <link rel="icon" href="LOGO.jpeg" sizes="any">
 <link rel="apple-touch-icon" href="LOGO.jpeg">
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="css/styles.css?v=2">
+<link rel="stylesheet" href="css/styles.css?v=3">
 <style>
   #install-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:99999;align-items:center;justify-content:center}
   #install-overlay.show{display:flex}
@@ -343,6 +343,17 @@
       </div>
     </div>
 
+    <!-- ── STOCK (admin) ─────────────────────────────────────────────── -->
+    <div class="page" id="page-stock">
+      <div style="font-size:15px;font-weight:500;margin-bottom:0.75rem">Stock</div>
+      <div class="stock-tabs" id="stock-pills">
+        <button class="stock-tab active" data-f="available" onclick="setStockFilter('available')">Available</button>
+        <button class="stock-tab" data-f="sold" onclick="setStockFilter('sold')">Sold</button>
+        <button class="stock-tab" data-f="undelivered" onclick="setStockFilter('undelivered')">Undelivered</button>
+      </div>
+      <div id="stock-results"></div>
+    </div>
+
     <!-- ── EDIT MODAL ────────────────────────────────────────────────── -->
     <div id="edit-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;align-items:flex-end;justify-content:center">
       <div style="background:#fff;border-radius:16px 16px 0 0;width:100%;max-width:600px;max-height:85vh;overflow-y:auto;padding:1.25rem">
@@ -416,16 +427,17 @@
 </div>
 
 <!-- ── SCRIPTS (order matters) ────────────────────────────────────────── -->
-<script src="js/state.js"></script>
-<script src="js/auth.js"></script>
-<script src="js/nav.js"></script>
-<script src="js/loans.js"></script>
-<script src="js/emi.js"></script>
-<script src="js/approvals.js"></script>
-<script src="js/my-subs.js"></script>
-<script src="js/emi-messages.js"></script>
-<script src="js/records.js"></script>
-<script src="js/users.js"></script>
+<script src="js/state.js?v=3"></script>
+<script src="js/auth.js?v=3"></script>
+<script src="js/nav.js?v=3"></script>
+<script src="js/loans.js?v=3"></script>
+<script src="js/emi.js?v=3"></script>
+<script src="js/approvals.js?v=3"></script>
+<script src="js/my-subs.js?v=3"></script>
+<script src="js/emi-messages.js?v=3"></script>
+<script src="js/stock.js?v=3"></script>
+<script src="js/records.js?v=3"></script>
+<script src="js/users.js?v=3"></script>
 
 <!-- ── Install Banner ─────────────────────────────────────────────────── -->
 <div id="install-overlay">
