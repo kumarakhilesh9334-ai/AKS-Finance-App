@@ -243,11 +243,17 @@
               </div>
             </div>
             <div id="ov-emi-reason-wrap" style="display:none"><label>Reason for difference <span style="color:#A32D2D">*</span></label>
-              <select id="ov-emi-reason">
+              <select id="ov-emi-reason" onchange="checkOverviewEmiReason()">
                 <option value="">— Select reason —</option>
                 <option>Late payment fine included</option><option>Extra EMI received</option>
                 <option>Early loan closing settlement</option><option>Partial payment</option><option>Default Adjustment</option>
+                <option>Multiple EMI Payment</option>
               </select>
+              <div id="ov-emi-multi-wrap" style="display:none;margin-top:8px">
+                <label>How many EMIs does this amount cover? <span style="color:#A32D2D">*</span></label>
+                <input type="number" id="ov-emi-multi-count" min="2" placeholder="e.g. 3">
+                <div style="font-size:11px;color:#888;margin-top:4px" id="ov-emi-multi-hint"></div>
+              </div>
             </div>
             <div class="full" id="ov-emi-diff-warn" style="display:none"><div class="diff-warn" id="ov-emi-diff-msg"></div></div>
             <div id="ov-emi-revised-next-wrap" style="display:none;margin:0.5rem 0;padding:8px;background:#f5faf8;border:0.5px solid #b8d4cc;border-radius:8px">

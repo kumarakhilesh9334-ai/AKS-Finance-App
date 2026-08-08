@@ -603,6 +603,66 @@ function doPost(e) {
             }
           }
           deleteFromSheet(ss, sheetName, id);
+
+        // ── Multiple EMI Payment: split one payment into N logged EMIs ──
+        } else if (miscType.indexOf('multiple emi payment') === 0) {
+          const count = parseInt((String(row[16] || '').match(/\((\d+)\)/) || [])[1]) || 2;
+          const loanId = String(row[5] || '').replace(/_\d+$/, '');
+          if (loanId) {
+            const ds = ss.getSheetByName(DATA_SHEET);
+            let loanRow = null;
+            if (ds && ds.getLastRow() > 1) {
+              const ids = ds.getRange(2, C.loanId+1, ds.getLastRow()-1, 1).getValues();
+              for (let i=0;i<ids.length;i++) {
+                if (String(ids[i][0]).trim() === loanId) {
+                  loanRow = ds.getRange(i+2, 1, 1, ds.getLastColumn()).getValues()[0];
+                  break;
+                }
+              }
+            }
+            const totalAmt = parseFloat(row[15]) || 0;
+            const receivedDate = String(fmtDate(row[13]) || '').trim();
+            if (loanRow) {
+              const stdEmi = parseFloat(loanRow[C.monthlyEmi]) || 0;
+              const numRcv = parseInt(loanRow[C.numReceivedEmi]) || 0;
+              const dur    = parseInt(loanRow[C.emiDuration]) || 0;
+              const fill   = Math.max(0, Math.min(count, dur - numRcv));
+              if (fill > 0) {
+                const emiStartRaw = loanRow[C.emiStartDate];
+                const emiStart = (emiStartRaw instanceof Date && !isNaN(emiStartRaw))
+                  ? new Date(emiStartRaw) : parseFlexDate(emiStartRaw);
+                const logSheet  = ensureSheet(ss, LOGGED_EMI_SHEET,
+                  ['EMI_ID','Customer Name','Mobile Model','EMI_Start_Date','EMI_Number',
+                   'EMI_Date','Loan ID','Received','Received_date','MISC','Cashflow','MISC Type']);
+                for (let i = 0; i < fill; i++) {
+                  const slotIdx = numRcv + i;
+                  const isLast  = (i === fill - 1);
+                  const cash    = isLast ? totalAmt : 0;
+                  let scheduledDate = '';
+                  if (emiStart) {
+                    const d = new Date(emiStart);
+                    d.setMonth(d.getMonth() + slotIdx);
+                    scheduledDate = fmtDate(d);
+                  }
+                  logSheet.appendRow([
+                    String(loanRow[C.loanId]||'').trim() + '_' + (slotIdx + 1),
+                    loanRow[C.customerName] || '',
+                    loanRow[C.model] || '',
+                    loanRow[C.emiStartDate] || '',
+                    slotIdx + 1,
+                    scheduledDate,
+                    loanId,
+                    true,
+                    receivedDate,
+                    cash - stdEmi,
+                    cash,
+                    'Extra EMI received',
+                  ]);
+                }
+              }
+            }
+          }
+          deleteFromSheet(ss, sheetName, id);
         } else if (miscType === 'partial payment' && rowStatus === 'pending') {
           const sheet = ss.getSheetByName(UNAPP_EMI_SHEET);
           const data = sheet.getDataRange().getValues();

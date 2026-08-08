@@ -1449,6 +1449,7 @@ async function selectOverviewLoan(loanId) {
       $('ov-emi-reason').value = '';
       $('ov-emi-reason-wrap').style.display = 'none';
       $('ov-emi-diff-warn').style.display   = 'none';
+      checkOverviewEmiReason();
 
       const subBtn = $('ov-emi-submit-btn');
       if (pendingSet.has(nextNum)) {
@@ -1718,16 +1719,34 @@ function checkOverviewEmiDiff() {
   let loan = (S.sheetLoans && S.sheetLoans.find(l => l.loanId === loanId)) || S.loans.find(l => l.loanId === loanId);
   if (!loan) return;
   const stdEmi  = loan.monthlyEmi || loan?.data?.monthlyEmi || 0;
-  const got     = parseFloat($('ov-emi-amt').value) || 0;
-  if (!got) return;
+  const raw     = $('ov-emi-amt') ? $('ov-emi-amt').value : '';
+  if (raw === '') return;
+  const got     = parseFloat(raw) || 0;
   const diff = got - stdEmi;
   if (Math.abs(diff) > 1) {
     $('ov-emi-reason-wrap').style.display = 'block';
     $('ov-emi-diff-warn').style.display   = 'block';
     $('ov-emi-diff-msg').textContent = `Differs from standard EMI ${fmtAmt(stdEmi)} by ${diff>0?'+':''}${fmtAmt(Math.abs(diff))}. Please select a reason.`;
+    checkOverviewEmiReason();
   } else {
     $('ov-emi-reason-wrap').style.display = 'none';
     $('ov-emi-diff-warn').style.display   = 'none';
+    const mw = $('ov-emi-multi-wrap'); if (mw) mw.style.display = 'none';
+  }
+}
+
+function checkOverviewEmiReason() {
+  const isMulti = ($('ov-emi-reason') ? $('ov-emi-reason').value : '') === 'Multiple EMI Payment';
+  const wrap = $('ov-emi-multi-wrap');
+  if (!wrap) return;
+  wrap.style.display = isMulti ? 'block' : 'none';
+  if (isMulti) {
+    const loanId = S.selectedEmiLoanId;
+    let loan = null;
+    if (loanId) loan = (S.sheetLoans && S.sheetLoans.find(l => l.loanId === loanId)) || S.loans.find(l => l.loanId === loanId);
+    const remaining = loan ? (loan.emiDuration || 0) - (loan.numReceivedEmi || 0) : 0;
+    const hint = $('ov-emi-multi-hint');
+    if (hint) hint.textContent = 'EMIs remaining for this loan: ' + Math.max(0, remaining) + '. Minimum 2.';
   }
 }
 
@@ -1740,9 +1759,10 @@ async function submitOverviewEmi() {
   if (!loan) { showAlert('Loan data not found.', 'e'); return; }
   const nextNum = (loan.numReceivedEmi || 0) + 1;
   if (nextNum > (loan.emiDuration || 0)) { showAlert('All EMIs already collected for this loan.', 'e'); return; }
-  const amt  = parseFloat($('ov-emi-amt').value) || 0;
+  const amtRaw = $('ov-emi-amt') ? $('ov-emi-amt').value : '';
+  const amt  = parseFloat(amtRaw);
   const date = $('ov-emi-date') ? $('ov-emi-date').value : '';
-  if (!amt || !date) { showAlert('Please enter amount and payment date.', 'e'); return; }
+  if (amtRaw === '' || isNaN(amt) || !date) { showAlert('Please enter amount and payment date.', 'e'); return; }
 
   // Warn if scheduled date is far in the future
   if (loan.emiStartDate) {
@@ -1762,7 +1782,20 @@ async function submitOverviewEmi() {
   const extraRcv = loan.extraEmiReceived || 0;
   const stdEmi   = loan.monthlyEmi || 0;
   const expected = Math.max(0, stdEmi - extraRcv);
-  if (Math.abs(amt - stdEmi) > 1 && !v('ov-emi-reason')) { showAlert('Please select a reason for the amount difference.', 'e'); return; }
+  let reason = $('ov-emi-reason') ? $('ov-emi-reason').value : '';
+  let multiCount = 0;
+  if (reason === 'Multiple EMI Payment') {
+    multiCount = parseInt(($('ov-emi-multi-count')||{}).value) || 0;
+    const remaining = (loan.emiDuration || 0) - (loan.numReceivedEmi || 0);
+    if (multiCount < 2) { showAlert('Please enter how many EMIs this amount covers (minimum 2).', 'e'); return; }
+    if (multiCount > remaining) { showAlert('This loan has only ' + remaining + ' EMI(s) remaining.', 'e'); return; }
+    if (Math.abs(amt - stdEmi * multiCount) > 1) {
+      if (!confirm(fmtAmt(amt) + ' will be split as ' + fmtAmt(stdEmi) + ' per EMI across ' + multiCount + ' EMIs. Continue?')) return;
+    }
+    reason = 'Multiple EMI Payment (' + multiCount + ')';
+  } else if (Math.abs(amt - stdEmi) > 1 && !reason) {
+    showAlert('Please select a reason for the amount difference.', 'e'); return;
+  }
   const numReceived = loan.numReceivedEmi || 0;
   const emiNum       = numReceived + 1;
   const emiStartDate = loan.emiStartDate || '';
@@ -1788,7 +1821,7 @@ async function submitOverviewEmi() {
     date, scheduledDate, emiStartDate,
     received: receivedVal,
     mode: $('ov-emi-mode') ? $('ov-emi-mode').value : 'Cash',
-    reason: $('ov-emi-reason') ? $('ov-emi-reason').value : '',
+    reason: reason,
     notes: $('ov-emi-notes') ? $('ov-emi-notes').value : '',
     akShare:  Math.round((loan.akShare  || 0) * 100),
     aksShare: Math.round((loan.aksShare || 0) * 100),
@@ -1801,6 +1834,9 @@ async function submitOverviewEmi() {
       const res = await gasPost({action:'saveEmi', item:emiItem});
       if (res.ok) {
         S._submittedEmis[loanId + '_' + emiNum] = true;
+        if (multiCount > 0) {
+          for (let i = 1; i < multiCount; i++) S._submittedEmis[loanId + '_' + (emiNum + i)] = true;
+        }
         if (res.pending) S.pending = res.pending;
         const revDt = $('ov-emi-next-revised-date');
         if (revDt && revDt.value && emiNum < (loan.emiDuration || 0)) {
