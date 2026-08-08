@@ -22,7 +22,7 @@ function buildNav() {
     tabs.push({ id: 'my-subs', label: 'My Subs', badge: myCount||null });
   if (u.role === 'admin' || u.perms.approvals) tabs.push({ id: 'approvals', label: 'Approvals', badge: pc });
   if (u.role === 'admin') tabs.push({ id: 'emi-msgs', label: 'EMI Msgs' });
-  if (u.role === 'admin') tabs.push({ id: 'stock', label: 'Stock' });
+  if (u.role === 'admin' || u.perms.stock) tabs.push({ id: 'stock', label: 'Stock' });
   if (u.role === 'admin') tabs.push({ id: 'users', label: 'Users' });
 
   // Desktop top nav

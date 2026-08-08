@@ -12,6 +12,7 @@ async function renderUsers() {
     if (u.perms.allLoans)  perms.push('All Loans');
     if (u.perms.approvals) perms.push('Approvals');
     if (u.perms.submit)    perms.push('Submit');
+    if (u.perms.stock)     perms.push('Stock');
     const isBlocked = blockedUsers.includes(u.username);
     return `<div class="user-row">
       <div class="avatar">${u.name.slice(0, 2).toUpperCase()}</div>
@@ -52,6 +53,7 @@ async function addUser() {
       loan:      $('p-loan').checked,
       allLoans:  $('p-allLoans').checked,
       approvals: $('p-approvals').checked,
+      stock:     $('p-stock').checked,
     },
   };
 

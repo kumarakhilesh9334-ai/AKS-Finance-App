@@ -24,11 +24,13 @@ function migrateUserPerms() {
   S.users = S.users.map(u => {
     if (!u.perms) u.perms = {};
     if (u.perms.submit === undefined) u.perms.submit = u.role === 'admin';
+    if (u.perms.stock === undefined)  u.perms.stock  = u.role === 'admin';
     return u;
   });
   if (S.cu) {
     if (!S.cu.perms) S.cu.perms = {};
     if (S.cu.perms.submit === undefined) S.cu.perms.submit = S.cu.role === 'admin';
+    if (S.cu.perms.stock === undefined)  S.cu.perms.stock  = S.cu.role === 'admin';
   }
 }
 
