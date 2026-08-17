@@ -59,7 +59,7 @@ async function gasGet(action, params = {}) {
     .map(([k,v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v === undefined ? '' : v))
     .join('&');
   try {
-    const res = await fetch(S.sheetsUrl + '?' + qs);
+    const res = await fetch(S.sheetsUrl + '?' + qs, { cache: 'no-store' });
     return await res.json();
   } catch(err) {
     return { ok: false, error: 'Network error: ' + err.message };

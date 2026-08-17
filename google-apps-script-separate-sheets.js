@@ -1,9 +1,10 @@
 /**
- * AKS Finance — Google Apps Script
- * Sheets: Data | Unapproved_Loan | Unapproved_EMI | Input | logged EMI
+ * AKS Finance — Google Apps Script (SEPARATE SHEETS)
+ * Stock data is in a SEPARATE spreadsheet for faster load times.
+ * All other data is in the main spreadsheet.
  */
 
-const SPREADSHEET_ID   = '13ICELiymkG6qAX1Vdf256KNXra4t21wFPZcoYZzfk1c';
+const SPREADSHEET_ID   = '10mkkgm0DH6gEFfbgkEvnULEnqdMo1ZmekKWf-iqF6EM';
 const DATA_SHEET       = 'Data';
 const UNAPP_LOAN_SHEET = 'Unapproved_Loan';
 const UNAPP_EMI_SHEET  = 'Unapproved_EMI';
@@ -11,8 +12,8 @@ const INPUT_SHEET      = 'Input';
 const LOGGED_EMI_SHEET     = 'logged EMI';
 const USERS_SHEET          = 'Users';
 const REVISED_DATES_SHEET  = 'Revised_Dates';
-const STOCK_SHEET_ID   = '13ICELiymkG6qAX1Vdf256KNXra4t21wFPZcoYZzfk1c';
-const STOCK_SHEET_TAB  = 'Stock';
+const STOCK_SHEET_ID   = '1HXvWKCy8F5xVgPlnB4R0zq9ufMUaqnx69OqGXjRXLDA';
+const STOCK_SHEET_TAB  = 'Data';
 
 // Column map for Data tab (0-based, column A = 0)
 const C = {
@@ -304,7 +305,8 @@ function doGet(e) {
       const cached = (!forceRefresh) ? cache.get('stock_data_t') : null;
       if (cached) return jsonResponse({ok:true, stock: JSON.parse(cached)});
 
-      const sheet = ss.getSheetByName(STOCK_SHEET_TAB);
+      const stockSs  = SpreadsheetApp.openById(STOCK_SHEET_ID);
+      const sheet = stockSs.getSheetByName(STOCK_SHEET_TAB);
       if (!sheet || sheet.getLastRow() < 1) return jsonResponse({ok:true, stock:{headers:[],rows:[]}});
 
       // Read only through column T (20 cols); stop at the first empty cell in column A

@@ -32,8 +32,7 @@ const _STOCK_SORT_DESC = {
 
 async function initStockPage() {
   setStockFilter('available');
-  if (!_stockLoaded) await loadStock();
-  else renderStock();
+  await loadStock();
 }
 
 function setStockFilter(f) {
@@ -47,7 +46,7 @@ function setStockFilter(f) {
 async function loadStock() {
   showLoader();
   try {
-    const res = await gasGet('readStock');
+    const res = await gasGet('readStock', { forceRefresh: '1', _t: Date.now() });
     if (!res.ok) { showAlert('Failed to load stock: ' + (res.error || ''), 'e'); return; }
     const stock = (res.stock && res.stock.headers) ? res.stock : { headers: [], rows: [] };
     // The sheet has two columns for payment info: 'Paid By' (bank/UPI) and 'Payment Mode' (Cash/AKS Fin).

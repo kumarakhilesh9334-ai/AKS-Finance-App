@@ -1,6 +1,7 @@
 /**
- * AKS Finance — Google Apps Script
- * Sheets: Data | Unapproved_Loan | Unapproved_EMI | Input | logged EMI
+ * AKS Finance — Google Apps Script (SINGLE SHEET)
+ * All data — including Stock — lives in ONE spreadsheet.
+ * Faster deployment, but Stock tab may load slower due to formulas in other tabs.
  */
 
 const SPREADSHEET_ID   = '13ICELiymkG6qAX1Vdf256KNXra4t21wFPZcoYZzfk1c';
