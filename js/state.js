@@ -2,7 +2,7 @@
 // Central data store for AKS Finance app.
 // All modules read/write through this object.
 
-const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbzFE_aDkwxYUsB47VPWJGpDft4wvm_k2VqAz7oMRAdaNdNeTumb3VZ_vd50esW-vaEasQ/exec';
+const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbzyMrb-oU3s_MH1jROgYO7oQAyWP6BgXx9qsuxz25I4jIoqJpsgchEFsE_Cgf9OJnx5Zw/exec';
 // ↑ Update this ONLY if you create a brand-new Apps Script deployment.
 //   To update the script code without changing the URL:
 //   Apps Script → Deploy → Manage deployments → Edit → New version → Deploy.
@@ -43,6 +43,15 @@ async function fetchUsersFromSheets() {
       S.users = data.users;
       migrateUserPerms();
       saveUsers();
+      if (S.cu) {
+        const fresh = S.users.find(u => u.id === S.cu.id);
+        if (fresh) {
+          S.cu.role  = fresh.role;
+          S.cu.perms = fresh.perms;
+          try { localStorage.setItem('aks_cu', JSON.stringify(S.cu)); } catch(e) {}
+          refreshNav();
+        }
+      }
     }
   } catch(e) {
     console.warn('Could not fetch users from sheet, using local:', e.message);

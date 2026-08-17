@@ -50,14 +50,17 @@ async function loadStock() {
     const res = await gasGet('readStock');
     if (!res.ok) { showAlert('Failed to load stock: ' + (res.error || ''), 'e'); return; }
     const stock = (res.stock && res.stock.headers) ? res.stock : { headers: [], rows: [] };
-    // The sheet has two 'Payment Mode' columns; the FIRST one holds 'Paid By' values.
-    // Rename it so the All pill doesn't show duplicate headers.
-    let renamed = false;
+    // The sheet has two columns for payment info: 'Paid By' (bank/UPI) and 'Payment Mode' (Cash/AKS Fin).
+    // They may both be named 'Payment Mode' or both 'Paid By' in the sheet.
+    // Normalize: first occurrence → 'Paid By', second → 'Payment Mode'.
+    const pmIndices = [];
     for (let i = 0; i < stock.headers.length; i++) {
-      if (!renamed && String(stock.headers[i]).toLowerCase() === 'payment mode') {
-        stock.headers[i] = 'Paid By';
-        renamed = true;
-      }
+      const h = String(stock.headers[i]).toLowerCase();
+      if (h === 'payment mode' || h === 'paid by') pmIndices.push(i);
+    }
+    if (pmIndices.length >= 2) {
+      stock.headers[pmIndices[0]] = 'Paid By';
+      stock.headers[pmIndices[1]] = 'Payment Mode';
     }
     _stock = stock;
     _stockLoaded = true;
@@ -295,7 +298,11 @@ function renderStock() {
       const hasDelivery = dIdx >= 0 && r[dIdx] != null && String(r[dIdx]).trim() !== '';
       return hasOrder && !hasDelivery;
     };
-    if (_stockFilter === 'available') data = rows.filter(r => !isSold(r));
+    const iIdx = _colIndex(headers, 'IMEI_1');
+    if (_stockFilter === 'available') data = rows.filter(r => {
+      const hasImei = iIdx >= 0 && r[iIdx] != null && String(r[iIdx]).trim() !== '';
+      return hasImei && !isSold(r);
+    });
     else if (_stockFilter === 'sold') data = rows.filter(r => isSold(r));
     else data = rows.filter(isUndelivered);
     const descSet = _STOCK_SORT_DESC[_stockFilter] || {};

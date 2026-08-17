@@ -3,7 +3,7 @@
  * Sheets: Data | Unapproved_Loan | Unapproved_EMI | Input | logged EMI
  */
 
-const SPREADSHEET_ID   = '10mkkgm0DH6gEFfbgkEvnULEnqdMo1ZmekKWf-iqF6EM';
+const SPREADSHEET_ID   = '13ICELiymkG6qAX1Vdf256KNXra4t21wFPZcoYZzfk1c';
 const DATA_SHEET       = 'Data';
 const UNAPP_LOAN_SHEET = 'Unapproved_Loan';
 const UNAPP_EMI_SHEET  = 'Unapproved_EMI';
@@ -11,8 +11,8 @@ const INPUT_SHEET      = 'Input';
 const LOGGED_EMI_SHEET     = 'logged EMI';
 const USERS_SHEET          = 'Users';
 const REVISED_DATES_SHEET  = 'Revised_Dates';
-const STOCK_SHEET_ID   = '1HXvWKCy8F5xVgPlnB4R0zq9ufMUaqnx69OqGXjRXLDA';
-const STOCK_SHEET_TAB  = 'Data';
+const STOCK_SHEET_ID   = '13ICELiymkG6qAX1Vdf256KNXra4t21wFPZcoYZzfk1c';
+const STOCK_SHEET_TAB  = 'Stock';
 
 // Build marker — change this to prove which code a deployment is running
 const BUILD = 'stock-ss-fix-v2';
@@ -318,7 +318,7 @@ function doGet(e) {
       const pin    = (e && e.parameter && e.parameter._pin) || '';
       const users = readAllUsers(ss);
       const u = users.find(x => String(x.id) === String(userId) && String(x.pin) === String(pin));
-      if (!u || u.role !== 'admin') return jsonResponse({ok:false, error:'Unauthorized'});
+      if (!u || (u.role !== 'admin' && !u.perms.stock)) return jsonResponse({ok:false, error:'Unauthorized'});
 
       const cache  = CacheService.getScriptCache();
       const cached = cache.get('stock_data_t');
@@ -548,13 +548,25 @@ function doPost(e) {
       const { id, username, pin, name, role, perms } = payload;
       const headers = ['ID','Username','PIN','Name','Role','loan','allLoans','approvals','submit','stock'];
       const sheet = ensureSheet(ss, USERS_SHEET, headers);
-      sheet.appendRow([id, username, pin, name, role,
-        perms.loan ? 'TRUE' : 'FALSE',
-        perms.allLoans ? 'TRUE' : 'FALSE',
-        perms.approvals ? 'TRUE' : 'FALSE',
-        perms.submit ? 'TRUE' : 'FALSE',
-        perms.stock ? 'TRUE' : 'FALSE',
-      ]);
+      // Map each header to its column position so the sheet layout is irrelevant
+      const lastCol = sheet.getLastColumn();
+      const rowHeaders = sheet.getRange(1, 1, 1, lastCol).getValues()[0]
+        .map(h => String(h || '').trim().toLowerCase());
+      const nextRow = sheet.getLastRow() + 1;
+      const setCell = (name, val) => {
+        const i = rowHeaders.indexOf(name.toLowerCase());
+        if (i !== -1) sheet.getRange(nextRow, i + 1).setValue(val);
+      };
+      setCell('ID', id);
+      setCell('Username', username);
+      setCell('PIN', pin);
+      setCell('Name', name);
+      setCell('Role', role);
+      setCell('loan', perms.loan ? 'TRUE' : 'FALSE');
+      setCell('allLoans', perms.allLoans ? 'TRUE' : 'FALSE');
+      setCell('approvals', perms.approvals ? 'TRUE' : 'FALSE');
+      setCell('submit', perms.submit ? 'TRUE' : 'FALSE');
+      setCell('stock', perms.stock ? 'TRUE' : 'FALSE');
       return jsonResponse({ok:true, users:readAllUsers(ss)});
     }
 
@@ -1092,19 +1104,30 @@ function readAllUsers(ss) {
     return [{ id:'u1', username:'AKS', pin:'0000', name:'AKS (You)', role:'admin',
       perms:{ loan:true, allLoans:true, approvals:true, submit:true, stock:true } }];
   }
-  const raw = sheet.getRange(2, 1, sheet.getLastRow()-1, 10).getValues();
+  const lastCol = sheet.getLastColumn();
+  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h || '').trim().toLowerCase());
+  const col = name => {
+    const i = headers.indexOf(name);
+    return i === -1 ? -1 : i;
+  };
+  const ci = { id:col('id'), username:col('username'), pin:col('pin'), name:col('name'), role:col('role'),
+    loan:col('loan'), allLoans:col('allloans'), approvals:col('approvals'), submit:col('submit'), stock:col('stock') };
+  const read = (r, key, def) => ci[key] >= 0 ? String(r[ci[key]] || '').trim() : def;
+  const readBool = (r, key) => read(r, key, '').toUpperCase() === 'TRUE';
+
+  const raw = sheet.getRange(2, 1, sheet.getLastRow()-1, lastCol).getValues();
   const users = raw.filter(r => r[0] && String(r[0]).trim()).map(r => ({
-    id: String(r[0]).trim(),
-    username: String(r[1]).trim(),
-    pin: String(r[2]).trim(),
-    name: String(r[3]).trim(),
-    role: String(r[4]).trim(),
+    id: read(r, 'id', String(r[0]).trim()),
+    username: read(r, 'username'),
+    pin: read(r, 'pin'),
+    name: read(r, 'name'),
+    role: read(r, 'role'),
     perms: {
-      loan:      String(r[5]).toUpperCase() === 'TRUE',
-      allLoans:  String(r[6]).toUpperCase() === 'TRUE',
-      approvals: String(r[7]).toUpperCase() === 'TRUE',
-      submit:    String(r[8]).toUpperCase() === 'TRUE',
-      stock:     String(r[9]).toUpperCase() === 'TRUE',
+      loan:      readBool(r, 'loan'),
+      allLoans:  readBool(r, 'allLoans'),
+      approvals: readBool(r, 'approvals'),
+      submit:    readBool(r, 'submit'),
+      stock:     readBool(r, 'stock'),
     },
   }));
   // Ensure default admin is always present (even if not in the sheet)
