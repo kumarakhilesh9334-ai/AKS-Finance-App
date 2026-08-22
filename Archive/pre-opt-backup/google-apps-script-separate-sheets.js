@@ -197,26 +197,22 @@ function doGet(e) {
   // ── Read all revised dates (lightweight, for Log EMI tab) ──────────
   if (action === 'readRevisedDates') {
     try {
-      return jsonResponse({ok:true, dates: readAllRevisedDates(ss)});
+      const sheet = ss.getSheetByName(REVISED_DATES_SHEET);
+      if (!sheet || sheet.getLastRow() < 2) return jsonResponse({ok:true, dates:[]});
+      const rows = sheet.getRange(2, 1, sheet.getLastRow()-1, 6).getValues();
+      const dates = rows.filter(r => r[0] && String(r[0]).trim()).map(r => ({
+        loanId: String(r[0]||'').trim(),
+        emiNum: parseInt(r[1])||0,
+        revisedDate: fmtDate(r[2]),
+        amount: parseFloat(r[3])||0,
+        note: String(r[4]||'').trim(),
+        createdAt: String(r[5]||''),
+      }));
+      return jsonResponse({ok:true, dates});
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
 
-// ── Read every revised date (shared by GET readRevisedDates and setRevisedDate) ──
-function readAllRevisedDates(ss) {
-  const sheet = ss.getSheetByName(REVISED_DATES_SHEET);
-  if (!sheet || sheet.getLastRow() < 2) return [];
-  const rows = sheet.getRange(2, 1, sheet.getLastRow()-1, 6).getValues();
-  return rows.filter(r => r[0] && String(r[0]).trim()).map(r => ({
-    loanId: String(r[0]||'').trim(),
-    emiNum: parseInt(r[1])||0,
-    revisedDate: fmtDate(r[2]),
-    amount: parseFloat(r[3])||0,
-    note: String(r[4]||'').trim(),
-    createdAt: String(r[5]||''),
-  }));
-}
-
-// ── Read pending submissions ────────────────────────────────────────
+  // ── Read pending submissions ────────────────────────────────────────
   if (action === 'readPending') {
     try {
       return jsonResponse({ok:true, pending:readAllPending(ss)});
@@ -366,7 +362,7 @@ function doPost(e) {
         return jsonResponse({ok:false, error:'Account blocked. Contact admin.'});
       }
 
-      const users = getCachedUsers(ss);
+      const users = readAllUsers(ss);
       const user = users.find(u => u.username === username && u.pin === pin);
 
       if (user) {
@@ -435,8 +431,7 @@ function doPost(e) {
         d.guarantor||'', d.appLockCharge||0, (d.akShare||0)/100,
         (d.rateOfInterest||0)/100
       ]);
-      // Lean response — client updates its local pending list itself.
-      return jsonResponse({ok:true});
+      return jsonResponse({ok:true, pending:readAllPending(ss)});
     }
 
     // ── Save new EMI submission ───────────────────────────────────────
@@ -461,8 +456,8 @@ function doPost(e) {
         const ids = ds.getRange(2, C.loanId+1, ds.getLastRow()-1, 1).getValues();
         for (let i=0;i<ids.length;i++){
           if (String(ids[i][0]).trim()===String(d.loanId||'').trim()){
-            // Read just the one needed cell instead of the whole ~93-col row.
-            emiStartDate = ds.getRange(i+2, C.emiStartDate+1).getValue();
+            const row = ds.getRange(i+2, 1, 1, ds.getLastColumn()).getValues()[0];
+            emiStartDate = row[C.emiStartDate];
             break;
           }
         }
@@ -489,8 +484,7 @@ function doPost(e) {
         emiId, d.customerName||'', d.model||'', d.emiStartDate||'', d.emiNum||'',
         emiDateFmt, d.loanId||'', received, receivedDateFmt, misc, d.amount||0, miscType
       ]);
-      // Lean response — client updates its local pending list itself.
-      return jsonResponse({ok:true});
+      return jsonResponse({ok:true, pending:readAllPending(ss)});
     }
 
     // ── Update (edit) a row ───────────────────────────────────────────
@@ -524,8 +518,7 @@ function doPost(e) {
               newMisc,d.amount||0,d.miscType||''
             ]]);
           }
-          // Lean response — client already holds the edited data.
-          return jsonResponse({ok:true});
+          return jsonResponse({ok:true, pending:readAllPending(ss)});
         }
       }
       return jsonResponse({ok:false,error:'ID not found'});
@@ -555,7 +548,6 @@ function doPost(e) {
       setCell('approvals', perms.approvals ? 'TRUE' : 'FALSE');
       setCell('submit', perms.submit ? 'TRUE' : 'FALSE');
       setCell('stock', perms.stock ? 'TRUE' : 'FALSE');
-      bustUsersCache();
       return jsonResponse({ok:true, users:readAllUsers(ss)});
     }
 
@@ -564,12 +556,11 @@ function doPost(e) {
       const { id } = payload;
       const sheet = ss.getSheetByName(USERS_SHEET);
       if (!sheet) return jsonResponse({ok:false, error:'Sheet not found'});
-    const vals = sheet.getDataRange().getValues();
-    for (let i=vals.length-1;i>=1;i--){
-      if (String(vals[i][0])===String(id)){ sheet.deleteRow(i+1); break; }
-    }
-    bustUsersCache();
-    return jsonResponse({ok:true, users:readAllUsers(ss)});
+      const vals = sheet.getDataRange().getValues();
+      for (let i=vals.length-1;i>=1;i--){
+        if (String(vals[i][0])===String(id)){ sheet.deleteRow(i+1); break; }
+      }
+      return jsonResponse({ok:true, users:readAllUsers(ss)});
     }
 
     // ── Approve ───────────────────────────────────────────────────────
@@ -613,7 +604,7 @@ function doPost(e) {
                 }
               }
             }
-            if (!loanRow) { deleteFromSheet(ss, sheetName, id); return jsonResponse({ok:true}); }
+            if (!loanRow) { deleteFromSheet(ss, sheetName, id); return jsonResponse({ok:true, pending:readAllPending(ss)}); }
             const duration = parseInt(loanRow[C.emiDuration]) || 0;
             const stdEmi = parseFloat(loanRow[C.monthlyEmi]) || 0;
             const numRcv = parseInt(loanRow[C.numReceivedEmi]) || 0;
@@ -631,7 +622,6 @@ function doPost(e) {
                 ['EMI_ID','Customer Name','Mobile Model','EMI_Start_Date','EMI_Number',
                  'EMI_Date','Loan ID','Received','Received_date','MISC','Cashflow','MISC Type']);
 
-              const newRows = [];
               for (let i = 0; i < remaining; i++) {
                 const slotIdx = numRcv + i;
                 const isLast  = (i === remaining - 1);
@@ -645,7 +635,7 @@ function doPost(e) {
                   scheduledDate = fmtDate(d);
                 }
 
-                newRows.push([
+                logSheet.appendRow([
                   String(loanRow[C.loanId]||'').trim() + '_' + (slotIdx + 1),
                   loanRow[C.customerName] || '',
                   loanRow[C.model] || '',
@@ -660,9 +650,6 @@ function doPost(e) {
                   'Early loan closing settlement',
                 ]);
               }
-              // One bulk write instead of one appendRow per EMI.
-              if (newRows.length)
-                logSheet.getRange(logSheet.getLastRow() + 1, 1, newRows.length, 12).setValues(newRows);
             }
           }
           deleteFromSheet(ss, sheetName, id);
@@ -697,7 +684,6 @@ function doPost(e) {
                 const logSheet  = ensureSheet(ss, LOGGED_EMI_SHEET,
                   ['EMI_ID','Customer Name','Mobile Model','EMI_Start_Date','EMI_Number',
                    'EMI_Date','Loan ID','Received','Received_date','MISC','Cashflow','MISC Type']);
-                const newRows = [];
                 for (let i = 0; i < fill; i++) {
                   const slotIdx = numRcv + i;
                   const isLast  = (i === fill - 1);
@@ -708,7 +694,7 @@ function doPost(e) {
                     d.setMonth(d.getMonth() + slotIdx);
                     scheduledDate = fmtDate(d);
                   }
-                  newRows.push([
+                  logSheet.appendRow([
                     String(loanRow[C.loanId]||'').trim() + '_' + (slotIdx + 1),
                     loanRow[C.customerName] || '',
                     loanRow[C.model] || '',
@@ -723,9 +709,6 @@ function doPost(e) {
                     'Extra EMI received',
                   ]);
                 }
-                // One bulk write instead of one appendRow per EMI.
-                if (newRows.length)
-                  logSheet.getRange(logSheet.getLastRow() + 1, 1, newRows.length, 12).setValues(newRows);
               }
             }
           }
@@ -757,8 +740,7 @@ function doPost(e) {
       }
       try { CacheService.getScriptCache().remove('loans_slim'); } catch(e) {}
       try { CacheService.getScriptCache().remove('loans_full'); } catch(e) {}
-      // Lean response — client removes the approved item locally.
-      return jsonResponse({ok:true});
+      return jsonResponse({ok:true, pending:readAllPending(ss)});
     }
     // ── Update remaining partial payment ──────────────────────────────
     if (payload.action === 'updateRemainingEmi') {
@@ -779,8 +761,7 @@ function doPost(e) {
           break;
         }
       }
-      // Lean response — client mirrors the row update locally.
-      return jsonResponse({ok:true});
+      return jsonResponse({ok:true, pending:readAllPending(ss)});
     }
 
     // ── Reject ────────────────────────────────────────────────────────
@@ -793,8 +774,7 @@ function doPost(e) {
         if (String(rows[i][0])===String(id)){
           sheet.getRange(i+1,2).setValue('rejected');
           sheet.getRange(i+1,5).setValue(note||'');
-          // Lean response — client marks the item rejected locally.
-          return jsonResponse({ok:true});
+          return jsonResponse({ok:true, pending:readAllPending(ss)});
         }
       }
       return jsonResponse({ok:false,error:'ID not found'});
@@ -844,8 +824,7 @@ function doPost(e) {
       ]);
       try { CacheService.getScriptCache().remove('loans_slim'); } catch(e) {}
       try { CacheService.getScriptCache().remove('loans_full'); } catch(e) {}
-      // Return fresh dates in the same response — saves the follow-up readRevisedDates GET.
-      return jsonResponse({ok:true, dates:readAllRevisedDates(ss)});
+      return jsonResponse({ok:true, pending:readAllPending(ss)});
     }
 
     return jsonResponse({ok:false, error:'Unknown action: '+payload.action});
@@ -949,7 +928,8 @@ function appendToInput(ss, row) {
     row[17], row[18], row[19], '', '', '',
   ]);
   const r = sheet.getLastRow();
-  sheet.getRangeList(['D' + r, 'M' + r]).setNumberFormat('@');
+  sheet.getRange(r, 4).setNumberFormat('@');
+  sheet.getRange(r, 13).setNumberFormat('@');
 }
 
 // ── Append approved EMI to logged EMI sheet ───────────────────────────────
@@ -1043,19 +1023,11 @@ function ensureSheet(ss, name, headers) {
 
 function deleteFromSheet(ss, sheetName, id) {
   const sheet = ss.getSheetByName(sheetName);
-  if (!sheet || sheet.getLastRow() < 2) return;
+  if (!sheet) return;
   const vals = sheet.getDataRange().getValues();
-  // Group contiguous matching rows so each run is a single deleteRows call
-  // (per-row deleteRow is very slow on large sheets).
-  const runs = [];
-  for (let i = vals.length - 1; i >= 1; i--) {
-    if (String(vals[i][0]) === String(id)) {
-      const row = i + 1;
-      if (runs.length && runs[0].start === row + runs[0].len) runs[0].start = row;
-      else runs.unshift({ start: row, len: 1 });
-    }
+  for (let i=vals.length-1;i>=1;i--){
+    if (String(vals[i][0])===String(id)){ sheet.deleteRow(i+1); return; }
   }
-  runs.forEach(r => sheet.deleteRows(r.start, r.len));
 }
 
 function readRowById(ss, sheetName, id) {
@@ -1149,32 +1121,11 @@ function readAllUsers(ss) {
 
 // Public version — no PINs exposed (used by GET readUsers)
 function readAllUsersPublic(ss) {
-  return getCachedUsers(ss).map(({ pin, ...u }) => u);
-}
-
-// ── Cached user list — avoids a full Users-sheet read on EVERY request ────
-// TTL 300 s. Bust with bustUsersCache() whenever users are added/removed.
-// Note: edits made directly in the Users sheet take up to 5 min to be seen.
-function getCachedUsers(ss) {
-  const cache = CacheService.getScriptCache();
-  const cached = cache.get('users_cache');
-  if (cached) {
-    try { return JSON.parse(cached); } catch(e) { /* fall through */ }
-  }
-  const users = readAllUsers(ss);
-  try {
-    const str = JSON.stringify(users);
-    if (str.length <= 95000) cache.put('users_cache', str, 300);
-  } catch(e) {}
-  return users;
-}
-
-function bustUsersCache() {
-  try { CacheService.getScriptCache().remove('users_cache'); } catch(e) {}
+  return readAllUsers(ss).map(({ pin, ...u }) => u);
 }
 
 function verifyAuth(ss, userId, pin) {
-  const users = getCachedUsers(ss);
+  const users = readAllUsers(ss);
   return users.some(u => u.id === userId && u.pin === pin);
 }
 

@@ -114,37 +114,8 @@ const num = id => parseFloat($(id)?.value) || 0;
 const fmt = n => n == null ? '—' : '₹' + Number(n).toLocaleString('en-IN');
 
 function showAlert(msg, type = 's') {
-  // Errors open a pop-up dialog instead of the banner strip — impossible to miss.
-  if (type === 'e') { showErrorModal(msg); return; }
   $('alert-box').innerHTML = `<div class="alert al-${type}">${msg}</div>`;
-  setTimeout(() => { if ($('alert-box')) $('alert-box').innerHTML = ''; }, 3500);
-}
-
-// Pop-up error dialog (created on demand, styled to match the app).
-function showErrorModal(msg) {
-  let m = document.getElementById('error-modal');
-  if (!m) {
-    m = document.createElement('div');
-    m.id = 'error-modal';
-    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px';
-    m.innerHTML =
-      '<div role="dialog" style="background:#fff;border-radius:16px;width:100%;max-width:360px;padding:22px;box-shadow:0 8px 32px rgba(0,0,0,0.25);text-align:center">' +
-        '<div style="width:46px;height:46px;margin:0 auto 10px;border-radius:50%;background:#FCEBEB;display:flex;align-items:center;justify-content:center;font-size:22px">⚠️</div>' +
-        '<div style="font-size:14px;font-weight:600;color:#A32D2D;margin-bottom:6px">Something went wrong</div>' +
-        '<div id="error-modal-msg" style="font-size:13px;color:#333;line-height:1.45;word-break:break-word"></div>' +
-        '<button class="btn" style="width:100%;margin-top:16px;background:#A32D2D;color:#fff;border:none;padding:10px 0;border-radius:8px;font-weight:600;cursor:pointer" onclick="closeErrorModal()">OK</button>' +
-      '</div>';
-    m.addEventListener('click', e => { if (e.target === m) closeErrorModal(); });
-    document.body.appendChild(m);
-  }
-  const msgEl = m.querySelector('#error-modal-msg');
-  if (msgEl) msgEl.textContent = String(msg);   // textContent — server messages can't inject HTML
-  m.style.display = 'flex';
-}
-
-function closeErrorModal() {
-  const m = document.getElementById('error-modal');
-  if (m) m.style.display = 'none';
+  setTimeout(() => $('alert-box').innerHTML = '', 3500);
 }
 
 function nextPid() {

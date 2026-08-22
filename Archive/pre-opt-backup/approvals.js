@@ -50,9 +50,7 @@ async function gasPost(payload) {
   }
 }
 
-// Authenticated GET helper — auto-injects _userId and _pin as query params.
-// Identical concurrent GETs share one in-flight request instead of doubling up.
-const _inflightGets = {};
+// Authenticated GET helper — auto-injects _userId and _pin as query params
 async function gasGet(action, params = {}) {
   params.action = action;
   params._userId = S.cu ? S.cu.id : '';
@@ -60,19 +58,12 @@ async function gasGet(action, params = {}) {
   const qs = Object.entries(params)
     .map(([k,v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v === undefined ? '' : v))
     .join('&');
-  if (_inflightGets[qs]) return _inflightGets[qs];
-  const req = (async () => {
-    try {
-      const res = await fetch(S.sheetsUrl + '?' + qs, { cache: 'no-store' });
-      return await res.json();
-    } catch(err) {
-      return { ok: false, error: 'Network error: ' + err.message };
-    } finally {
-      delete _inflightGets[qs];
-    }
-  })();
-  _inflightGets[qs] = req;
-  return req;
+  try {
+    const res = await fetch(S.sheetsUrl + '?' + qs, { cache: 'no-store' });
+    return await res.json();
+  } catch(err) {
+    return { ok: false, error: 'Network error: ' + err.message };
+  }
 }
 
 // ── Approvals: two-column layout ──────────────────────────────────────────
@@ -129,17 +120,12 @@ async function approve(id, type) {
   try {
     const res = await gasPost({action:'approvePending', id, type:item.type, data:item.data});
     if (res.ok) {
-      // Server confirmed — update the local list directly, no extra round-trips.
-      const isPartial = item.type === 'emi'
-        && String(item.data.miscType||'').toLowerCase() === 'partial payment';
-      if (isPartial) item.status = 'approved';   // stays in sheet as approved partial
-      else S.pending = S.pending.filter(p => p.id !== id);
-      cacheState();
+      if (res.pending) S.pending = res.pending;
+      await fetchApprovedPartials();
       refreshNav();
       renderApprovals($('appr-search') ? $('appr-search').value : '');
       rerenderActiveTab();
       showAlert('Approved ✓');
-      fetchApprovedPartials();   // background refresh — never blocks the UI
     } else {
       if (res.error === 'duplicate_emi') {
         showAlert('This EMI already exists in the logged EMI sheet!', 'e');
@@ -163,14 +149,12 @@ async function reject(id, type) {
   try {
     const res = await gasPost({action:'rejectPending', id, type:item.type, note});
     if (res.ok) {
-      // Server confirmed — mark rejected locally, no extra round-trips.
-      item.status = 'rejected';
-      item.note   = note;
-      cacheState();
+      if (res.pending) S.pending = res.pending;
+      await fetchApprovedPartials();
       refreshNav();
       renderApprovals($('appr-search') ? $('appr-search').value : '');
       rerenderActiveTab();
-      showAlert('Entry rejected.', 'w');
+      showAlert('Entry rejected.', 'e');
     } else {
       await fetchPendingFromSheets();
       showAlert('Rejection failed: ' + (res.error || 'Unknown error'), 'e');
@@ -285,8 +269,8 @@ async function saveEdit() {
     if (S.sheetsUrl) {
       const res = await gasPost({action:'updatePending', id, type:item.type, data:d});
       if (res.ok) {
-        // `d` references item.data — the local list already holds the edits.
-        cacheState();
+        if (res.pending) S.pending = res.pending;
+        await fetchApprovedPartials();
         refreshNav();
         renderApprovals($('appr-search') ? $('appr-search').value : '');
         rerenderActiveTab();

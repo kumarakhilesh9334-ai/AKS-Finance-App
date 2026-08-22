@@ -228,8 +228,8 @@ function doGet(e) {
         .filter(r => String(r[1]).toLowerCase()==='approved' && String(r[16]||'').toLowerCase()==='partial payment')
         .map(r => ({
           id: String(r[0]), loanId: String(r[5]||'').replace(/_\d+$/,''),
-          customerName: r[6], emiNum: r[9], emiDate: r[10],
-          receivedDate: r[13], amount: parseFloat(r[15])||0,
+          customerName: r[6], emiNum: r[9], emiDate: fmtDate(r[10]),
+          receivedDate: fmtDate(r[13]), amount: parseFloat(r[15])||0,
         }));
       return jsonResponse({ok:true, partials});
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
@@ -421,6 +421,8 @@ function doPost(e) {
         'Guarantor/ Alternate no/ Comments','App Lock Charge','AK Share','Rate of Interest'
       ];
       const sheet = ensureSheet(ss, UNAPP_LOAN_SHEET, headers);
+      // Normalize submittedAt to Date before appending
+      if (p.submittedAt) p.submittedAt = new Date(p.submittedAt);
       sheet.appendRow([
         p.id, p.status, p.submittedBy, p.submittedAt, '',
         fmtDateFromYMD(d.billDate), d.customerName||'', d.phone||'', d.idNum||'',
@@ -476,6 +478,9 @@ function doPost(e) {
       const misc     = (d.amount||0) - (d.expectedAmount||0);
       const received = d.received !== false; // default TRUE
       const miscType = d.reason || '';
+
+      // Normalize submittedAt to Date before appending
+      if (p.submittedAt) p.submittedAt = new Date(p.submittedAt);
 
       sheet.appendRow([
         p.id, p.status, p.submittedBy, p.submittedAt, '',
@@ -903,7 +908,7 @@ function readUnapproved(ss, sheetName, type) {
         };
       }
       return { id:String(r[0]), type, status:String(r[1]),
-               submittedBy:String(r[2]), submittedAt:String(r[3]),
+               submittedBy:String(r[2]), submittedAt:fmtDate(r[3]),
                note:String(r[4]||''), data };
     });
 }

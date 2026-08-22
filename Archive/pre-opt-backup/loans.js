@@ -303,9 +303,7 @@ async function submitLoan() {
     if (S.sheetsUrl) {
       const res = await gasPost({action:'saveLoan', item:loanItem});
       if (res.ok) {
-        // Server confirmed — add our own submission locally, no extra round-trip.
-        S.pending.push(loanItem);
-        cacheState();
+        if (res.pending) S.pending = res.pending;
         refreshNav();
         showAlert('Loan submitted for approval.');
       } else {

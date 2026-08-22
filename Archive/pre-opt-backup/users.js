@@ -61,13 +61,10 @@ async function addUser() {
   try {
     const res = await gasPost({ action:'addUser', ...user });
     if (!res.ok) { showAlert('Failed to add user: ' + (res.error || 'Unknown error'), 'e'); return; }
-    // POST response already carries the fresh user list — no follow-up readUsers GET.
-    if (Array.isArray(res.users)) {
-      S.users = res.users;
-      migrateUserPerms();
-      saveUsers();
-    }
-  } catch(e) { console.warn('Sheet addUser failed:', e.message); }
+  } catch(e) { console.warn('Sheet addUser failed, saving locally:', e.message); }
+
+  // Merge response from sheet (or just use local if sheet failed)
+  await syncUsersFromSheet();
 
   $('nu-user').value = '';
   $('nu-pin').value  = '';
@@ -83,14 +80,9 @@ async function removeUser(id) {
   try {
     const res = await gasPost({ action:'removeUser', id });
     if (!res.ok) { showAlert('Failed to remove user: ' + (res.error || 'Unknown error'), 'e'); return; }
-    // POST response already carries the fresh user list — no follow-up readUsers GET.
-    if (Array.isArray(res.users)) {
-      S.users = res.users;
-      migrateUserPerms();
-      saveUsers();
-    }
-  } catch(e) { console.warn('Sheet removeUser failed:', e.message); }
+  } catch(e) { console.warn('Sheet removeUser failed, removing locally:', e.message); }
 
+  await syncUsersFromSheet();
   renderUsers();
 }
 

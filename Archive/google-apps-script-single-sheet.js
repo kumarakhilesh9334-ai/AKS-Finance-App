@@ -229,8 +229,8 @@ function doGet(e) {
         .filter(r => String(r[1]).toLowerCase()==='approved' && String(r[16]||'').toLowerCase()==='partial payment')
         .map(r => ({
           id: String(r[0]), loanId: String(r[5]||'').replace(/_\d+$/,''),
-          customerName: r[6], emiNum: r[9], emiDate: r[10],
-          receivedDate: r[13], amount: parseFloat(r[15])||0,
+          customerName: r[6], emiNum: r[9], emiDate: fmtDate(r[10]),
+          receivedDate: fmtDate(r[13]), amount: parseFloat(r[15])||0,
         }));
       return jsonResponse({ok:true, partials});
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }

@@ -655,27 +655,20 @@ async function submitEmi() {
       const res = await gasPost({action:'saveEmi', item:emiItem});
       if (res.ok) {
         S._submittedEmis[loanId + '_' + emiNum] = true;
-        // Server confirmed — add our own submission locally, no extra round-trip.
-        S.pending.push(emiItem);
-        cacheState();
+        if (res.pending) S.pending = res.pending;
+        // Submit revised date for next EMI directly (no approval)
+        const revDt = $('emi-next-revised-date');
+        if (revDt && revDt.value && emiNum < (sheetLoan ? sheetLoan.emiDuration : 0)) {
+          const nextNum2 = emiNum + 1;
+          const nextAmt = sheetLoan ? sheetLoan.monthlyEmi : 0;
+          const revRes = await gasPost({ action: 'setRevisedDate', loanId, emiNum: nextNum2, revisedDate: revDt.value, amount: nextAmt || 0, note: '' });
+          if (revRes.ok) {
+            try { const rd2 = await gasGet('readRevisedDates'); if (rd2.ok) S.revisedDates = rd2.dates; } catch(e) {}
+          }
+        }
         refreshNav();
         rerenderActiveTab();
         showAlert('EMI payment submitted for approval.');
-        // Revised date syncs quietly in the background (response carries fresh dates).
-        const revDt = $('emi-next-revised-date');
-        const revVal = revDt ? revDt.value : '';
-        if (revVal && emiNum < (sheetLoan ? sheetLoan.emiDuration : 0)) {
-          const nextNum2 = emiNum + 1;
-          const nextAmt = sheetLoan ? sheetLoan.monthlyEmi : 0;
-          gasPost({ action: 'setRevisedDate', loanId, emiNum: nextNum2, revisedDate: revVal, amount: nextAmt || 0, note: '' })
-            .then(revRes => {
-              if (revRes && revRes.ok) {
-                if (revRes.dates) S.revisedDates = revRes.dates;
-                rerenderActiveTab();
-              }
-            })
-            .catch(() => {});
-        }
       } else {
         await fetchPendingFromSheets();
         showAlert('Submission failed: ' + (res.error || 'Unknown error'), 'e');
@@ -712,25 +705,8 @@ async function logRemainingPartial(id, currentAmount) {
   try {
     const res = await gasPost({action:'updateRemainingEmi', id, additionalAmount: parseFloat(additional), newDate});
     if (res.ok) {
-      // Server confirmed — mirror the row update locally, no extra round-trips.
-      const idx = S.approvedPartials.findIndex(x => String(x.id) === String(id));
-      if (idx !== -1) {
-        const p = S.approvedPartials[idx];
-        S.approvedPartials.splice(idx, 1);
-        const newTotal = Number(p.amount||0) + parseFloat(additional);
-        S.pending.push({
-          id: p.id, type: 'emi', status: 'pending',
-          submittedBy: S.cu.id, submittedAt: new Date().toISOString(), note: '',
-          data: {
-            loanId: p.loanId, customerName: p.customerName, model: '', emiStartDate: '',
-            emiNum: p.emiNum, date: newDate, scheduledDate: p.emiDate,
-            misc: 0, miscType: '',
-            amount: newTotal, expectedAmount: newTotal,
-          },
-        });
-        cacheState();
-      }
-      fetchApprovedPartials();   // background refresh — never blocks the UI
+      if (res.pending) S.pending = res.pending;
+      await fetchApprovedPartials();
       refreshNav();
       rerenderActiveTab();
       renderApprovals($('appr-search') ? $('appr-search').value : '');
@@ -1075,8 +1051,12 @@ async function submitRevisedDate() {
   try {
     const res = await gasPost({ action: 'setRevisedDate', loanId, emiNum, revisedDate, amount, note });
     if (res.ok) {
-      // Response carries the fresh dates — no follow-up readRevisedDates GET.
-      if (res.dates) S.revisedDates = res.dates;
+      if (res.pending) S.pending = res.pending;
+      // Re-fetch revised dates
+      try {
+        const revData = await gasGet('readRevisedDates');
+        if (revData.ok) S.revisedDates = revData.dates;
+      } catch(e) { console.warn('Could not re-fetch revised dates:', e.message); }
       // Re-render loan detail and cards
       selectEmiLoan(loanId);
       rerenderActiveTab();
@@ -1865,27 +1845,19 @@ async function submitOverviewEmi() {
         if (multiCount > 0) {
           for (let i = 1; i < multiCount; i++) S._submittedEmis[loanId + '_' + (emiNum + i)] = true;
         }
-        // Server confirmed — add our own submission locally, no extra round-trip.
-        S.pending.push(emiItem);
-        cacheState();
+        if (res.pending) S.pending = res.pending;
+        const revDt = $('ov-emi-next-revised-date');
+        if (revDt && revDt.value && emiNum < (loan.emiDuration || 0)) {
+          const nextNum2 = emiNum + 1;
+          const nextAmt = loan.monthlyEmi || 0;
+          const revRes = await gasPost({ action: 'setRevisedDate', loanId, emiNum: nextNum2, revisedDate: revDt.value, amount: nextAmt || 0, note: '' });
+          if (revRes.ok) {
+            try { const rd2 = await gasGet('readRevisedDates'); if (rd2.ok) S.revisedDates = rd2.dates; } catch(e) {}
+          }
+        }
         refreshNav();
         rerenderActiveTab();
         showAlert('EMI payment submitted for approval.');
-        // Revised date syncs quietly in the background (response carries fresh dates).
-        const revDt = $('ov-emi-next-revised-date');
-        const revVal = revDt ? revDt.value : '';
-        if (revVal && emiNum < (loan.emiDuration || 0)) {
-          const nextNum2 = emiNum + 1;
-          const nextAmt = loan.monthlyEmi || 0;
-          gasPost({ action: 'setRevisedDate', loanId, emiNum: nextNum2, revisedDate: revVal, amount: nextAmt || 0, note: '' })
-            .then(revRes => {
-              if (revRes && revRes.ok) {
-                if (revRes.dates) S.revisedDates = revRes.dates;
-                rerenderActiveTab();
-              }
-            })
-            .catch(() => {});
-        }
       } else {
         await fetchPendingFromSheets();
         showAlert('Submission failed: ' + (res.error || 'Unknown error'), 'e');
@@ -2065,8 +2037,11 @@ async function submitMobileJabt() {
   try {
     const res = await gasPost({ action: 'setRevisedDate', loanId, emiNum: 0, revisedDate: '', amount: 0, note: 'Mobile Jabt' });
     if (res.ok) {
-      // Response carries the fresh dates — no follow-up readRevisedDates GET.
-      if (res.dates) S.revisedDates = res.dates;
+      if (res.pending) S.pending = res.pending;
+      try {
+        const revData = await gasGet('readRevisedDates');
+        if (revData.ok) S.revisedDates = revData.dates;
+      } catch(e) { console.warn('Could not re-fetch revised dates:', e.message); }
       selectEmiLoan(loanId);
       rerenderActiveTab();
       renderApprovals($('appr-search') ? $('appr-search').value : '');

@@ -44,46 +44,32 @@ function setStockFilter(f) {
 }
 
 async function loadStock() {
-  // Fast paint from the server's cache (≤15 min old), then a silent force-refresh.
   showLoader();
-  let wasEmpty = false;
   try {
-    const res = await gasGet('readStock');
+    const res = await gasGet('readStock', { forceRefresh: '1', _t: Date.now() });
     if (!res.ok) { showAlert('Failed to load stock: ' + (res.error || ''), 'e'); return; }
-    applyStock(res.stock);
-    wasEmpty = !_stock.headers.length;
-    if (wasEmpty) showAlert('Stock sheet is empty.', 'e');
+    const stock = (res.stock && res.stock.headers) ? res.stock : { headers: [], rows: [] };
+    // The sheet has two columns for payment info: 'Paid By' (bank/UPI) and 'Payment Mode' (Cash/AKS Fin).
+    // They may both be named 'Payment Mode' or both 'Paid By' in the sheet.
+    // Normalize: first occurrence → 'Paid By', second → 'Payment Mode'.
+    const pmIndices = [];
+    for (let i = 0; i < stock.headers.length; i++) {
+      const h = String(stock.headers[i]).toLowerCase();
+      if (h === 'payment mode' || h === 'paid by') pmIndices.push(i);
+    }
+    if (pmIndices.length >= 2) {
+      stock.headers[pmIndices[0]] = 'Paid By';
+      stock.headers[pmIndices[1]] = 'Payment Mode';
+    }
+    _stock = stock;
+    _stockLoaded = true;
+    renderStock();
+    if (!_stock.headers.length) showAlert('Stock sheet is empty.', 'e');
   } catch (err) {
     showAlert('Failed to load stock: ' + err.message, 'e');
   } finally {
     hideLoader();
   }
-  // Background force-refresh — updates the view quietly if data changed.
-  gasGet('readStock', { forceRefresh: '1' }).then(res => {
-    if (res && res.ok && res.stock && res.stock.headers) {
-      applyStock(res.stock);
-      if (!res.stock.headers.length && !wasEmpty) showAlert('Stock sheet is empty.', 'e');
-    }
-  }).catch(() => {});
-}
-
-function applyStock(stock) {
-  stock = (stock && stock.headers) ? stock : { headers: [], rows: [] };
-  // The sheet has two columns for payment info: 'Paid By' (bank/UPI) and 'Payment Mode' (Cash/AKS Fin).
-  // They may both be named 'Payment Mode' or both 'Paid By' in the sheet.
-  // Normalize: first occurrence → 'Paid By', second → 'Payment Mode'.
-  const pmIndices = [];
-  for (let i = 0; i < stock.headers.length; i++) {
-    const h = String(stock.headers[i]).toLowerCase();
-    if (h === 'payment mode' || h === 'paid by') pmIndices.push(i);
-  }
-  if (pmIndices.length >= 2) {
-    stock.headers[pmIndices[0]] = 'Paid By';
-    stock.headers[pmIndices[1]] = 'Payment Mode';
-  }
-  _stock = stock;
-  _stockLoaded = true;
-  renderStock();
 }
 
 function _esc(s) {
