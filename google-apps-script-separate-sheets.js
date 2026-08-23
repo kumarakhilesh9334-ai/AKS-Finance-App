@@ -201,22 +201,7 @@ function doGet(e) {
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
 
-// ── Read every revised date (shared by GET readRevisedDates and setRevisedDate) ──
-function readAllRevisedDates(ss) {
-  const sheet = ss.getSheetByName(REVISED_DATES_SHEET);
-  if (!sheet || sheet.getLastRow() < 2) return [];
-  const rows = sheet.getRange(2, 1, sheet.getLastRow()-1, 6).getValues();
-  return rows.filter(r => r[0] && String(r[0]).trim()).map(r => ({
-    loanId: String(r[0]||'').trim(),
-    emiNum: parseInt(r[1])||0,
-    revisedDate: fmtDate(r[2]),
-    amount: parseFloat(r[3])||0,
-    note: String(r[4]||'').trim(),
-    createdAt: String(r[5]||''),
-  }));
-}
-
-// ── Read pending submissions ────────────────────────────────────────
+  // ── Read pending submissions ────────────────────────────────────────
   if (action === 'readPending') {
     try {
       return jsonResponse({ok:true, pending:readAllPending(ss)});
@@ -874,6 +859,22 @@ function fixDuplicatePids() {
     }
   });
   SpreadsheetApp.getUi().alert('Fixed: ' + JSON.stringify(result));
+}
+
+// ── Read every revised date (shared by GET readRevisedDates and setRevisedDate) ──
+// TOP-LEVEL helper — must live outside doGet/doPost so both handlers can call it.
+function readAllRevisedDates(ss) {
+  const sheet = ss.getSheetByName(REVISED_DATES_SHEET);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  const rows = sheet.getRange(2, 1, sheet.getLastRow()-1, 6).getValues();
+  return rows.filter(r => r[0] && String(r[0]).trim()).map(r => ({
+    loanId: String(r[0]||'').trim(),
+    emiNum: parseInt(r[1])||0,
+    revisedDate: fmtDate(r[2]),
+    amount: parseFloat(r[3])||0,
+    note: String(r[4]||'').trim(),
+    createdAt: String(r[5]||''),
+  }));
 }
 
 // ── Read both unapproved sheets and return combined pending list ──────────
