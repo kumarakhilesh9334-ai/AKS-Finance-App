@@ -26,14 +26,6 @@ async function fetchPendingFromSheets() {
   }
 }
 
-// ── Save new submission to Sheets ─────────────────────────────────────────
-async function savePendingToSheets(item) {
-  if (!S.sheetsUrl) return;
-  try {
-    await gasPost({action:'savePending', item});
-  } catch(err) { console.warn('savePending error:', err.message); }
-}
-
 // Google Apps Script POST helper — uses a form submission trick to
 // bypass CORS while still sending a parseable body.
 // Apps Script receives the JSON in e.parameter.payload
