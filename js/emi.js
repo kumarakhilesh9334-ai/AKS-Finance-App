@@ -185,12 +185,7 @@ function revisedBadgeHtml(loan) {
     return !slot || !slot.received;
   });
   if (!unpaidRevisions.length) return '';
-  const latest = unpaidRevisions.reduce((a, b) => {
-    const da = parseSheetDate(a.revisedDate);
-    const db = parseSheetDate(b.revisedDate);
-    if (!da) return b; if (!db) return a;
-    return da > db ? a : b;
-  });
+  const latest = unpaidRevisions[unpaidRevisions.length-1];
   const revDateStr = latest.revisedDate ? fmtDisplayDate(latest.revisedDate) : '';
   const revDt = parseSheetDate(latest.revisedDate);
   let prefix = '';
@@ -333,16 +328,15 @@ function renderRevisedView() {
     const hasJabt = S.revisedDates.some(rd => rd.loanId === l.loanId && rd.note === 'Mobile Jabt');
     if (hasJabt) { mobileJabt.push(l); return; }
     const dates = S.revisedDates.filter(rd => rd.loanId === l.loanId && rd.revisedDate);
-    let latest = null;
-    dates.forEach(d => { const dt = parseSheetDate(d.revisedDate); if (dt && (!latest || dt > latest)) latest = dt; });
+    const latest = dates.length ? parseSheetDate(dates[dates.length-1].revisedDate) : null;
     if (!latest) { upcoming.push(l); return; }
     if (latest >= today) upcoming.push(l); else overdue.push(l);
   });
   // Sort: overdue descending (most overdue first), scheduled ascending (soonest first)
-  const getLastRev = (lid) => { let m = null; S.revisedDates.filter(rd => rd.loanId === lid && rd.revisedDate).forEach(d => { const dt = parseSheetDate(d.revisedDate); if (dt && (!m || dt > m)) m = dt; }); return m; };
-  const getFirstRev = (lid) => { let m = null; S.revisedDates.filter(rd => rd.loanId === lid && rd.revisedDate).forEach(d => { const dt = parseSheetDate(d.revisedDate); if (dt && (!m || dt < m)) m = dt; }); return m; };
+  // Resolution is the bottom-most appended row (last in sheet order), not the max date.
+  const getLastRev = (lid) => { const d = S.revisedDates.filter(rd => rd.loanId === lid && rd.revisedDate); return d.length ? parseSheetDate(d[d.length-1].revisedDate) : null; };
   overdue.sort((a, b) => { const da = getLastRev(a.loanId), db = getLastRev(b.loanId); if (!da && !db) return 0; if (!da) return 1; if (!db) return -1; return db - da; });
-  upcoming.sort((a, b) => { const da = getFirstRev(a.loanId), db = getFirstRev(b.loanId); if (!da && !db) return 0; if (!da) return 1; if (!db) return -1; return da - db; });
+  upcoming.sort((a, b) => { const da = getLastRev(a.loanId), db = getLastRev(b.loanId); if (!da && !db) return 0; if (!da) return 1; if (!db) return -1; return da - db; });
 
   function sectionHtml(label, key, color, bg, icon, items, cardType) {
     const collapsed = _revViewCollapsed[key];
@@ -552,10 +546,13 @@ async function selectEmiLoan(loanId) {
     const hasRevForCurrEmi = (S.revisedDates||[]).some(d => d.loanId === loanId && d.emiNum === nextNum);
     if (hasRevForCurrEmi && nextNum < duration) {
       revWrap.style.display = 'block';
-      // Default = latest revised date + 1 month
+      // Default = bottom-most appended revised date + 1 month
       const loanRevs = (S.revisedDates||[]).filter(d => d.loanId === loanId && d.revisedDate);
-      let latest = null;
-      loanRevs.forEach(d => { const dt = parseSheetDate(d.revisedDate); if (dt && (!latest || dt > latest)) latest = dt; });
+      let latest = loanRevs.length ? parseSheetDate(loanRevs[loanRevs.length-1].revisedDate) : null;
+      if (!latest) {
+        const loanRevsAll = (S.revisedDates||[]).filter(d => d.loanId === loanId);
+        if (loanRevsAll.length) latest = parseSheetDate(loanRevsAll[loanRevsAll.length-1].revisedDate);
+      }
       if (latest) {
         const next = new Date(latest);
         next.setMonth(next.getMonth() + 1);
@@ -1500,8 +1497,11 @@ async function selectOverviewLoan(loanId) {
       if (hasRevForCurrEmi && nextNum < duration) {
         revWrap.style.display = 'block';
         const loanRevs = (S.revisedDates||[]).filter(d => d.loanId === loanId && d.revisedDate);
-        let latest = null;
-        loanRevs.forEach(d => { const dt = parseSheetDate(d.revisedDate); if (dt && (!latest || dt > latest)) latest = dt; });
+        let latest = loanRevs.length ? parseSheetDate(loanRevs[loanRevs.length-1].revisedDate) : null;
+        if (!latest) {
+          const loanRevsAll = (S.revisedDates||[]).filter(d => d.loanId === loanId);
+          if (loanRevsAll.length) latest = parseSheetDate(loanRevsAll[loanRevsAll.length-1].revisedDate);
+        }
         if (latest) {
           const next = new Date(latest);
           next.setMonth(next.getMonth() + 1);
@@ -1925,13 +1925,12 @@ function renderOverviewRevised() {
     const hasJabt = S.revisedDates.some(rd => rd.loanId === l.loanId && rd.note === 'Mobile Jabt');
     if (hasJabt) { mobileJabt.push(l); return; }
     const dates = S.revisedDates.filter(rd => rd.loanId === l.loanId && rd.revisedDate);
-    let latest = null;
-    dates.forEach(d => { const dt = parseSheetDate(d.revisedDate); if (dt && (!latest || dt > latest)) latest = dt; });
+    const latest = dates.length ? parseSheetDate(dates[dates.length-1].revisedDate) : null;
     if (!latest) { upcoming.push(l); return; }
     if (latest >= today) upcoming.push(l); else overdue.push(l);
   });
-  const getLastRev = (lid) => { let m = null; S.revisedDates.filter(rd => rd.loanId === lid && rd.revisedDate).forEach(d => { const dt = parseSheetDate(d.revisedDate); if (dt && (!m || dt > m)) m = dt; }); return m; };
-  const getFirstRev = (lid) => { let m = null; S.revisedDates.filter(rd => rd.loanId === lid && rd.revisedDate).forEach(d => { const dt = parseSheetDate(d.revisedDate); if (dt && (!m || dt < m)) m = dt; }); return m; };
+  // Resolution is the bottom-most appended row (last in sheet order), not the max date.
+  const getLastRev = (lid) => { const d = S.revisedDates.filter(rd => rd.loanId === lid && rd.revisedDate); return d.length ? parseSheetDate(d[d.length-1].revisedDate) : null; };
   overdue.sort((a, b) => { const da = getLastRev(a.loanId), db = getLastRev(b.loanId); if (!da && !db) return 0; if (!da) return 1; if (!db) return -1; return db - da; });
   upcoming.sort((a, b) => {
     const da = getLastRev(a.loanId), db = getLastRev(b.loanId);
