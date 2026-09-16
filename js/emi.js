@@ -640,7 +640,7 @@ async function submitEmi() {
     amount:         amt, expectedAmount: stdEmi, misc: amt - stdEmi,
     date, scheduledDate, emiStartDate,
     received: receivedVal,
-    mode: v('emi-mode'), reason: v('emi-reason'), notes: v('emi-notes'),
+    mode: v('emi-mode'), reason: v('emi-reason'), miscType: v('emi-reason'), notes: v('emi-notes'),
     akShare:  sheetLoan ? Math.round(sheetLoan.akShare  * 100) : inAppLoan.data.akShare,
     aksShare: sheetLoan ? Math.round(sheetLoan.aksShare * 100) : inAppLoan.data.aksShare,
   };
@@ -1850,6 +1850,7 @@ async function submitOverviewEmi() {
     received: receivedVal,
     mode: $('ov-emi-mode') ? $('ov-emi-mode').value : 'Cash',
     reason: reason,
+    miscType: reason,
     notes: $('ov-emi-notes') ? $('ov-emi-notes').value : '',
     akShare:  Math.round((loan.akShare  || 0) * 100),
     aksShare: Math.round((loan.aksShare || 0) * 100),

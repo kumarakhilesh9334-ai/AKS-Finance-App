@@ -113,11 +113,20 @@ const v = id => $(id)?.value?.trim() || '';
 const num = id => parseFloat($(id)?.value) || 0;
 const fmt = n => n == null ? '—' : '₹' + Number(n).toLocaleString('en-IN');
 
+let _alertTimer = null;
 function showAlert(msg, type = 's') {
   // Errors open a pop-up dialog instead of the banner strip — impossible to miss.
   if (type === 'e') { showErrorModal(msg); return; }
-  $('alert-box').innerHTML = `<div class="alert al-${type}">${msg}</div>`;
-  setTimeout(() => { if ($('alert-box')) $('alert-box').innerHTML = ''; }, 3500);
+  if (_alertTimer) { clearTimeout(_alertTimer); _alertTimer = null; }
+  const box = $('alert-box');
+  box.innerHTML = `<div class="alert al-${type}" onclick="dismissAlert()">${msg}</div>`;
+  _alertTimer = setTimeout(() => { if ($('alert-box')) $('alert-box').innerHTML = ''; _alertTimer = null; }, 3500);
+}
+
+// Tap anywhere on the toast to dismiss it immediately.
+function dismissAlert() {
+  if (_alertTimer) { clearTimeout(_alertTimer); _alertTimer = null; }
+  if ($('alert-box')) $('alert-box').innerHTML = '';
 }
 
 // Pop-up error dialog (created on demand, styled to match the app).

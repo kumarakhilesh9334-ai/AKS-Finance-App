@@ -85,6 +85,11 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 .al-s{background:#EAF3DE;color:#27500A;border:0.5px solid #97C459}
 .al-e{background:#FCEBEB;color:#791F1F;border:0.5px solid #F09595}
 .al-w{background:#FAEEDA;color:#633806;border:0.5px solid #FAC775}
+/* Floating toast — fixed overlay, out of document flow, so showing/hiding
+   it never shifts the page content (prevents accidental taps). */
+#alert-box{position:fixed;top:84px;left:50%;transform:translateX(-50%);z-index:9999;width:auto;max-width:92vw;pointer-events:none;display:flex;justify-content:center}
+#alert-box .alert{margin:0;box-shadow:0 3px 14px rgba(0,0,0,0.2);pointer-events:auto;cursor:pointer;animation:toast-in 0.18s ease}
+@keyframes toast-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 .divider{border:none;border-top:0.5px solid #eee;margin:0.75rem 0}
 .pcount{background:#BA7517;color:#fff;border-radius:20px;font-size:10px;padding:1px 6px;margin-left:4px}
 .diff-warn{background:#FAEEDA;border:0.5px solid #FAC775;border-radius:8px;padding:8px 10px;margin-top:0.5rem;font-size:12px;color:#633806}

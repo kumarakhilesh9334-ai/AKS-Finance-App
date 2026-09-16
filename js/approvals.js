@@ -123,7 +123,7 @@ async function approve(id, type) {
     if (res.ok) {
       // Server confirmed — update the local list directly, no extra round-trips.
       const isPartial = item.type === 'emi'
-        && String(item.data.miscType||'').toLowerCase() === 'partial payment';
+        && String(item.data.miscType || item.data.reason || '').toLowerCase() === 'partial payment';
       if (isPartial) item.status = 'approved';   // stays in sheet as approved partial
       else S.pending = S.pending.filter(p => p.id !== id);
       cacheState();
@@ -215,7 +215,7 @@ function populateEditModal(item) {
          + editField('Expected ₹',     'ed-expamt',   d.expectedAmount, 'number')
          + editField('Received ₹',     'ed-amount',   d.amount,   'number')
          + editField('Payment date',   'ed-date',     ymdFromDD(d.date), 'date')
-         + editField('Reason',         'ed-misctype', d.miscType);
+         + editField('Reason',         'ed-misctype', d.miscType || d.reason);
   }
   $('edit-modal-body').innerHTML = html;
 }
@@ -268,6 +268,7 @@ async function saveEdit() {
     d.misc          = d.amount - d.expectedAmount;
     d.date          = $('ed-date').value;
     d.miscType      = $('ed-misctype').value.trim();
+    d.reason        = d.miscType;
   }
 
   closeEditModal();
@@ -348,7 +349,7 @@ function subCard(p, showActions, hideRoi) {
         <span class="kv-l">EMI start</span>   <span class="kv-v">${fmtDateDD(d.emiStartDate)}</span>
         <span class="kv-l">Std EMI</span>    <span class="kv-v">${fmt(d.expectedAmount)}</span>
         ${adjExpected!==d.expectedAmount?`<span class="kv-l">Expected</span><span class="kv-v">${fmt(adjExpected)}</span>`:''}
-        <span class="kv-l">Reason for difference</span><span class="kv-v">${d.miscType||'—'}</span>
+        <span class="kv-l">Reason for difference</span><span class="kv-v">${d.miscType||d.reason||'—'}</span>
       </div>
     </div>`;
   }
