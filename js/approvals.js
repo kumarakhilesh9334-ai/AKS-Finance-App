@@ -306,52 +306,61 @@ function subCard(p, showActions, hideRoi) {
   let detail = '';
   if (p.type === 'loan') {
     const d = p.data;
-    detail = `<div class="kv">
-      <span class="kv-l">Bill Date</span>    <span class="kv-v">${fmtDateDD(d.billDate)}</span>
-      <span class="kv-l">Customer</span>     <span class="kv-v">${d.customerName}</span>
-      <span class="kv-l">Phone</span>        <span class="kv-v">${d.phone}</span>
-      <span class="kv-l">Aadhaar/PAN</span>  <span class="kv-v">${d.idNum}</span>
-      <span class="kv-l">Model</span>        <span class="kv-v">${d.model}</span>
-      <span class="kv-l">Device Type</span>  <span class="kv-v">${d.deviceType}</span>
-      <span class="kv-l">Device amount</span><span class="kv-v">${fmt(d.price)}</span>
-      <span class="kv-l">Down payment</span> <span class="kv-v">${fmt(d.downPayment)}</span>
-      <span class="kv-l">Processing fee</span><span class="kv-v">${fmt(d.processingFee)}</span>
-      <span class="kv-l">Interest</span>     <span class="kv-v">${fmt(d.interest)}</span>
-      <span class="kv-l">EMI duration</span> <span class="kv-v">${d.tenure} months</span>
-      <span class="kv-l">Monthly EMI</span>  <span class="kv-v">${fmt((d.price - d.downPayment + d.processingFee + d.interest) / (d.tenure||1))}</span>
-      <span class="kv-l">EMI start</span>    <span class="kv-v">${fmtDateDD(d.emiStart)}</span>
-      <span class="kv-l">App lock</span>     <span class="kv-v">${fmt(d.appLockCharge)}</span>
-      <span class="kv-l">AK share</span>     <span class="kv-v">${d.akShare}%</span>
-      ${!hideRoi ? `<span class="kv-l">Rate of interest</span><span class="kv-v" style="color:#BA7517">${d.rateOfInterest}%</span>` : ''}
-      ${d.guarantor?`<span class="kv-l">Guarantor</span><span class="kv-v">${d.guarantor}</span>`:''}
+    detail = `<div style="display:flex;flex-wrap:wrap;gap:16px">
+      <div class="kv kv-big">
+        <span class="kv-l">Name</span>     <span class="kv-v">${d.customerName}</span>
+        <span class="kv-l">Loan ID</span>  <span class="kv-v">${d.loanId}</span>
+        <span class="kv-l">Interest</span> <span class="kv-v">${fmt(d.interest)}</span>
+        ${!hideRoi ? `<span class="kv-l">ROI</span><span class="kv-v" style="color:#BA7517">${d.rateOfInterest}%</span>` : ''}
+      </div>
+      <div class="kv">
+        <span class="kv-l">Bill Date</span>     <span class="kv-v">${fmtDateDD(d.billDate)}</span>
+        <span class="kv-l">Phone</span>         <span class="kv-v">${d.phone}</span>
+        <span class="kv-l">Aadhaar/PAN</span>   <span class="kv-v">${d.idNum}</span>
+        <span class="kv-l">Model</span>         <span class="kv-v">${d.model}</span>
+        <span class="kv-l">Device Type</span>   <span class="kv-v">${d.deviceType}</span>
+        <span class="kv-l">Device amount</span> <span class="kv-v">${fmt(d.price)}</span>
+        <span class="kv-l">Down payment</span>  <span class="kv-v">${fmt(d.downPayment)}</span>
+        <span class="kv-l">Processing fee</span><span class="kv-v">${fmt(d.processingFee)}</span>
+        <span class="kv-l">EMI duration</span>  <span class="kv-v">${d.tenure} months</span>
+        <span class="kv-l">Monthly EMI</span>   <span class="kv-v">${fmt((d.price - d.downPayment + d.processingFee + d.interest) / (d.tenure||1))}</span>
+        <span class="kv-l">EMI start</span>     <span class="kv-v">${fmtDateDD(d.emiStart)}</span>
+        <span class="kv-l">App lock</span>      <span class="kv-v">${fmt(d.appLockCharge)}</span>
+        <span class="kv-l">AK share</span>      <span class="kv-v">${d.akShare}%</span>
+        ${d.guarantor?`<span class="kv-l">Guarantor</span><span class="kv-v">${d.guarantor}</span>`:''}
+      </div>
     </div>`;
   } else {
     const d = p.data, diff = d.amount - d.expectedAmount;
     const loan = S.sheetLoans?.find(l => l.loanId === d.loanId);
     const extraRcv = loan ? (loan.extraEmiReceived||0) : 0;
     const adjExpected = Math.max(0, d.expectedAmount - extraRcv);
-    detail = `<div class="kv">
-      <span class="kv-l">Loan ID</span>     <span class="kv-v" style="color:#534AB7">${d.loanId}</span>
-      <span class="kv-l">Customer</span>    <span class="kv-v">${d.customerName}</span>
-      <span class="kv-l">Model</span>       <span class="kv-v">${d.model}</span>
-      <span class="kv-l">EMI number</span>  <span class="kv-v">EMI ${d.emiNum}</span>
-      <span class="kv-l">EMI start</span>   <span class="kv-v">${fmtDateDD(d.emiStartDate)}</span>
-      <span class="kv-l">Std EMI</span>    <span class="kv-v">${fmt(d.expectedAmount)}</span>
-      ${adjExpected!==d.expectedAmount?`<span class="kv-l">Expected</span><span class="kv-v">${fmt(adjExpected)}</span>`:''}
-      <span class="kv-l">Received</span>    <span class="kv-v">${fmt(d.amount)}${Math.abs(diff)>1?` (${diff>0?'+':'–'}${fmt(Math.abs(diff))})`:''}</span>
-      ${d.miscType?`<span class="kv-l">Reason</span><span class="kv-v">${d.miscType}</span>`:''}
-      <span class="kv-l">Payment date</span><span class="kv-v">${fmtDateDD(d.date)}</span>
+    detail = `<div style="display:flex;flex-wrap:wrap;gap:16px">
+      <div class="kv kv-big">
+        <span class="kv-l">Name</span>   <span class="kv-v">${d.customerName}</span>
+        <span class="kv-l">Amount</span> <span class="kv-v">${fmt(d.amount)}${Math.abs(diff)>1?` (${diff>0?'+':'–'}${fmt(Math.abs(diff))})`:''}</span>
+        <span class="kv-l">Date</span>   <span class="kv-v">${fmtDateDD(d.date)}</span>
+      </div>
+      <div class="kv">
+        <span class="kv-l">Loan ID</span>     <span class="kv-v" style="color:#534AB7">${d.loanId}</span>
+        <span class="kv-l">Model</span>       <span class="kv-v">${d.model}</span>
+        <span class="kv-l">EMI number</span>  <span class="kv-v">EMI ${d.emiNum}</span>
+        <span class="kv-l">EMI start</span>   <span class="kv-v">${fmtDateDD(d.emiStartDate)}</span>
+        <span class="kv-l">Std EMI</span>    <span class="kv-v">${fmt(d.expectedAmount)}</span>
+        ${adjExpected!==d.expectedAmount?`<span class="kv-l">Expected</span><span class="kv-v">${fmt(adjExpected)}</span>`:''}
+        <span class="kv-l">Reason for difference</span><span class="kv-v">${d.miscType||'—'}</span>
+      </div>
     </div>`;
   }
 
   const btns = {
-    approve: '<button class="btn btn-success btn-sm" onclick="approve(\''+p.id+'\',\''+p.type+'\')">✓ Approve</button>',
-    edit: '<button class="btn btn-sm" style="color:#534AB7;border-color:#534AB7" onclick="editSubmission(\''+p.id+'\',\''+p.type+'\')">✎ Edit</button>',
-    reject: '<button class="btn btn-danger btn-sm"  onclick="reject(\''+p.id+'\',\''+p.type+'\')">✗ Reject</button>',
+    approve: '<button class="btn btn-success btn-action" onclick="approve(\''+p.id+'\',\''+p.type+'\')">✓ Approve</button>',
+    edit: '<button class="btn btn-action btn-action-edit" onclick="editSubmission(\''+p.id+'\',\''+p.type+'\')">✎ Edit</button>',
+    reject: '<button class="btn btn-danger btn-action" onclick="reject(\''+p.id+'\',\''+p.type+'\')">✗ Reject</button>',
   };
-  const actionList = showActions === true ? ['approve','edit','reject'] : (Array.isArray(showActions) ? showActions : []);
+  const actionList = showActions === true ? ['reject','edit','approve'] : (Array.isArray(showActions) ? showActions : []);
   const actionsHtml = actionList.length && p.status === 'pending'
-    ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:0.75rem;padding-top:0.75rem;border-top:0.5px solid #eee">${actionList.map(a => btns[a]||'').join('')}</div>`
+    ? `<div class="appr-actions">${actionList.map(a => btns[a]||'').join('')}</div>`
     : p.note ? `<div style="font-size:12px;color:#A32D2D;margin-top:0.5rem">Rejection note: ${p.note}</div>` : '';
 
   return `<div class="card">
