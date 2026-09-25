@@ -12,6 +12,7 @@ const INPUT_SHEET      = 'Input';
 const LOGGED_EMI_SHEET     = 'logged EMI';
 const USERS_SHEET          = 'Users';
 const REVISED_DATES_SHEET  = 'Revised_Dates';
+const LOCK_STATUS_SHEET    = 'LockAppStatus';
 const STOCK_SHEET_ID   = '1HXvWKCy8F5xVgPlnB4R0zq9ufMUaqnx69OqGXjRXLDA';
 const STOCK_SHEET_TAB  = 'Data';
 
@@ -114,6 +115,12 @@ function doGet(e) {
       const raw   = sheet.getRange(2, 1, sheet.getLastRow()-1, nCols).getValues();
       const loans = raw.filter(r => r[C.loanId] && String(r[C.loanId]).trim()).map(r => buildFullLoan(r));
 
+      // Merge lock-app-removed status from LockAppStatus tab (Data stays read-only)
+      const lockMap = readLockStatus(ss);
+      if (Object.keys(lockMap).length) loans.forEach(loan => {
+        if (lockMap[loan.loanId]) loan.lockRemoved = true;
+      });
+
       // Enrich all loans with miscType from logged EMI sheet (eliminates per-card round-trip)
       try {
         const logSheet = ss.getSheetByName(LOGGED_EMI_SHEET);
@@ -156,6 +163,9 @@ function doGet(e) {
       const row   = raw.find(r => String(r[C.loanId]).trim() === String(loanId).trim());
       if (!row) return jsonResponse({ok:false,error:'Not found'});
       const loan = buildFullLoan(row);
+      // Merge lock-app-removed status from LockAppStatus tab (Data stays read-only)
+      const lockMap = readLockStatus(ss);
+      if (lockMap[loanId]) loan.lockRemoved = true;
       // Enrich slots with miscType from logged EMI sheet
       try {
         const logSheet = ss.getSheetByName(LOGGED_EMI_SHEET);
@@ -269,6 +279,11 @@ function doGet(e) {
       const nCols = 93; // up to revisedDateMsg (index 92)
       const raw   = sheet.getRange(2, 1, sheet.getLastRow()-1, nCols).getValues();
       const loans = raw.map(r => buildFullLoan(r));
+      // Merge lock-app-removed status from LockAppStatus tab (Data stays read-only)
+      const lockMap = readLockStatus(ss);
+      if (Object.keys(lockMap).length) loans.forEach(loan => {
+        if (lockMap[loan.loanId]) loan.lockRemoved = true;
+      });
       return jsonResponse({ok:true, loans});
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
@@ -833,6 +848,46 @@ function doPost(e) {
       return jsonResponse({ok:true, dates:readAllRevisedDates(ss)});
     }
 
+    // ── Set lock app removed (loan-level, upsert into LockAppStatus) ──
+    if (payload.action === 'setLockRemoved') {
+      const loanId = String(payload.loanId || '').trim();
+      if (!loanId) return jsonResponse({ok:false, error:'Missing loanId'});
+
+      // Verify loan exists in Data and is a Mobile device (read-only scan)
+      const ds = ss.getSheetByName(DATA_SHEET);
+      let deviceType = '';
+      if (ds && ds.getLastRow() > 1) {
+        const ids = ds.getRange(2, C.loanId+1, ds.getLastRow()-1, 1).getValues();
+        for (let i=0; i<ids.length; i++) {
+          if (String(ids[i][0]).trim() === loanId) {
+            deviceType = String(ds.getRange(i+2, C.deviceType+1).getValue() || '').trim();
+            break;
+          }
+        }
+      }
+      if (!deviceType) return jsonResponse({ok:false, error:'Loan not found'});
+      if (deviceType.toLowerCase() !== 'mobile') return jsonResponse({ok:false, error:'Not a Mobile device'});
+
+      const sheet = ensureSheet(ss, LOCK_STATUS_SHEET, ['LoanID','Removed','RemovedAt']);
+      const now = new Date().toISOString();
+      let rowNum = 0;
+      if (sheet.getLastRow() > 1) {
+        const ids = sheet.getRange(2, 1, sheet.getLastRow()-1, 1).getValues();
+        for (let i=0; i<ids.length; i++) {
+          if (String(ids[i][0]).trim() === loanId) { rowNum = i + 2; break; }
+        }
+      }
+      if (rowNum > 0) {
+        sheet.getRange(rowNum, 2).setValue(true);
+        sheet.getRange(rowNum, 3).setValue(now);
+      } else {
+        sheet.appendRow([loanId, true, now]);
+      }
+      try { CacheService.getScriptCache().remove('loans_slim'); } catch(e) {}
+      try { CacheService.getScriptCache().remove('loans_full'); } catch(e) {}
+      return jsonResponse({ok:true});
+    }
+
     return jsonResponse({ok:false, error:'Unknown action: '+payload.action});
   } catch(err){ return jsonResponse({ok:false, error:err.message}); }
 }
@@ -863,6 +918,18 @@ function fixDuplicatePids() {
 
 // ── Read every revised date (shared by GET readRevisedDates and setRevisedDate) ──
 // TOP-LEVEL helper — must live outside doGet/doPost so both handlers can call it.
+function readLockStatus(ss) {
+  const sheet = ss.getSheetByName(LOCK_STATUS_SHEET);
+  if (!sheet || sheet.getLastRow() < 2) return {};
+  const rows = sheet.getRange(2, 1, sheet.getLastRow()-1, 2).getValues();
+  const map = {};
+  rows.forEach(r => {
+    const lid = String(r[0]||'').trim();
+    if (lid && r[1] === true) map[lid] = true;
+  });
+  return map;
+}
+
 function readAllRevisedDates(ss) {
   const sheet = ss.getSheetByName(REVISED_DATES_SHEET);
   if (!sheet || sheet.getLastRow() < 2) return [];

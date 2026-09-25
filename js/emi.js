@@ -1085,6 +1085,28 @@ async function submitRevisedDate() {
   } finally { hideLoader(); }
 }
 
+async function removeLockApp() {
+  const loanId = S.selectedEmiLoanId;
+  if (!loanId) return;
+  if (!confirm('Mark lock app as removed for loan ' + loanId + '?')) return;
+  showLoader();
+  try {
+    const res = await gasPost({ action: 'setLockRemoved', loanId });
+    if (res.ok) {
+      const loan = (S.sheetLoans && S.sheetLoans.find(l => l.loanId === loanId))
+        || S.loans.find(l => l.loanId === loanId);
+      if (loan) loan.lockRemoved = true;
+      selectOverviewLoan(loanId);
+      rerenderActiveTab();
+      showAlert('Lock app marked as removed.');
+    } else {
+      showAlert('Failed to remove lock app: ' + (res.error || 'Unknown error'), 'e');
+    }
+  } catch (e) {
+    showAlert('Failed to remove lock app: ' + (e.message || 'Unknown error'), 'e');
+  } finally { hideLoader(); }
+}
+
 // ── OVERVIEW TAB (merged view) ────────────────────────────────────────────
 const _ovViewCollapsed = { upcoming: false, overdue: false };
 S.showOverviewRevised = false;
@@ -1450,7 +1472,12 @@ async function selectOverviewLoan(loanId) {
       }
     }
     if (btnWrap) {
-      btnWrap.style.display = (loan.numReceivedEmi < duration) ? '' : 'none';
+      const canRemoveLock = S.cu.role === 'admin' && String(loan.deviceType||'').trim().toLowerCase() === 'mobile' && loan.lockRemoved !== true;
+      const lockBtn = $('ov-lock-remove-btn');
+      if (lockBtn) lockBtn.style.display = canRemoveLock ? '' : 'none';
+      const revBtn = $('ov-revised-date-btn');
+      if (revBtn) revBtn.style.display = (loan.numReceivedEmi < duration) ? '' : 'none';
+      btnWrap.style.display = (loan.numReceivedEmi < duration || canRemoveLock) ? '' : 'none';
       btnWrap.dataset.monthlyEmi = loan.monthlyEmi || '';
       btnWrap.dataset.duration = duration;
     }
