@@ -369,7 +369,7 @@ async function selectEmiLoan(loanId) {
     if (!loan) return;
 
     // If full data not yet loaded and card is slim, fetch detail on click
-    if (!S._fullLoaded && loan._slim) {
+    if (loan._slim) {
       try {
         const data = await gasGet('readLoanDetail', { loanId });
         if (data.ok && data.loan) {
@@ -833,7 +833,7 @@ async function openCdDetail(loanId) {
   let l = S.sheetLoans && S.sheetLoans.find(x => x.loanId === loanId);
   if (!l) return;
 
-  if (!S._fullLoaded && l._slim) {
+  if (l._slim) {
     try {
       const data = await gasGet('readLoanDetail', { loanId });
       if (data.ok && data.loan) {
@@ -1317,7 +1317,7 @@ async function selectOverviewLoan(loanId) {
       || (() => { const l = S.loans.find(l => l.loanId === loanId); return l ? { ...l.data, status:'Active', slots:l.emis||[], numReceivedEmi: (l.emis||[]).length } : null; })();
     if (!loan) return;
 
-    if (!S._fullLoaded && loan._slim) {
+    if (loan._slim) {
       try {
         const data = await gasGet('readLoanDetail', { loanId });
         if (data.ok && data.loan) {

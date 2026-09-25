@@ -78,7 +78,8 @@ function restoreState() {
       const s = localStorage.getItem('aks_cache_'+k);
       if (s) { const v = JSON.parse(s); if (v !== null) { S[k] = v; restored = true; } }
     });
-    if (restored) S._fullLoaded = true;
+    const firstLoan = Array.isArray(S.sheetLoans) ? S.sheetLoans[0] : null;
+    S._fullLoaded = restored && !!firstLoan && !firstLoan._slim;
   } catch(e) {}
 }
 

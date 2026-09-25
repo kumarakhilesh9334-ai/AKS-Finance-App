@@ -53,12 +53,20 @@ async function gasGet(action, params = {}) {
     .map(([k,v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v === undefined ? '' : v))
     .join('&');
   if (_inflightGets[qs]) return _inflightGets[qs];
+  // Retry transport-level failures (network errors / non-JSON HTML responses)
+  // up to 2 more times with backoff — reads are idempotent, safe to retry.
+  const DELAY = [0, 1000, 2000];
   const req = (async () => {
     try {
-      const res = await fetch(S.sheetsUrl + '?' + qs, { cache: 'no-store' });
-      return await res.json();
-    } catch(err) {
-      return { ok: false, error: 'Network error: ' + err.message };
+      for (let attempt = 0; attempt < DELAY.length; attempt++) {
+        if (DELAY[attempt]) await new Promise(r => setTimeout(r, DELAY[attempt]));
+        try {
+          const res = await fetch(S.sheetsUrl + '?' + qs, { cache: 'no-store' });
+          return await res.json();
+        } catch (err) {
+          if (attempt === DELAY.length - 1) return { ok: false, error: 'Network error: ' + err.message };
+        }
+      }
     } finally {
       delete _inflightGets[qs];
     }
