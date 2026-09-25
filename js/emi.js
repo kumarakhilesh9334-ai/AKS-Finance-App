@@ -1483,7 +1483,7 @@ async function selectOverviewLoan(loanId) {
         if (canRemoveLock) {
           const alreadyRemoved = loan.lockRemoved === true;
           lockBtn.textContent = alreadyRemoved ? 'Restore App Lock' : 'Remove Lock App';
-          lockBtn.style.background = alreadyRemoved ? '#399C9C' : '#A32D2D';
+          lockBtn.style.background = alreadyRemoved ? '#A32D2D' : '#399C9C';
           lockBtn.style.color = '#fff';
           lockBtn.style.border = 'none';
         }
