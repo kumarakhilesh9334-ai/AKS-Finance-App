@@ -1085,25 +1085,29 @@ async function submitRevisedDate() {
   } finally { hideLoader(); }
 }
 
-async function removeLockApp() {
+async function toggleLockApp() {
   const loanId = S.selectedEmiLoanId;
   if (!loanId) return;
-  if (!confirm('Mark lock app as removed for loan ' + loanId + '?')) return;
+  const loan = (S.sheetLoans && S.sheetLoans.find(l => l.loanId === loanId))
+    || (S.loans && S.loans.find(l => l.loanId === loanId));
+  const currentlyRemoved = !!(loan && loan.lockRemoved);
+  const target = !currentlyRemoved;
+  if (!confirm(target
+    ? 'Mark lock app as removed for loan ' + loanId + '?'
+    : 'Restore app lock for loan ' + loanId + '?')) return;
   showLoader();
   try {
-    const res = await gasPost({ action: 'setLockRemoved', loanId });
+    const res = await gasPost({ action: 'setLockRemoved', loanId, removed: target });
     if (res.ok) {
-      const loan = (S.sheetLoans && S.sheetLoans.find(l => l.loanId === loanId))
-        || S.loans.find(l => l.loanId === loanId);
-      if (loan) loan.lockRemoved = true;
+      if (loan) loan.lockRemoved = target ? true : undefined;
       selectOverviewLoan(loanId);
       rerenderActiveTab();
-      showAlert('Lock app marked as removed.');
+      showAlert(target ? 'Lock app marked as removed.' : 'Lock app restored.');
     } else {
-      showAlert('Failed to remove lock app: ' + (res.error || 'Unknown error'), 'e');
+      showAlert('Failed: ' + (res.error || 'Unknown error'), 'e');
     }
   } catch (e) {
-    showAlert('Failed to remove lock app: ' + (e.message || 'Unknown error'), 'e');
+    showAlert('Failed: ' + (e.message || 'Unknown error'), 'e');
   } finally { hideLoader(); }
 }
 
@@ -1472,9 +1476,18 @@ async function selectOverviewLoan(loanId) {
       }
     }
     if (btnWrap) {
-      const canRemoveLock = S.cu.role === 'admin' && String(loan.deviceType||'').trim().toLowerCase() === 'mobile' && loan.lockRemoved !== true;
+      const canRemoveLock = S.cu.role === 'admin' && String(loan.deviceType||'').trim().toLowerCase() === 'mobile';
       const lockBtn = $('ov-lock-remove-btn');
-      if (lockBtn) lockBtn.style.display = canRemoveLock ? '' : 'none';
+      if (lockBtn) {
+        lockBtn.style.display = canRemoveLock ? '' : 'none';
+        if (canRemoveLock) {
+          const alreadyRemoved = loan.lockRemoved === true;
+          lockBtn.textContent = alreadyRemoved ? 'Restore App Lock' : 'Remove Lock App';
+          lockBtn.style.background = alreadyRemoved ? '#399C9C' : '#A32D2D';
+          lockBtn.style.color = '#fff';
+          lockBtn.style.border = 'none';
+        }
+      }
       const revBtn = $('ov-revised-date-btn');
       if (revBtn) revBtn.style.display = (loan.numReceivedEmi < duration) ? '' : 'none';
       btnWrap.style.display = (loan.numReceivedEmi < duration || canRemoveLock) ? '' : 'none';

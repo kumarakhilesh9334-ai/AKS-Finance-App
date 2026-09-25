@@ -848,8 +848,10 @@ function doPost(e) {
       return jsonResponse({ok:true, dates:readAllRevisedDates(ss)});
     }
 
-    // ── Set lock app removed (loan-level, upsert into LockAppStatus) ──
+    // ── Set lock app removed state (loan-level toggle, upsert into LockAppStatus) ──
     if (payload.action === 'setLockRemoved') {
+      const caller = getCachedUsers(ss).find(u => u.id === _userId);
+      if (!caller || caller.role !== 'admin') return jsonResponse({ok:false, error:'Admin only'});
       const loanId = String(payload.loanId || '').trim();
       if (!loanId) return jsonResponse({ok:false, error:'Missing loanId'});
 
@@ -870,6 +872,7 @@ function doPost(e) {
 
       const sheet = ensureSheet(ss, LOCK_STATUS_SHEET, ['LoanID','Removed','RemovedAt']);
       const now = new Date().toISOString();
+      const removed = payload.removed === undefined ? true : payload.removed === true || payload.removed === 'true';
       let rowNum = 0;
       if (sheet.getLastRow() > 1) {
         const ids = sheet.getRange(2, 1, sheet.getLastRow()-1, 1).getValues();
@@ -878,10 +881,10 @@ function doPost(e) {
         }
       }
       if (rowNum > 0) {
-        sheet.getRange(rowNum, 2).setValue(true);
-        sheet.getRange(rowNum, 3).setValue(now);
+        sheet.getRange(rowNum, 2).setValue(removed);
+        sheet.getRange(rowNum, 3).setValue(removed ? now : '');
       } else {
-        sheet.appendRow([loanId, true, now]);
+        sheet.appendRow([loanId, removed, removed ? now : '']);
       }
       try { CacheService.getScriptCache().remove('loans_slim'); } catch(e) {}
       try { CacheService.getScriptCache().remove('loans_full'); } catch(e) {}
