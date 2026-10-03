@@ -1357,6 +1357,26 @@ async function selectOverviewLoan(loanId) {
     $('ov-detail-loanid').textContent = loanId;
     $('ov-detail-sub').textContent    = loan.customerName || '';
 
+    const collectEl = $('ov-detail-collect');
+    if (collectEl) {
+      if (loan.emiCompleted || loan.status === 'Closed') {
+        collectEl.style.display = 'none';
+      } else {
+        const std       = loan.monthlyEmi || 0;
+        const revExtra  = -(loan.extraEmiReceived || 0);
+        const expected  = Math.max(0, std + revExtra);
+        $('ov-detail-collect-main').textContent = 'Collect: ' + fmtAmt(expected);
+        const sub = $('ov-detail-collect-sub');
+        if (loan.extraEmiReceived !== 0) {
+          sub.textContent = '(' + std.toLocaleString('en-IN') + (revExtra >= 0 ? ' + ' : ' − ') + Math.abs(revExtra).toLocaleString('en-IN') + ')';
+          sub.style.display = '';
+        } else {
+          sub.style.display = 'none';
+        }
+        collectEl.style.display = '';
+      }
+    }
+
     const detail = $('ov-detail');
     detail.style.display = 'block';
     if ($('ov-detail-ph')) $('ov-detail-ph').style.display = 'none';
@@ -1503,9 +1523,7 @@ async function selectOverviewLoan(loanId) {
       if (emiFormWrap) emiFormWrap.style.display = 'none';
     } else {
       if (emiFormWrap) emiFormWrap.style.display = '';
-      const extraReceived = loan.extraEmiReceived || 0;
-      const expectedAmt   = Math.max(0, (loan.monthlyEmi || 0) - extraReceived);
-      $('ov-next-label').textContent = `Recording: EMI ${nextNum} of ${duration} · Standard EMI: ${fmtAmt(loan.monthlyEmi)}${extraReceived ? ' · Expected to collect: ' + fmtAmt(expectedAmt) : ''}`;
+      $('ov-next-label').textContent = `Recording: EMI ${nextNum} of ${duration} · Standard EMI: ${fmtAmt(loan.monthlyEmi)}`;
 
       // Prefill
       $('ov-emi-amt').value  = loan.monthlyEmi || '';
