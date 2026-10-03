@@ -34,6 +34,11 @@ async function gasPost(payload) {
   payload._userId = S.cu ? S.cu.id : '';
   payload._pin    = S.cu ? S.cu.pin : '';
   form.append('payload', JSON.stringify(payload));
+  // Every POST is a potential mutation: a write takes priority over the
+  // background full-data load, and any read already in flight becomes a stale
+  // pre-write snapshot that must not be painted.
+  preemptFullLoadRetry();
+  noteLoanWrite();
   try {
     const res = await fetch(S.sheetsUrl, { method:'POST', body: form });
     return await res.json();
@@ -44,35 +49,47 @@ async function gasPost(payload) {
 
 // Authenticated GET helper — auto-injects _userId and _pin as query params.
 // Identical concurrent GETs share one in-flight request instead of doubling up.
+// Pass { signal } to make the request abortable (see preemptFullLoadRetry) — an
+// aborted request never consumes a retry attempt, since the abort is deliberate.
 const _inflightGets = {};
-async function gasGet(action, params = {}) {
+async function gasGet(action, params = {}, opts = {}) {
   params.action = action;
   params._userId = S.cu ? S.cu.id : '';
   params._pin    = S.cu ? S.cu.pin : '';
   const qs = Object.entries(params)
     .map(([k,v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v === undefined ? '' : v))
     .join('&');
-  if (_inflightGets[qs]) return _inflightGets[qs];
+  const signal = opts && opts.signal;
+  // Share an in-flight request only when it is interchangeable with this one. An
+  // untargeted caller may reuse any request, but an abortable caller must never
+  // inherit a foreign signal: it could not cancel it, and a preempted entry would
+  // poison the next attempt by handing it the aborted result.
+  const entry = _inflightGets[qs];
+  if (entry && (!signal || entry.signal === signal)) return entry.promise;
   // Retry transport-level failures (network errors / non-JSON HTML responses)
   // up to 2 more times with backoff — reads are idempotent, safe to retry.
   const DELAY = [0, 1000, 2000];
-  const req = (async () => {
+  const token = { signal: signal, promise: null };
+  _inflightGets[qs] = token;   // register first so a synchronous return still cleans up
+  token.promise = (async () => {
     try {
       for (let attempt = 0; attempt < DELAY.length; attempt++) {
         if (DELAY[attempt]) await new Promise(r => setTimeout(r, DELAY[attempt]));
+        if (signal && signal.aborted) return { ok: false, error: 'aborted', aborted: true };
         try {
-          const res = await fetch(S.sheetsUrl + '?' + qs, { cache: 'no-store' });
+          const res = await fetch(S.sheetsUrl + '?' + qs, { cache: 'no-store', signal: signal });
           return await res.json();
         } catch (err) {
+          if (signal && signal.aborted) return { ok: false, error: 'aborted', aborted: true };
           if (attempt === DELAY.length - 1) return { ok: false, error: 'Network error: ' + err.message };
         }
       }
     } finally {
-      delete _inflightGets[qs];
+      // Identity-checked: a newer attempt may already own this key.
+      if (_inflightGets[qs] === token) delete _inflightGets[qs];
     }
   })();
-  _inflightGets[qs] = req;
-  return req;
+  return token.promise;
 }
 
 // ── Approvals: two-column layout ──────────────────────────────────────────

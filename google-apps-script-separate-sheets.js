@@ -116,34 +116,15 @@ function doGet(e) {
       const loans = raw.filter(r => r[C.loanId] && String(r[C.loanId]).trim()).map(r => buildFullLoan(r));
 
       // Merge lock-app-removed status from LockAppStatus tab (Data stays read-only)
-      const lockMap = readLockStatus(ss);
+      const lockMap = getCachedLockStatusMap(ss);
       if (Object.keys(lockMap).length) loans.forEach(loan => {
         if (lockMap[loan.loanId]) loan.lockRemoved = true;
       });
 
       // Enrich all loans with miscType from logged EMI sheet (eliminates per-card round-trip)
       try {
-        const logSheet = ss.getSheetByName(LOGGED_EMI_SHEET);
-        if (logSheet && logSheet.getLastRow() > 1) {
-          const logData = logSheet.getRange(2, 1, logSheet.getLastRow()-1, 12).getValues();
-          const byLoan = {};
-          logData.forEach(r => {
-            const lid = String(r[0]||'').replace(/_\d+$/, '');
-            if (!byLoan[lid]) byLoan[lid] = [];
-            byLoan[lid].push(r);
-          });
-          loans.forEach(loan => {
-            const rows = byLoan[loan.loanId];
-            if (rows) rows.forEach(r => {
-              const emiNum = parseInt(r[4]);
-              const mt = String(r[11]||'').trim();
-              if (mt && loan.slots) {
-                const slot = loan.slots.find(s => s.num === emiNum);
-                if (slot) slot.miscType = mt;
-              }
-            });
-          });
-        }
+        const byLoan = getCachedEmiLogByLoan(ss);
+        loans.forEach(loan => applyMiscTypes(loan, byLoan));
       } catch(e) { /* non-critical */ }
 
       const loansStr = JSON.stringify(loans);
@@ -156,50 +137,43 @@ function doGet(e) {
   if (action === 'readLoanDetail') {
     const loanId = (e.parameter && e.parameter.loanId) || '';
     try {
+      const cache = CacheService.getScriptCache();
+      const ck = loanDetailCacheKey(loanId);
+      const hit = cache.get(ck);
+      if (hit) {
+        try { return jsonResponse({ ok:true, loan: JSON.parse(hit) }); } catch(e) { /* rebuild */ }
+      }
+
       const sheet = ss.getSheetByName(DATA_SHEET);
       if (!sheet || sheet.getLastRow() < 2) return jsonResponse({ok:false,error:'No data'});
-      const nCols = sheet.getLastColumn();
-      const raw   = sheet.getRange(2,1,sheet.getLastRow()-1,nCols).getValues();
-      const row   = raw.find(r => String(r[C.loanId]).trim() === String(loanId).trim());
-      if (!row) return jsonResponse({ok:false,error:'Not found'});
+      const lastRow = sheet.getLastRow();
+      const nCols   = sheet.getLastColumn();
+
+      // Targeted lookup: read only the loanId column to locate the row, then read
+      // that single row. Previously this read every row x every column and searched
+      // in JS, which cost 4-5s per card click.
+      const ids = sheet.getRange(2, C.loanId + 1, lastRow - 1, 1).getValues();
+      const want = String(loanId).trim();
+      let rel = -1;
+      for (let i = 0; i < ids.length; i++) {
+        if (String(ids[i][0] || '').trim() === want) { rel = i; break; }
+      }
+      if (rel === -1) return jsonResponse({ok:false,error:'Not found'});
+
+      const row = sheet.getRange(rel + 2, 1, 1, nCols).getValues()[0];
       const loan = buildFullLoan(row);
+
       // Merge lock-app-removed status from LockAppStatus tab (Data stays read-only)
-      const lockMap = readLockStatus(ss);
+      const lockMap = getCachedLockStatusMap(ss);
       if (lockMap[loanId]) loan.lockRemoved = true;
+
       // Enrich slots with miscType from logged EMI sheet
-      try {
-        const logSheet = ss.getSheetByName(LOGGED_EMI_SHEET);
-        if (logSheet && logSheet.getLastRow() > 1) {
-          const logData = logSheet.getRange(2, 1, logSheet.getLastRow()-1, 12).getValues();
-          const prefix = String(loanId) + '_';
-          logData.forEach(r => {
-            if (String(r[0]||'').startsWith(prefix)) {
-              const emiNum = parseInt(r[4]);
-              const miscType = String(r[11]||'').trim();
-              if (miscType && loan.slots) {
-                const slot = loan.slots.find(s => s.num === emiNum);
-                if (slot) slot.miscType = miscType;
-              }
-            }
-          });
-        }
-      } catch(e) { /* non-critical */ }
+      try { applyMiscTypes(loan, getCachedEmiLogByLoan(ss)); } catch(e) { /* non-critical */ }
+
       // Enrich with revised dates for this loan
-      try {
-        const revSheet = ss.getSheetByName(REVISED_DATES_SHEET);
-        if (revSheet && revSheet.getLastRow() > 1) {
-          const revData = revSheet.getRange(2, 1, revSheet.getLastRow()-1, 6).getValues();
-          loan.revisedDates = revData
-            .filter(r => String(r[0]||'').trim() === loanId)
-            .map(r => ({
-              emiNum: parseInt(r[1])||0,
-              revisedDate: fmtDate(r[2]),
-              amount: parseFloat(r[3])||0,
-              note: String(r[4]||'').trim(),
-              createdAt: String(r[5]||''),
-            }));
-        }
-      } catch(e) { /* non-critical */ }
+      try { loan.revisedDates = getCachedRevisedDatesFor(ss, loanId); } catch(e) { /* non-critical */ }
+
+      cachePutIfSmall(cache, ck, loan, DETAIL_CACHE_TTL);
       return jsonResponse({ok:true, loan});
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
@@ -757,6 +731,7 @@ function doPost(e) {
       }
       try { CacheService.getScriptCache().remove('loans_slim'); } catch(e) {}
       try { CacheService.getScriptCache().remove('loans_full'); } catch(e) {}
+      bustLoanDataCaches(type === 'emi' ? String(row[5] || '').replace(/_\d+$/, '') : '');
       // Lean response — client removes the approved item locally.
       return jsonResponse({ok:true});
     }
@@ -844,6 +819,7 @@ function doPost(e) {
       ]);
       try { CacheService.getScriptCache().remove('loans_slim'); } catch(e) {}
       try { CacheService.getScriptCache().remove('loans_full'); } catch(e) {}
+      bustLoanDataCaches(loanId);
       // Return fresh dates in the same response — saves the follow-up readRevisedDates GET.
       return jsonResponse({ok:true, dates:readAllRevisedDates(ss)});
     }
@@ -888,6 +864,7 @@ function doPost(e) {
       }
       try { CacheService.getScriptCache().remove('loans_slim'); } catch(e) {}
       try { CacheService.getScriptCache().remove('loans_full'); } catch(e) {}
+      bustLoanDataCaches(loanId);
       return jsonResponse({ok:true});
     }
 
@@ -944,6 +921,104 @@ function readAllRevisedDates(ss) {
     amount: parseFloat(r[3])||0,
     note: String(r[4]||'').trim(),
     createdAt: String(r[5]||''),
+  }));
+}
+
+// ── Cached helpers for per-loan detail reads (readLoanDetail) ─────────────
+// readLoanDetail runs once per card click while the client is in slim mode.
+// The lock-status, logged-EMI and revised-date sheets are the same for every
+// loan, so they are cached for 5 min instead of being re-read per click.
+const DETAIL_CACHE_TTL = 300;
+
+function loanDetailCacheKey(loanId) {
+  return 'loan_dtl_' + String(loanId || '').replace(/[^A-Za-z0-9_-]/g, '_');
+}
+
+// Drops the per-loan detail cache plus every shared sheet cache it was built
+// from. Called from all write paths so a mutated loan is never served stale.
+function bustLoanDataCaches(loanId) {
+  try { CacheService.getScriptCache().remove(loanDetailCacheKey(loanId)); } catch(e) {}
+  try { CacheService.getScriptCache().remove('lock_status_map'); } catch(e) {}
+  try { CacheService.getScriptCache().remove('emi_log_byloan'); } catch(e) {}
+  try { CacheService.getScriptCache().remove('revised_dates_raw'); } catch(e) {}
+}
+
+function cachePutIfSmall(cache, key, value, ttl) {
+  try {
+    const str = JSON.stringify(value);
+    if (str.length <= 95000) cache.put(key, str, ttl);
+  } catch(e) { /* non-critical */ }
+}
+
+// Lock-app-removed map, cached.
+function getCachedLockStatusMap(ss) {
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get('lock_status_map');
+  if (hit) { try { return JSON.parse(hit); } catch(e) { /* re-read */ } }
+  const map = readLockStatus(ss);
+  cachePutIfSmall(cache, 'lock_status_map', map, DETAIL_CACHE_TTL);
+  return map;
+}
+
+// Logged-EMI rows grouped by base loanId (the _<n> suffix stripped), cached.
+function getCachedEmiLogByLoan(ss) {
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get('emi_log_byloan');
+  if (hit) { try { return JSON.parse(hit); } catch(e) { /* re-read */ } }
+  const byLoan = {};
+  try {
+    const logSheet = ss.getSheetByName(LOGGED_EMI_SHEET);
+    if (logSheet && logSheet.getLastRow() > 1) {
+      const logData = logSheet.getRange(2, 1, logSheet.getLastRow()-1, 12).getValues();
+      logData.forEach(r => {
+        const lid = String(r[0]||'').replace(/_\d+$/, '');
+        if (!byLoan[lid]) byLoan[lid] = [];
+        byLoan[lid].push(r);
+      });
+    }
+  } catch(e) { /* non-critical */ }
+  cachePutIfSmall(cache, 'emi_log_byloan', byLoan, DETAIL_CACHE_TTL);
+  return byLoan;
+}
+
+// Copies miscType from the logged-EMI rows onto the matching slots of a loan.
+function applyMiscTypes(loan, byLoan) {
+  const rows = byLoan && byLoan[loan.loanId];
+  if (!rows || !loan.slots) return;
+  rows.forEach(r => {
+    const emiNum = parseInt(r[4]);
+    const mt = String(r[11]||'').trim();
+    if (!mt) return;
+    const slot = loan.slots.find(s => s.num === emiNum);
+    if (slot) slot.miscType = mt;
+  });
+}
+
+// Revised dates for one loan — raw sheet cached, filtered in memory.
+function getCachedRevisedDatesFor(ss, loanId) {
+  const cache = CacheService.getScriptCache();
+  let rows = null;
+  const hit = cache.get('revised_dates_raw');
+  if (hit) { try { rows = JSON.parse(hit); } catch(e) { rows = null; } }
+  if (!rows) {
+    rows = [];
+    try {
+      const revSheet = ss.getSheetByName(REVISED_DATES_SHEET);
+      if (revSheet && revSheet.getLastRow() > 1) {
+        rows = revSheet.getRange(2, 1, revSheet.getLastRow()-1, 6).getValues().map(r => [
+          String(r[0]||'').trim(),
+          parseInt(r[1])||0,
+          fmtDate(r[2]),
+          parseFloat(r[3])||0,
+          String(r[4]||'').trim(),
+          String(r[5]||''),
+        ]);
+      }
+    } catch(e) { /* non-critical */ }
+    cachePutIfSmall(cache, 'revised_dates_raw', rows, DETAIL_CACHE_TTL);
+  }
+  return rows.filter(r => r[0] === String(loanId)).map(r => ({
+    emiNum: r[1], revisedDate: r[2], amount: r[3], note: r[4], createdAt: r[5],
   }));
 }
 

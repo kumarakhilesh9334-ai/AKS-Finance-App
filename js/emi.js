@@ -15,6 +15,87 @@ function clearOverviewSearch() {
   if (inp) { inp.value = ''; renderAllOverview(''); inp.focus(); }
 }
 
+// ── Full-data load, retry and preemption ─────────────────────────────────
+// The app boots with slim loan rows and upgrades them to full rows via
+// readAllLoans. If that call fails the client stays in slim mode, which means
+// every card click pays a per-loan readLoanDetail round-trip. The machinery
+// below retries readAllLoans in the background until it succeeds, while always
+// letting a user-initiated card click or a write take priority over it.
+let _fullLoadCtl = null;         // AbortController of the in-flight background load
+let _fullLoadP = null;           // its promise
+let _fullLoadRetryTimer = null;  // pending retry (delay-paced)
+let _loanWriteGen = 0;           // bumped by every write; discards stale reads
+
+// A write landed: any readAllLoans already in flight is now a pre-write
+// snapshot and must not be painted over the fresh data.
+function noteLoanWrite() { _loanWriteGen++; }
+
+// Loads full loans + revised dates. Returns 'ok' | 'failed' | 'aborted' | 'stale'.
+async function loadFullLoans(opts) {
+  const signal = opts && opts.signal;
+  const gen = _loanWriteGen;
+  const results = await Promise.all([
+    gasGet('readAllLoans', {}, { signal: signal }),
+    gasGet('readRevisedDates', {}, { signal: signal }),
+  ]);
+  const fullData = results[0], revData = results[1];
+  if (fullData && fullData.aborted) return 'aborted';
+  if (!fullData || !fullData.ok) return 'failed';
+  if (gen !== _loanWriteGen) return 'stale';
+  S.sheetLoans  = fullData.loans || [];
+  S._fullLoaded = true;
+  if (revData && revData.ok) S.revisedDates = revData.dates;
+  cacheState();
+  rerenderActiveTab();
+  return 'ok';
+}
+
+// Arms a paced retry. Kept short after a preemption (the user just interacted)
+// and longer after a genuine failure, so a persistently failing backend is not
+// hammered. Retries are otherwise unlimited.
+function armFullLoadRetry(delay) {
+  if (S._fullLoaded || !S.sheetsUrl) return;
+  if (_fullLoadRetryTimer) return;
+  _fullLoadRetryTimer = setTimeout(() => {
+    _fullLoadRetryTimer = null;
+    scheduleFullLoadsRetry();
+  }, delay);
+}
+
+// Fire-and-forget background full-data load. Never awaited by UI code, so it
+// cannot block rendering. Only one attempt runs at a time. Returns the in-flight
+// promise (or null) so the boot path can await it.
+function scheduleFullLoadsRetry() {
+  if (S._fullLoaded || !S.sheetsUrl) return null;
+  if (_fullLoadP) return _fullLoadP;
+  if (_fullLoadRetryTimer) { clearTimeout(_fullLoadRetryTimer); _fullLoadRetryTimer = null; }
+  const ctl = new AbortController();
+  _fullLoadCtl = ctl;
+  _fullLoadP = loadFullLoans({ signal: ctl.signal })
+    .catch(() => 'failed')
+    .then(status => {
+      // Only the current attempt may clear state — a preempted one must not
+      // stomp the attempt that replaced it.
+      if (_fullLoadCtl === ctl) { _fullLoadCtl = null; _fullLoadP = null; }
+      if (status === 'failed') armFullLoadRetry(5000);
+      else if (status === 'stale') armFullLoadRetry(800);
+      // 'aborted' → preemptFullLoadRetry already armed the resume.
+      return status;
+    });
+  return _fullLoadP;
+}
+
+// Called before any user-initiated work that must not queue behind the
+// background load: a card click in slim mode, and every write/submit.
+function preemptFullLoadRetry() {
+  if (_fullLoadRetryTimer) { clearTimeout(_fullLoadRetryTimer); _fullLoadRetryTimer = null; }
+  if (_fullLoadCtl) { try { _fullLoadCtl.abort(); } catch(e) {} }
+  _fullLoadCtl = null;
+  _fullLoadP = null;
+  // Unlimited retries: resume shortly after the user's action settles.
+  armFullLoadRetry(800);
+}
+
 // ── Fetch loans from Sheets on login ─────────────────────────────────────
 async function fetchLoansFromSheets(force) {
   if (!S.sheetsUrl) return;
@@ -34,17 +115,10 @@ async function fetchLoansFromSheets(force) {
     cacheState();   // persist slim data immediately
     rerenderActiveTab();
 
-    // Step 2: Pre-fetch full data (93 cols + miscType) + revised dates in parallel
-    const [fullData, revData] = await Promise.all([
-      gasGet('readAllLoans'),
-      gasGet('readRevisedDates'),
-    ]);
-    if (fullData.ok) { S.sheetLoans = fullData.loans || []; S._fullLoaded = true; }
-    if (revData.ok) S.revisedDates = revData.dates;
-    cacheState();   // persist fresh data to localStorage
-
-    // Re-render cards with full data + revised badges now available
-    rerenderActiveTab();
+    // Step 2: Pre-fetch full data (93 cols + miscType) + revised dates in parallel.
+    // Routed through scheduleFullLoadsRetry so it is tracked and abortable — a
+    // card click during boot preempts it and the retry resumes afterwards.
+    await scheduleFullLoadsRetry();
 
     if (statusEl) {
       statusEl.textContent = '✓ ' + S.sheetLoans.length + ' loans loaded.';
@@ -58,7 +132,21 @@ async function fetchLoansFromSheets(force) {
 }
 
 function rerenderActiveTab() {
-  if (S.page === 'all-loans') renderAllOverview($('ov-search') ? $('ov-search').value : '');
+  if (S.page === 'all-loans') {
+    // The list scrollers persist across a re-render (only their contents are
+    // rebuilt), so snapshot their offsets to avoid jumping mid-session.
+    const scrollers = Array.prototype.slice.call(
+      document.querySelectorAll('#page-all-loans .emi-col-body'));
+    const scrolls = scrollers.map(el => el.scrollTop);
+    renderAllOverview($('ov-search') ? $('ov-search').value : '');
+    // Cards were rebuilt from scratch — restore the selected-card highlight.
+    const sel = S.selectedEmiLoanId;
+    if (sel) {
+      document.querySelectorAll(`#page-all-loans .emi-card[data-loanid="${sel}"]`)
+        .forEach(r => r.classList.add('selected'));
+    }
+    scrollers.forEach((el, i) => { if (scrolls[i]) el.scrollTop = scrolls[i]; });
+  }
   if (S.page === 'my-subs')      renderMySubs();
 }
 
@@ -834,6 +922,9 @@ async function openCdDetail(loanId) {
   if (!l) return;
 
   if (l._slim) {
+    // Same priority rule as the card click: this user-initiated detail read
+    // outranks any background full-data load.
+    preemptFullLoadRetry();
     try {
       const data = await gasGet('readLoanDetail', { loanId });
       if (data.ok && data.loan) {
@@ -1344,6 +1435,11 @@ async function selectOverviewLoan(loanId) {
     if (!loan) return;
 
     if (loan._slim) {
+      // The card click takes priority over any background full-data load: abort
+      // it and fetch this loan's detail first. preemptFullLoadRetry() re-arms the
+      // background load ~800ms out, so it resumes on its own once clicking stops
+      // — no need to schedule it here, which would churn a request per click.
+      preemptFullLoadRetry();
       try {
         const data = await gasGet('readLoanDetail', { loanId });
         if (data.ok && data.loan) {
