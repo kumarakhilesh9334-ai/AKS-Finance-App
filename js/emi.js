@@ -30,21 +30,34 @@ let _loanWriteGen = 0;           // bumped by every write; discards stale reads
 // snapshot and must not be painted over the fresh data.
 function noteLoanWrite() { _loanWriteGen++; }
 
+// Replace the card list. Returns false when an empty reply was IGNORED because
+// we already hold cards — an empty array from Google is not proof that the
+// sheet is empty, so it must never wipe data that is working.
+function applyLoanList(loans) {
+  const incoming = Array.isArray(loans) ? loans : [];
+  if (!incoming.length && S.sheetLoans && S.sheetLoans.length) return false;
+  S.sheetLoans = incoming;
+  return true;
+}
+
 // Loads full loans + revised dates. Returns 'ok' | 'failed' | 'aborted' | 'stale'.
 async function loadFullLoans(opts) {
   const signal = opts && opts.signal;
   const gen = _loanWriteGen;
   const results = await Promise.all([
-    gasGet('readAllLoans', {}, { signal: signal }),
-    gasGet('readRevisedDates', {}, { signal: signal }),
+    gasGet('readAllLoans', {}, { signal: signal, priority: PRIORITY.full }),
+    gasGet('readRevisedDates', {}, { signal: signal, priority: PRIORITY.revDates }),
   ]);
   const fullData = results[0], revData = results[1];
   if (fullData && fullData.aborted) return 'aborted';
   if (!fullData || !fullData.ok) return 'failed';
   if (gen !== _loanWriteGen) return 'stale';
-  S.sheetLoans  = fullData.loans || [];
-  S._fullLoaded = true;
   if (revData && revData.ok) S.revisedDates = revData.dates;
+  // An empty reply must not mark us "loaded" while cards are on screen —
+  // treat it as failed so the retry loop stays armed instead of going quiet.
+  if (!applyLoanList(fullData.loans || [])) return 'failed';
+  S._fullLoaded = true;
+  S._fullStamp++;   // any readLoansSlim still in flight must not overwrite this
   cacheState();
   rerenderActiveTab();
   return 'ok';
@@ -65,10 +78,14 @@ function armFullLoadRetry(delay) {
 // Fire-and-forget background full-data load. Never awaited by UI code, so it
 // cannot block rendering. Only one attempt runs at a time. Returns the in-flight
 // promise (or null) so the boot path can await it.
-function scheduleFullLoadsRetry() {
-  if (S._fullLoaded || !S.sheetsUrl) return null;
+// `force` re-arms the load even while full rows are already on screen — that is
+// what ↻ Refresh uses, because otherwise a user who already holds full data can
+// never get a fresh copy.
+function scheduleFullLoadsRetry(force) {
+  if (!S.sheetsUrl) return null;
   if (_fullLoadP) return _fullLoadP;
   if (_fullLoadRetryTimer) { clearTimeout(_fullLoadRetryTimer); _fullLoadRetryTimer = null; }
+  if (!force && S._fullLoaded) return null;
   const ctl = new AbortController();
   _fullLoadCtl = ctl;
   _fullLoadP = loadFullLoans({ signal: ctl.signal })
@@ -104,21 +121,72 @@ async function fetchLoansFromSheets(force) {
     rerenderActiveTab();
     return;
   }
+  const btn = $('btn-refresh-loans');
+  if (btn) { btn.disabled = true; btn.textContent = '↻ Refreshing…'; }
   const statusEl = $('emi-fetch-status');
   if (statusEl) { statusEl.textContent = 'Loading loans…'; statusEl.className = 'emi-fetch-status loading'; }
+
+  // Full rows already on screen (snapshot or cache): skip the slim pass.
+  // Slim exists only to get *something* up fast — here we already hold more,
+  // and painting slim over it would trade full rows for slim ones, pushing
+  // every card click back onto a per-loan readLoanDetail round-trip until the
+  // next full read replaced them again.
+  if (S._fullLoaded && Array.isArray(S.sheetLoans) && S.sheetLoans.length) {
+    S._loadingLoans = true;
+    try {
+      // force=true: re-arm even though full rows are held — that is this button.
+      const st = await scheduleFullLoadsRetry(true);
+      if (statusEl) {
+        if (st === 'ok') {
+          statusEl.textContent = '✓ ' + S.sheetLoans.length + ' loans loaded.';
+          statusEl.className = 'emi-fetch-status ok';
+        } else if (st === 'failed') {
+          statusEl.textContent = '⚠ Could not refresh — showing data from the last update.';
+          statusEl.className = 'emi-fetch-status warn';
+        }
+        // 'aborted' (a card click took over) and 'stale' (a write landed first)
+        // are both normal — say nothing.
+        if (st === 'ok' || st === 'failed') {
+          setTimeout(() => { if ($('emi-fetch-status')) $('emi-fetch-status').textContent = ''; }, 3000);
+        }
+      }
+    } finally {
+      S._loadingLoans = false;
+      if (btn) { btn.disabled = false; btn.textContent = '↻ Refresh'; }
+    }
+    return;
+  }
+
+  S._loadingLoans = true;
+  const stampAtStart = S._fullStamp;
   try {
+    // Started NOW, in parallel with the slim fetch. It used to be chained into
+    // the slim fetch's `finally`, so a slim call that burned all three of its
+    // retry attempts could put readAllLoans ~90 s behind it — and readAllLoans
+    // is the call that makes card clicks instant.
+    scheduleFullLoadsRetry();
+
     // Step 1: Slim fetch — card columns only, instant render
-    const slimRes  = await gasGet('readLoansSlim');
+    const slimRes  = await gasGet('readLoansSlim', {}, { priority: PRIORITY.slim });
     if (!slimRes.ok) throw new Error(slimRes.error || 'Unknown error');
-    S.sheetLoans   = slimRes.loans || [];
+
+    // A full load landed while we were waiting. It is a strict superset of what
+    // slim just brought back, so keep it rather than downgrading the screen.
+    if (S._fullStamp !== stampAtStart) {
+      if (statusEl) {
+        statusEl.textContent = '✓ ' + S.sheetLoans.length + ' loans loaded.';
+        statusEl.className = 'emi-fetch-status ok';
+        setTimeout(() => { if ($('emi-fetch-status')) $('emi-fetch-status').textContent = ''; }, 3000);
+      }
+      return;
+    }
+
+    // applyLoanList refuses to overwrite cards we already hold with an empty
+    // reply — a degraded response is not proof the sheet is empty.
+    applyLoanList(slimRes.loans || []);
     S._fullLoaded  = false;
     cacheState();   // persist slim data immediately
     rerenderActiveTab();
-
-    // Step 2: Pre-fetch full data (93 cols + miscType) + revised dates in parallel.
-    // Routed through scheduleFullLoadsRetry so it is tracked and abortable — a
-    // card click during boot preempts it and the retry resumes afterwards.
-    await scheduleFullLoadsRetry();
 
     if (statusEl) {
       statusEl.textContent = '✓ ' + S.sheetLoans.length + ' loans loaded.';
@@ -127,8 +195,29 @@ async function fetchLoansFromSheets(force) {
     }
   } catch (err) {
     if (statusEl) { statusEl.textContent = '⚠ Could not load: ' + err.message; statusEl.className = 'emi-fetch-status warn'; }
-    S.sheetLoans = [];
+    // Keep whatever is already on screen. Wiping here is what caused the
+    // permanent "Fetching from Sheets…" state: 1191 cards disappeared and
+    // nothing ever put them back.
+    if (!S.sheetLoans || !S.sheetLoans.length) rerenderActiveTab();
+  } finally {
+    S._loadingLoans = false;
+    if (btn) { btn.disabled = false; btn.textContent = '↻ Refresh'; }
+    // ALWAYS start the background full load — even when the slim fetch failed.
+    // Previously this only ran on the success path, so a slim failure left no
+    // retry loop running at all and the app sat stuck for good.
+    // Tracked + abortable so a card click preempts it.
+    scheduleFullLoadsRetry();
   }
+}
+
+// Shown only when there is genuinely nothing to render. Distinguishes the three
+// real states — a request is running, the load failed with nothing running, or
+// the sheet really is empty — instead of always claiming "Fetching…".
+function loansEmptyMsg() {
+  const busy = S._loadingLoans || _fullLoadP || _fullLoadRetryTimer;
+  if (busy) return '<div class="emi-col-empty">Fetching from Sheets…</div>';
+  if (!S._fullLoaded) return '<div class="emi-col-empty">Couldn\'t load loans — tap ↻ Refresh to retry.</div>';
+  return '<div class="emi-col-empty">No loans</div>';
 }
 
 function rerenderActiveTab() {
@@ -247,7 +336,7 @@ function renderEmiColumns(query) {
     const mobEl = $('mob-' + c + '-count');
     if (colEl && mobEl) mobEl.textContent = colEl.textContent;
   });
-  const noDataMsg = (!S.sheetLoans || !S.sheetLoans.length) ? '<div class="emi-col-empty">Fetching from Sheets…</div>' : '';
+  const noDataMsg = (!S.sheetLoans || !S.sheetLoans.length) ? loansEmptyMsg() : '';
   $('col-all-list').innerHTML      = (upcoming.length + overdue.length + partials.length)
     ? [...upcoming.map(l => emiCard(l, 'upcoming')), ...overdue.map(l => emiCard(l, 'overdue')), ...partials.map(p => partialCard(p))].join('')
     : (noDataMsg || '<div class="emi-col-empty">No active loans</div>');
@@ -459,7 +548,7 @@ async function selectEmiLoan(loanId) {
     // If full data not yet loaded and card is slim, fetch detail on click
     if (loan._slim) {
       try {
-        const data = await gasGet('readLoanDetail', { loanId });
+        const data = await gasGet('readLoanDetail', { loanId }, { priority: PRIORITY.detail });
         if (data.ok && data.loan) {
           const idx = S.sheetLoans.findIndex(l => l.loanId === loanId);
           if (idx !== -1) S.sheetLoans[idx] = data.loan;
@@ -737,8 +826,13 @@ async function submitEmi() {
   showLoader();
   try {
     if (S.sheetsUrl) {
-      const res = await gasPost({action:'saveEmi', item:emiItem});
-      if (res.ok) {
+      const r = await runAction(actionKey('saveEmi', loanId, emiNum), {action:'saveEmi', item:emiItem});
+      if (r.outcome === 'blocked') {
+        showAlert(r.message, 'e');
+      } else if (r.outcome === 'unconfirmed') {
+        showAlert("Couldn't confirm the submission — it may still have saved. Refresh the page to check.", 'w');
+      } else if (r.outcome === 'done') {
+        const res = r.res;
         S._submittedEmis[loanId + '_' + emiNum] = true;
         // Server confirmed — add our own submission locally, no extra round-trip.
         S.pending.push(emiItem);
@@ -752,18 +846,18 @@ async function submitEmi() {
         if (revVal && emiNum < (sheetLoan ? sheetLoan.emiDuration : 0)) {
           const nextNum2 = emiNum + 1;
           const nextAmt = sheetLoan ? sheetLoan.monthlyEmi : 0;
-          gasPost({ action: 'setRevisedDate', loanId, emiNum: nextNum2, revisedDate: revVal, amount: nextAmt || 0, note: '' })
+          runAction(actionKey('setRevisedDate', loanId, nextNum2),
+            { action: 'setRevisedDate', loanId, emiNum: nextNum2, revisedDate: revVal, amount: nextAmt || 0, note: '' })
             .then(revRes => {
-              if (revRes && revRes.ok) {
-                if (revRes.dates) S.revisedDates = revRes.dates;
+              if (revRes.outcome === 'done' && revRes.res.dates) {
+                S.revisedDates = revRes.res.dates;
                 rerenderActiveTab();
               }
             })
             .catch(() => {});
         }
       } else {
-        await fetchPendingFromSheets();
-        showAlert('Submission failed: ' + (res.error || 'Unknown error'), 'e');
+        showAlert('Submission failed: ' + ((r.res && r.res.error) || 'Unknown error'), 'e');
       }
     }
   } finally { hideLoader(); }
@@ -777,7 +871,7 @@ async function submitEmi() {
 async function fetchApprovedPartials() {
   if (!S.sheetsUrl) return;
   try {
-    const data = await gasGet('readApprovedPartials');
+    const data = await gasGet('readApprovedPartials', {}, { priority: PRIORITY.partials });
     if (data.ok && Array.isArray(data.partials)) {
       S.approvedPartials = data.partials;
       cacheState();
@@ -821,8 +915,7 @@ async function logRemainingPartial(id, currentAmount) {
       renderApprovals($('appr-search') ? $('appr-search').value : '');
       showAlert('Remaining payment submitted for approval.');
     } else {
-      await fetchPendingFromSheets();
-      showAlert('Submission failed: ' + (res.error || 'Unknown error'), 'e');
+      showWriteFailure(res, 'Submission');
     }
   } finally { hideLoader(); }
 }
@@ -926,7 +1019,7 @@ async function openCdDetail(loanId) {
     // outranks any background full-data load.
     preemptFullLoadRetry();
     try {
-      const data = await gasGet('readLoanDetail', { loanId });
+      const data = await gasGet('readLoanDetail', { loanId }, { priority: PRIORITY.detail });
       if (data.ok && data.loan) {
         const idx = S.sheetLoans.findIndex(x => x.loanId === loanId);
         if (idx !== -1) S.sheetLoans[idx] = data.loan;
@@ -1161,17 +1254,27 @@ async function submitRevisedDate() {
   closeRevisedDateForm();
   showLoader();
   try {
-    const res = await gasPost({ action: 'setRevisedDate', loanId, emiNum, revisedDate, amount, note });
-    if (res.ok) {
+    // blockRepeat:false — re-revising the same EMI is a normal correction, not a
+    // duplicate. Only an unconfirmed attempt is blocked, so a transport failure
+    // can't be blindly retried into two appended rows.
+    const r = await runAction(
+      actionKey('setRevisedDate', loanId, emiNum),
+      { action: 'setRevisedDate', loanId, emiNum, revisedDate, amount, note },
+      { blockRepeat: false });
+    if (r.outcome === 'blocked') {
+      showAlert(r.message, 'e');
+    } else if (r.outcome === 'unconfirmed') {
+      showAlert("Couldn't confirm the save — it may still have gone through. Refresh the page to check.", 'w');
+    } else if (r.outcome === 'done') {
       // Response carries the fresh dates — no follow-up readRevisedDates GET.
-      if (res.dates) S.revisedDates = res.dates;
+      if (r.res.dates) S.revisedDates = r.res.dates;
       // Re-render loan detail and cards
       selectEmiLoan(loanId);
       rerenderActiveTab();
       renderApprovals($('appr-search') ? $('appr-search').value : '');
       showAlert('Revised date saved.');
     } else {
-      showAlert('Failed to save revised date: ' + (res.error || 'Unknown error'), 'e');
+      showAlert('Failed to save revised date: ' + ((r.res && r.res.error) || 'Unknown error'), 'e');
     }
   } finally { hideLoader(); }
 }
@@ -1195,7 +1298,7 @@ async function toggleLockApp() {
       rerenderActiveTab();
       showAlert(target ? 'Lock app marked as removed.' : 'Lock app restored.');
     } else {
-      showAlert('Failed: ' + (res.error || 'Unknown error'), 'e');
+      showWriteFailure(res, 'The lock change');
     }
   } catch (e) {
     showAlert('Failed: ' + (e.message || 'Unknown error'), 'e');
@@ -1350,7 +1453,7 @@ function renderAllOverview(query) {
   $('ov-closed-count').textContent    = closed.length;
   $('ov-defaulted-count').textContent = defaulted.length;
 
-  const noDataMsg = (!S.sheetLoans || !S.sheetLoans.length) ? '<div class="emi-col-empty">Fetching from Sheets…</div>' : '';
+  const noDataMsg = (!S.sheetLoans || !S.sheetLoans.length) ? loansEmptyMsg() : '';
   const allCards = [...overdue.map(l => overviewCard(l, 'overdue')), ...upcoming.map(l => overviewCard(l, 'upcoming')), ...defaulted.map(l => overviewCard(l, 'defaulted')), ...closed.map(l => overviewCard(l, 'closed'))];
   $('ov-all-list').innerHTML       = allCards.length ? allCards.join('') : (noDataMsg || '<div class="emi-col-empty">No loans</div>');
   $('ov-upcoming-list').innerHTML  = upcoming.length  ? upcoming.map(l  => overviewCard(l, 'upcoming')).join('')  : (noDataMsg || '<div class="emi-col-empty">No upcoming EMIs</div>');
@@ -1441,7 +1544,7 @@ async function selectOverviewLoan(loanId) {
       // — no need to schedule it here, which would churn a request per click.
       preemptFullLoadRetry();
       try {
-        const data = await gasGet('readLoanDetail', { loanId });
+        const data = await gasGet('readLoanDetail', { loanId }, { priority: PRIORITY.detail });
         if (data.ok && data.loan) {
           const idx = S.sheetLoans.findIndex(l => l.loanId === loanId);
           if (idx !== -1) S.sheetLoans[idx] = data.loan;
@@ -2014,8 +2117,12 @@ async function submitOverviewEmi() {
   showLoader();
   try {
     if (S.sheetsUrl) {
-      const res = await gasPost({action:'saveEmi', item:emiItem});
-      if (res.ok) {
+      const r = await runAction(actionKey('saveEmi', loanId, emiNum), {action:'saveEmi', item:emiItem});
+      if (r.outcome === 'blocked') {
+        showAlert(r.message, 'e');
+      } else if (r.outcome === 'unconfirmed') {
+        showAlert("Couldn't confirm the submission — it may still have saved. Refresh the page to check.", 'w');
+      } else if (r.outcome === 'done') {
         S._submittedEmis[loanId + '_' + emiNum] = true;
         if (multiCount > 0) {
           for (let i = 1; i < multiCount; i++) S._submittedEmis[loanId + '_' + (emiNum + i)] = true;
@@ -2032,18 +2139,18 @@ async function submitOverviewEmi() {
         if (revVal && emiNum < (loan.emiDuration || 0)) {
           const nextNum2 = emiNum + 1;
           const nextAmt = loan.monthlyEmi || 0;
-          gasPost({ action: 'setRevisedDate', loanId, emiNum: nextNum2, revisedDate: revVal, amount: nextAmt || 0, note: '' })
+          runAction(actionKey('setRevisedDate', loanId, nextNum2),
+            { action: 'setRevisedDate', loanId, emiNum: nextNum2, revisedDate: revVal, amount: nextAmt || 0, note: '' })
             .then(revRes => {
-              if (revRes && revRes.ok) {
-                if (revRes.dates) S.revisedDates = revRes.dates;
+              if (revRes.outcome === 'done' && revRes.res.dates) {
+                S.revisedDates = revRes.res.dates;
                 rerenderActiveTab();
               }
             })
             .catch(() => {});
         }
       } else {
-        await fetchPendingFromSheets();
-        showAlert('Submission failed: ' + (res.error || 'Unknown error'), 'e');
+        showAlert('Submission failed: ' + ((r.res && r.res.error) || 'Unknown error'), 'e');
       }
     }
   } finally { hideLoader(); }
@@ -2226,7 +2333,7 @@ async function submitMobileJabt() {
       renderApprovals($('appr-search') ? $('appr-search').value : '');
       showAlert('Loan marked as Mobile Jabt.');
     } else {
-      showAlert('Failed to mark Mobile Jabt: ' + (res.error || 'Unknown error'), 'e');
+      showWriteFailure(res, 'The Mobile Jabt mark');
     }
   } finally { hideLoader(); }
 }

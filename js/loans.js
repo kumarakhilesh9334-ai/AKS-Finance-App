@@ -301,16 +301,24 @@ async function submitLoan() {
   showLoader();
   try {
     if (S.sheetsUrl) {
-      const res = await gasPost({action:'saveLoan', item:loanItem});
-      if (res.ok) {
+      // Key on the loan's content, not on nextPid() — the id is regenerated on
+      // every attempt, so an id-based key could never catch a resubmit. Phone +
+      // model + bill date is stable across retries of the same form.
+      const r = await runAction(
+        actionKey('saveLoan', d.phone || d.customerName, d.model, d.billDate),
+        {action:'saveLoan', item:loanItem});
+      if (r.outcome === 'blocked') {
+        showAlert(r.message, 'e');
+      } else if (r.outcome === 'unconfirmed') {
+        showAlert("Couldn't confirm the submission — it may still have saved. Refresh the page to check.", 'w');
+      } else if (r.outcome === 'done') {
         // Server confirmed — add our own submission locally, no extra round-trip.
         S.pending.push(loanItem);
         cacheState();
         refreshNav();
         showAlert('Loan submitted for approval.');
       } else {
-        await fetchPendingFromSheets();
-        showAlert('Submission failed: ' + (res.error || 'Unknown error'), 'e');
+        showAlert('Submission failed: ' + ((r.res && r.res.error) || 'Unknown error'), 'e');
       }
     }
   } finally { hideLoader(); }

@@ -56,7 +56,7 @@ function goTo(pg) {
   $('alert-box').innerHTML = '';
   if (pg === 'new-loan')  initNewLoanPage();
   if (pg === 'approvals') { renderApprovals($('appr-search') ? $('appr-search').value : ''); mobSwitchApprCol('loan'); }
-  if (pg === 'all-loans') { $('ov-detail').style.display = 'none'; if ($('ov-detail-ph')) $('ov-detail-ph').style.display = ''; S.showOverviewRevised = false; S.showOverviewPartials = false; S.showOverviewOverdue = false; S.showOverviewLoans = false; renderAllOverview(''); mobSwitchOvCol('all'); fetchApprovedPartials(); }
+  if (pg === 'all-loans') { $('ov-detail').style.display = 'none'; if ($('ov-detail-ph')) $('ov-detail-ph').style.display = ''; S.showOverviewRevised = false; S.showOverviewPartials = false; S.showOverviewOverdue = false; S.showOverviewLoans = false; renderAllOverview(''); mobSwitchOvCol('all'); if (!S._booting && !snapshotIsFresh()) fetchApprovedPartials(); }
   if (pg === 'my-subs')   renderMySubs();
   if (pg === 'emi-msgs')  initEmiMsgsPage();
   if (pg === 'stock')     initStockPage();

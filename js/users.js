@@ -31,7 +31,7 @@ async function unblockUser(username) {
   if (!confirm('Unblock @' + username + '?')) return;
   const res = await gasPost({ action: 'unblockUser', username });
   if (res.ok) { showAlert('@' + username + ' unblocked.'); blockedUsers = blockedUsers.filter(u => u !== username); renderUsers(); }
-  else showAlert('Failed to unblock: ' + (res.error || 'Unknown error'), 'e');
+  else showWriteFailure(res, 'Unblock');
 }
 
 async function addUser() {
@@ -60,7 +60,7 @@ async function addUser() {
   // Save to sheet
   try {
     const res = await gasPost({ action:'addUser', ...user });
-    if (!res.ok) { showAlert('Failed to add user: ' + (res.error || 'Unknown error'), 'e'); return; }
+    if (!res.ok) { showWriteFailure(res, 'Adding the user'); return; }
     // POST response already carries the fresh user list — no follow-up readUsers GET.
     if (Array.isArray(res.users)) {
       S.users = res.users;
@@ -82,7 +82,7 @@ async function removeUser(id) {
 
   try {
     const res = await gasPost({ action:'removeUser', id });
-    if (!res.ok) { showAlert('Failed to remove user: ' + (res.error || 'Unknown error'), 'e'); return; }
+    if (!res.ok) { showWriteFailure(res, 'Removing the user'); return; }
     // POST response already carries the fresh user list — no follow-up readUsers GET.
     if (Array.isArray(res.users)) {
       S.users = res.users;

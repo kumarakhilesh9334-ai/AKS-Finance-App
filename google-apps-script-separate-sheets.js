@@ -40,33 +40,71 @@ const C = {
   revisedDateMsg:92,
 };
 
+// ── Per-execution timing ───────────────────────────────────────────────────
+// Every GET carries a `_t` object so the client can split the wall-clock time
+// it observed into "script execution" vs "Google front-end + redirect hops".
+// Marks are DELTAS in ms since the previous mark, so they read directly from
+// the response body without doing arithmetic.
+//
+// tmEnd() runs when jsonResponse() is called, so `total` covers everything up
+// to that point and EXCLUDES the final JSON.stringify below. Note that
+// readLoansSlim/readAllLoans stringify the payload once already (the
+// cache-size check, timed as `str`) and jsonResponse stringifies it a second
+// time — add `str` again for the true serialization cost.
+let _T = null;
+function tmStart()   { _T = { t0: Date.now(), last: Date.now(), out: {} }; }
+function tm(name)    { if (!_T) return; const n = Date.now(); _T.out[name] = n - _T.last; _T.last = n; }
+function tmFlag(k,v) { if (_T) _T.out[k] = v; }
+function tmEnd()     { if (!_T) return null; const o = _T.out; o.total = Date.now() - _T.t0; _T = null; return o; }
+
 // ── GET ───────────────────────────────────────────────────────────────────
-function doGet(e) {
+// The real handler, renamed out of doGet so pushSnapshot() can call it and the
+// snapshot can never drift from what the API serves. `jsonResponse` is shadowed
+// by an identity shim, so this returns the response OBJECT and doGet() wraps it
+// for the wire. `opts.internal` is supplied ONLY by pushSnapshot() from inside
+// this script — no request parameter can ever reach it — which is what lets
+// internal reads skip PIN verification without opening a bypass from outside.
+function handleGet(e, opts) {
+  const jsonResponse = o => o;
+  const internal = !!(opts && opts.internal);
   const action = (e && e.parameter && e.parameter.action) || '';
 
   // Open spreadsheet ONCE for all handlers
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  tm('open');
 
   // ── Auth check: all actions except readUsers require PIN verification ──
-  if (action !== 'readUsers') {
+  // Skipped only for in-script calls (pushSnapshot); `internal` is not
+  // reachable from any request parameter.
+  if (!internal && action !== 'readUsers') {
     const _userId = (e && e.parameter && e.parameter._userId) || '';
     const _pin    = (e && e.parameter && e.parameter._pin) || '';
     if (!_userId || !_pin || !verifyAuth(ss, _userId, _pin)) {
       return jsonResponse({ok:false, error:'Unauthorized'});
     }
   }
+  tm('auth');
 
   // ── Slim: card columns only (49 cols) — instant card rendering ──────
   if (action === 'readLoansSlim') {
     try {
       const cache = CacheService.getScriptCache();
       const cached = cache.get('loans_slim');
-      if (cached) return jsonResponse({ok:true, loans: JSON.parse(cached)});
+      tm('cache');
+      if (cached) {
+        const fromCache = JSON.parse(cached);
+        tm('parse');
+        tmFlag('cached', true);
+        return jsonResponse({ok:true, loans: fromCache});
+      }
+      tmFlag('cached', false);
 
       const sheet = ss.getSheetByName(DATA_SHEET);
       if (!sheet || sheet.getLastRow() < 2) return jsonResponse({ok:true,loans:[]});
       const nRows = sheet.getLastRow() - 1;
+      tm('meta');
       const raw   = sheet.getRange(2, 1, nRows, 49).getValues();
+      tm('read');
       const loans = raw
         .filter(r => r[C.loanId] && String(r[C.loanId]).trim())
         .map(r => {
@@ -96,8 +134,13 @@ function doGet(e) {
             isDefaulted, emiCompleted, status, _slim:true,
           };
         });
+      tm('map');
       const loansSlimStr = JSON.stringify(loans);
-      if (loansSlimStr.length <= 95000) cache.put('loans_slim', loansSlimStr, 15);
+      tm('str');
+      // Never cache an empty result: rows surviving the filter but no loanId is
+      // an anomaly, not proof the sheet is empty. Caching it (even for 15s) let
+      // a degraded read get served to every client that asked next.
+      if (loans.length && loansSlimStr.length <= 95000) cache.put('loans_slim', loansSlimStr, 15);
       return jsonResponse({ok:true, loans});
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
@@ -107,28 +150,43 @@ function doGet(e) {
     try {
       const cache = CacheService.getScriptCache();
       const cached = cache.get('loans_full');
-      if (cached) return jsonResponse({ok:true, loans: JSON.parse(cached)});
+      tm('cache');
+      if (cached) {
+        const fromCache = JSON.parse(cached);
+        tm('parse');
+        tmFlag('cached', true);
+        return jsonResponse({ok:true, loans: fromCache});
+      }
+      tmFlag('cached', false);
 
       const sheet = ss.getSheetByName(DATA_SHEET);
       if (!sheet || sheet.getLastRow() < 2) return jsonResponse({ok:true,loans:[]});
       const nCols = 93;
+      tm('meta');
       const raw   = sheet.getRange(2, 1, sheet.getLastRow()-1, nCols).getValues();
+      tm('read');
       const loans = raw.filter(r => r[C.loanId] && String(r[C.loanId]).trim()).map(r => buildFullLoan(r));
+      tm('build');
 
       // Merge lock-app-removed status from LockAppStatus tab (Data stays read-only)
       const lockMap = getCachedLockStatusMap(ss);
       if (Object.keys(lockMap).length) loans.forEach(loan => {
         if (lockMap[loan.loanId]) loan.lockRemoved = true;
       });
+      tm('lock');
 
       // Enrich all loans with miscType from logged EMI sheet (eliminates per-card round-trip)
       try {
         const byLoan = getCachedEmiLogByLoan(ss);
         loans.forEach(loan => applyMiscTypes(loan, byLoan));
       } catch(e) { /* non-critical */ }
+      tm('emi');
 
       const loansStr = JSON.stringify(loans);
-      if (loansStr.length <= 95000) cache.put('loans_full', loansStr, 600);
+      tm('str');
+      // As with loans_slim: an empty payload is never authoritative, and this
+      // one would have been served for 10 minutes.
+      if (loans.length && loansStr.length <= 95000) cache.put('loans_full', loansStr, 600);
       return jsonResponse({ok:true, loans});
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
@@ -320,6 +378,16 @@ function doGet(e) {
   return jsonResponse({ok:true, message:'AKS Finance running.'});
 }
 
+// ── GET entry point ───────────────────────────────────────────────────────
+// Starts the timer and formats the object handleGet() returns. Deliberately
+// takes no `opts`: there is no way to pass `internal: true` in from a request,
+// so PIN verification can only be skipped when pushSnapshot() calls handleGet
+// directly in the same execution.
+function doGet(e) {
+  tmStart();
+  return jsonResponse(handleGet(e));
+}
+
 // ── POST ──────────────────────────────────────────────────────────────────
 function doPost(e) {
   try {
@@ -346,7 +414,8 @@ function doPost(e) {
       if (user) {
         // Success — reset failed attempts
         ScriptProperties.deleteProperty('failed_' + username);
-        return jsonResponse({ok:true, user, token: createSession(user)});
+        return jsonResponse({ok:true, user, token: createSession(user),
+                             snapshotToken: mintSnapshotToken(user.id)});
       }
 
       // Failed attempt — block after 5
@@ -378,7 +447,12 @@ function doPost(e) {
       const { token } = payload;
       if (token) {
         const userJson = ScriptProperties.getProperty('session_' + token);
-        if (userJson) return jsonResponse({ok:true, user: JSON.parse(userJson)});
+        // Re-mint the snapshot token here: restoreSession runs on every page
+        // load, so the device's snapshot access silently renews itself.
+        if (userJson) {
+          const u = JSON.parse(userJson);
+          return jsonResponse({ok:true, user: u, snapshotToken: mintSnapshotToken(u.id)});
+        }
       }
       return jsonResponse({ok:false, error:'Invalid or expired session'});
     }
@@ -388,6 +462,27 @@ function doPost(e) {
     const _pin    = String(payload._pin || '').trim();
     if (!_userId || !_pin || !verifyAuth(ss, _userId, _pin)) {
       return jsonResponse({ok:false, error:'Unauthorized'});
+    }
+
+    // ── Rebuild the snapshot on demand (the "Data as of" strip) ─────────
+    // The client never reads the sheet to refresh. It asks here, every sheet
+    // read happens inside pushSnapshot(), and the result lands on the Worker —
+    // only then does the client read anything, from the Worker. Floored so a
+    // burst of clicks cannot burn the daily runtime budget; a throttled caller
+    // gets an immediate ok and simply picks up whatever the Worker already has.
+    if (payload.action === 'pushSnapshotNow') {
+      const last = parseInt(ScriptProperties.getProperty('SNAPSHOT_LAST_PUSH') || '0', 10);
+      const waited = Date.now() - last;
+      if (last && waited < SNAPSHOT_PUSH_FLOOR_MS) {
+        return jsonResponse({ok:true, throttled:true,
+                             retryAfterMs: SNAPSHOT_PUSH_FLOOR_MS - waited});
+      }
+      try {
+        const r = pushSnapshot();
+        return jsonResponse({ok:true, epoch:r.epoch, bytes:r.bytes, sources:r.sources});
+      } catch (err) {
+        return jsonResponse({ok:false, error:'Snapshot push failed: ' + err.message});
+      }
     }
 
     // ── Save new loan submission ──────────────────────────────────────
@@ -529,8 +624,12 @@ function doPost(e) {
       setCell('approvals', perms.approvals ? 'TRUE' : 'FALSE');
       setCell('submit', perms.submit ? 'TRUE' : 'FALSE');
       setCell('stock', perms.stock ? 'TRUE' : 'FALSE');
-      bustUsersCache();
-      return jsonResponse({ok:true, users:readAllUsers(ss)});
+      // The row is written above. Anything that fails from here must not be
+      // reported as a failed write — so degrade to a lean response instead.
+      try { bustUsersCache(); } catch(e) {}
+      let users = null;
+      try { users = readAllUsers(ss); } catch(e) { users = null; }
+      return jsonResponse(users ? {ok:true, users:users} : {ok:true});
     }
 
     // ── Remove user ─────────────────────────────────────────────────────
@@ -542,8 +641,10 @@ function doPost(e) {
     for (let i=vals.length-1;i>=1;i--){
       if (String(vals[i][0])===String(id)){ sheet.deleteRow(i+1); break; }
     }
-    bustUsersCache();
-    return jsonResponse({ok:true, users:readAllUsers(ss)});
+    try { bustUsersCache(); } catch(e) {}
+    let users = null;
+    try { users = readAllUsers(ss); } catch(e) { users = null; }
+    return jsonResponse(users ? {ok:true, users:users} : {ok:true});
     }
 
     // ── Approve ───────────────────────────────────────────────────────
@@ -795,7 +896,11 @@ function doPost(e) {
           }
         }
       });
-      return jsonResponse({ok:true, fixed, pending:readAllPending(ss)});
+      // Writes are done — a failure re-reading the pending list must not turn
+      // this into a reported failure.
+      let pending = null;
+      try { pending = readAllPending(ss); } catch(e) { pending = null; }
+      return jsonResponse(pending ? {ok:true, fixed, pending:pending} : {ok:true, fixed});
     }
 
     // ── Update last message sent date in Config!B3 ──────────────────
@@ -820,8 +925,14 @@ function doPost(e) {
       try { CacheService.getScriptCache().remove('loans_slim'); } catch(e) {}
       try { CacheService.getScriptCache().remove('loans_full'); } catch(e) {}
       bustLoanDataCaches(loanId);
-      // Return fresh dates in the same response — saves the follow-up readRevisedDates GET.
-      return jsonResponse({ok:true, dates:readAllRevisedDates(ss)});
+      // Return fresh dates in the same response — saves the follow-up
+      // readRevisedDates GET. The row is already appended at this point, so a
+      // failure reading the dates back must NOT be reported as a failed write:
+      // that is exactly how the client ended up red-flagging a save that had
+      // already succeeded. Omit the field instead and let the client fetch later.
+      let dates = null;
+      try { dates = readAllRevisedDates(ss); } catch(e) { dates = null; }
+      return jsonResponse(dates ? {ok:true, dates:dates} : {ok:true});
     }
 
     // ── Set lock app removed state (loan-level toggle, upsert into LockAppStatus) ──
@@ -1331,7 +1442,185 @@ function createSession(user) {
   return token;
 }
 
+// ── SNAPSHOT (Path B) ───────────────────────────────────────────────────────
+// A 5-minute time-driven trigger runs pushSnapshot(), which rebuilds every read
+// payload by calling handleGet() directly — literally the same code the API
+// serves, so the snapshot can never drift from it — and POSTs the result to the
+// Cloudflare Worker. The browser then paints in ~0.3 s instead of paying Apps
+// Script's front-end (measured 2.0 s warm, 9.1 s cold) on every single load.
+
+// 30 days. Renewed on every login and every restoreSession, so a device only
+// re-enters its PIN if you change it, delete the user, or leave it alone a month.
+const SNAPSHOT_TOKEN_TTL = 30 * 24 * 60 * 60;
+
+// Floor on user-triggered pushes. The strip refresh runs pushSnapshot(), which
+// costs ~15 s of the 5400 s/day Apps Script budget; without a floor, mashing
+// the button — or ten people doing it at once — could spend the whole day's
+// allowance in a few minutes. The 10-minute timer sits far above this and is
+// never affected.
+const SNAPSHOT_PUSH_FLOOR_MS = 30000;
+
+// Add a sheet here and its payload joins the snapshot — one line, nothing else.
+// `action` must be a handleGet action; `out` is the key that action returns.
+const SNAPSHOT_SOURCES = [
+  // No `loans_slim`: readAllLoans already reads every one of these rows across
+  // all 93 columns, and the slim fallback in applySnapshot() can never fire —
+  // if readAllLoans failed, pushSnapshot() throws and no snapshot is published
+  // at all. Re-reading 49 of the same 93 columns cost ~4 s of every push.
+  { key: 'loans',        action: 'readAllLoans',         out: 'loans' },
+  { key: 'revisedDates', action: 'readRevisedDates',     out: 'dates' },
+  { key: 'pending',      action: 'readPending',          out: 'pending' },
+  { key: 'partials',     action: 'readApprovedPartials', out: 'partials' },
+  { key: 'users',        action: 'readUsers',            out: 'users' },
+  { key: 'stock',        action: 'readStock',            out: 'stock', params: { forceRefresh: '1' } },
+  { key: 'config',       action: 'readConfig',           out: 'lastMessageSent' },
+  { key: 'templates',    action: 'readMessageTemplates', out: 'templates' },
+];
+// readAllLoansForMsgs is served from `loans`: buildFullLoan() already carries
+// welcomeMsgText/emiMsgText/lastDateMsgText/thankYouMsgText/loanClosingMsgText/
+// revisedDateMsg, so a second read would only duplicate it.
+
+function hex2(b) {
+  const n = b < 0 ? b + 256 : b;
+  return (n < 16 ? '0' : '') + n.toString(16);
+}
+function hmacSha256Hex(secret, message) {
+  return Utilities.computeHmacSha256Signature(message, secret, Utilities.Charset.UTF_8)
+    .map(hex2).join('');
+}
+
+// Token: <userId>.<expiresAt>.<epoch>.<hmac>. Parsed from the right so a userId
+// containing dots cannot shift the fields.
+function mintSnapshotToken(userId) {
+  try {
+    const secret = ScriptProperties.getProperty('SNAPSHOT_SECRET');
+    if (!secret || !userId) return '';
+    const epoch = String(ScriptProperties.getProperty('SNAPSHOT_EPOCH') || '0');
+    const exp   = Math.floor(Date.now() / 1000) + SNAPSHOT_TOKEN_TTL;
+    const body  = String(userId) + '.' + exp + '.' + epoch;
+    return body + '.' + hmacSha256Hex(secret, body);
+  } catch (e) { return ''; }
+}
+
+// Hashes the Users sheet INCLUDING PINs, but only ever stores the digest.
+// The sheet is edited directly (no Apps Script hook fires on a PIN change), so
+// this is what catches it: pushSnapshot() runs every 5 minutes, compares the
+// digest, and bumps the epoch — killing every outstanding token.
+function usersFingerprint(ss) {
+  const canonical = readAllUsers(ss).map(u => [
+    u.id, u.username, u.pin, u.role,
+    u.perms ? [u.perms.loan, u.perms.allLoans, u.perms.approvals,
+               u.perms.submit, u.perms.stock].join(',') : ''
+  ].join('\u0001')).join('\u0002');
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,
+                                 canonical, Utilities.Charset.UTF_8)
+    .map(hex2).join('');
+}
+
+// Runs on the trigger. Throws on failure so the Apps Script error log records it.
+function pushSnapshot() {
+  const props = ScriptProperties;
+  const secret = props.getProperty('SNAPSHOT_SECRET');
+  const url    = props.getProperty('SNAPSHOT_WORKER_URL');
+  if (!url)    throw new Error('SNAPSHOT_WORKER_URL is not set — run configureSnapshot(url) once.');
+  if (!secret) throw new Error('SNAPSHOT_SECRET is not set — run configureSnapshot(url) once.');
+
+  // Stamped BEFORE the work starts, so a second caller arriving mid-push is
+  // refused instead of paying for a duplicate 15 s rebuild.
+  props.setProperty('SNAPSHOT_LAST_PUSH', String(Date.now()));
+
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+  const fp = usersFingerprint(ss);
+  let epoch = parseInt(props.getProperty('SNAPSHOT_EPOCH') || '0', 10);
+  if (fp !== props.getProperty('SNAPSHOT_USERS_FP')) {
+    epoch++;
+    props.setProperty('SNAPSHOT_EPOCH', String(epoch));
+    props.setProperty('SNAPSHOT_USERS_FP', fp);
+  }
+
+  const data = {};
+  SNAPSHOT_SOURCES.forEach(src => {
+    const resp = handleGet(
+      { parameter: Object.assign({ action: src.action }, src.params || {}) },
+      { internal: true }
+    );
+    if (!resp || resp.ok !== true) {
+      throw new Error(src.action + ' failed: ' + ((resp && resp.error) || 'unknown'));
+    }
+    data[src.key] = resp[src.out];
+  });
+
+  // HARD RULE: `users` must be the public projection. readAllUsers() returns
+  // raw PINs — the snapshot would publish every password in the sheet.
+  const users = data.users;
+  if (Array.isArray(users) && users.some(u => u && Object.prototype.hasOwnProperty.call(u, 'pin'))) {
+    throw new Error('refusing to push: snapshot users payload contains a pin');
+  }
+
+  const body = JSON.stringify({
+    v: 1,
+    generatedAt: Date.now(),
+    epoch: epoch,
+    usersFingerprint: fp,
+    data: data,
+  });
+
+  const res = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + secret },
+    payload: body,
+    muteHttpExceptions: true,
+  });
+  const code = res.getResponseCode();
+  if (code < 200 || code >= 300) {
+    throw new Error('worker rejected push: HTTP ' + code + ' ' +
+                    String(res.getContentText()).slice(0, 200));
+  }
+  return { ok: true, epoch: epoch, bytes: body.length, sources: SNAPSHOT_SOURCES.length };
+}
+
+// Run ONCE from the Apps Script editor, passing the Worker URL. Idempotent:
+// it prints the secret to paste into the Worker and installs the 5-min trigger.
+function configureSnapshot(workerUrl) {
+  const props = ScriptProperties;
+  if (workerUrl) props.setProperty('SNAPSHOT_WORKER_URL', String(workerUrl).trim());
+  if (!props.getProperty('SNAPSHOT_SECRET')) {
+    props.setProperty('SNAPSHOT_SECRET',
+      Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, ''));
+  }
+  if (!props.getProperty('SNAPSHOT_EPOCH')) props.setProperty('SNAPSHOT_EPOCH', '0');
+  createSnapshotTrigger();
+  return {
+    workerUrl: props.getProperty('SNAPSHOT_WORKER_URL'),
+    secret:    props.getProperty('SNAPSHOT_SECRET'),  // paste into the Worker
+    epoch:     props.getProperty('SNAPSHOT_EPOCH'),
+  };
+}
+
+function createSnapshotTrigger() {
+  ScriptApp.getProjectTriggers()
+    .filter(t => t.getHandlerFunction() === 'pushSnapshot')
+    .forEach(t => ScriptApp.deleteTrigger(t));
+  // everyMinutes accepts only 1, 5, 10, 15 or 30, and the trigger quota is
+  // 90 minutes of execution PER DAY across all of them.
+  //
+  //   5 min  -> 288 runs/day. At the measured ~16 s that is 77 min, leaving
+  //             only 13 min of headroom — a handful of Google's 30–60 s runs
+  //             would exhaust it and pushes would stop for the rest of the day.
+  //  10 min  -> 144 runs/day -> ~38 min, leaving 52 min of headroom.
+  //
+  // Ten minutes of staleness is invisible in practice: every page load still
+  // refreshes from the Apps Script API immediately after the snapshot paints,
+  // so the snapshot only decides how the screen looks during the first ~0.3 s.
+  ScriptApp.newTrigger('pushSnapshot').timeBased().everyMinutes(10).create();
+}
+
 function jsonResponse(obj) {
+  // Attach the per-execution timing marks. `_T` is null for doPost (no
+  // tmStart), so writes are untouched.
+  try { if (_T && obj && typeof obj === 'object') obj._t = tmEnd(); } catch(e) {}
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
 }

@@ -57,7 +57,13 @@ async function generateMessages() {
       gasGet('readAllLoansForMsgs'),
       gasGet('readRevisedDates'),
     ]);
-    if (!lData.ok) { showAlert('Failed to load loans: ' + (lData.error||''), 'e'); return; }
+    if (!lData.ok) {
+      // A transport failure is not a confirmed failure — say so, and don't
+      // dress it up as a data error.
+      if (lData.transport) showAlert("Couldn't reach Google to load loans. Refresh the page to retry.", 'w');
+      else showAlert('Failed to load loans: ' + (lData.error||''), 'e');
+      return;
+    }
 
     const loans = lData.loans || [];
     const revisedEntries = (rData.ok && rData.dates) ? rData.dates : [];
@@ -279,7 +285,7 @@ async function markMessagesDone() {
   try {
     const res = await gasPost({ action: 'updateLastMessageSent', date: today });
     if (!res.ok) {
-      showAlert('Failed to mark messages done: ' + (res.error || 'Unknown error'), 'e');
+      showWriteFailure(res, 'Marking messages done');
       return;
     }
     const next = parseDate(today);

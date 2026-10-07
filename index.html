@@ -7,7 +7,7 @@
 <link rel="icon" href="LOGO.jpeg" sizes="any">
 <link rel="apple-touch-icon" href="LOGO.jpeg">
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="css/styles.css?v=4">
+<link rel="stylesheet" href="css/styles.css?v=5">
 <style>
   #install-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:99999;align-items:center;justify-content:center}
   #install-overlay.show{display:flex}
@@ -55,6 +55,10 @@
     </div>
   </div>
   <div class="nav" id="nav"></div>
+  <!-- "Data as of" — how old the numbers on screen are, and the one refresh
+       control. Clicking it asks the sheet to rebuild the snapshot; this tab
+       never reads the sheet directly. Rendered by snapshot.js -->
+  <div id="data-asof" class="data-asof" style="display:none" onclick="stripRefresh()" title="Click to fetch the latest data"></div>
   <!-- Mobile bottom nav (built by buildNav, shown on mobile only) -->
   <div id="bottom-nav" style="display:none"></div>
   <div class="main">
@@ -164,7 +168,6 @@
             <input type="text" id="ov-search" placeholder="Search Loan ID or customer…" oninput="onSearchInput(this.value)">
           </div>
           <button class="btn btn-sm" onclick="clearOverviewSearch()" title="Clear search" style="flex-shrink:0">Clear</button>
-          <button class="btn btn-sm" onclick="fetchLoansFromSheets(true)" title="Refresh">↻ Refresh</button>
         </div>
         <div class="mob-five-tabs" id="ov-tabs">
             <button class="mob-five-tab active" id="mob-tab-ov-all"       onclick="mobSwitchOvCol('all')">🔵 All</button>
@@ -289,7 +292,6 @@
     <div class="page" id="page-approvals">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
         <span style="font-size:15px;font-weight:500">Pending approvals</span>
-        <button class="btn btn-sm" onclick="fetchPendingFromSheets()">↻ Refresh</button>
       </div>
       <div class="emi-search-wrap">
         <span class="emi-search-icon">🔍</span>
@@ -433,16 +435,17 @@
 </div>
 
 <!-- ── SCRIPTS (order matters) ────────────────────────────────────────── -->
-<script src="js/state.js?v=11"></script>
-<script src="js/auth.js?v=4"></script>
-<script src="js/nav.js?v=4"></script>
-<script src="js/loans.js?v=5"></script>
-<script src="js/emi.js?v=8"></script>
-<script src="js/approvals.js?v=8"></script>
+<script src="js/state.js?v=15"></script>
+<script src="js/snapshot.js?v=5"></script>
+<script src="js/auth.js?v=8"></script>
+<script src="js/nav.js?v=5"></script>
+<script src="js/loans.js?v=6"></script>
+<script src="js/emi.js?v=10"></script>
+<script src="js/approvals.js?v=11"></script>
 <script src="js/my-subs.js?v=4"></script>
-<script src="js/emi-messages.js?v=4"></script>
+<script src="js/emi-messages.js?v=5"></script>
 <script src="js/stock.js?v=8"></script>
-<script src="js/users.js?v=5"></script>
+<script src="js/users.js?v=6"></script>
 
 <!-- ── Install Banner ─────────────────────────────────────────────────── -->
 <div id="install-overlay">

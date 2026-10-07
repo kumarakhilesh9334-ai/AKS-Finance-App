@@ -38,8 +38,10 @@ function migrateUserPerms() {
 async function fetchUsersFromSheets() {
   if (!S.sheetsUrl) return;
   try {
-    const res  = await fetch(S.sheetsUrl + '?action=readUsers');
-    const data = await res.json();
+    // Routed through gasGet instead of a bare fetch: this was the only boot
+    // request with no retry, no in-flight dedupe and no queue slot. It now
+    // retries transient 404s and joins the concurrency queue like the rest.
+    const data = await gasGet('readUsers', {}, { priority: PRIORITY.users });
     if (data.ok && Array.isArray(data.users)) {
       S.users = data.users;
       migrateUserPerms();
@@ -59,8 +61,33 @@ async function fetchUsersFromSheets() {
   }
 }
 
+// ── REQUEST PRIORITY ──────────────────────────────────────────────────────
+// Lower number = admitted to the Apps Script queue first. The app used to fire
+// every boot request at once and let Google sort it out; giving the boot burst
+// an explicit order (and a hard concurrency cap) keeps a card click or a user
+// write from waiting behind a background refresh.
+const PRIORITY = {
+  detail:   0,   // readLoanDetail  — the user is staring at this card
+  slim:     1,   // readLoansSlim   — boots the card list
+  session:  2,   // restoreSession  — must land before anything needs auth
+  full:     3,   // readAllLoans
+  pending:  4,   // readPending
+  revDates: 5,   // readRevisedDates
+  partials: 6,   // readApprovedPartials
+  users:    7,   // readUsers
+  push:     9,   // pushSnapshotNow — 15 s, admitted last so a card click or a
+                 //                 write never queues behind it (1 of 2 slots
+                 //                 is held for the duration; the other stays free)
+};
+// Writes and lookups that are not named above.
+const PRIORITY_WRITE = 1;
+const PRIORITY_DEFAULT = 5;
+
 // ── CACHE ───────────────────────────────────────────────────────────────────
-const CACHE_KEYS = ['sheetLoans','pending','revisedDates','approvedPartials'];
+// `snapshotAt` is the generatedAt of the last snapshot we applied — it is what
+// the "Data as of" strip renders, and it must survive a reload so the strip is
+// honest before any network call has happened.
+const CACHE_KEYS = ['sheetLoans','pending','revisedDates','approvedPartials','snapshotAt'];
 
 function cacheState() {
   try {
@@ -81,6 +108,9 @@ function restoreState() {
     const firstLoan = Array.isArray(S.sheetLoans) ? S.sheetLoans[0] : null;
     S._fullLoaded = restored && !!firstLoan && !firstLoan._slim;
   } catch(e) {}
+  // Defined in snapshot.js, which loads after this file — but only ever runs
+  // after every script has parsed, so the guard is belt-and-braces.
+  if (typeof renderDataAsOf === 'function') renderDataAsOf();
 }
 
 function clearCache() {
@@ -103,7 +133,25 @@ const S = {
   showOverviewRevised: false,
   showOverviewPartials: false,
   _fullLoaded: false,
+  // Bumped every time full (non-slim) loan rows land — from readAllLoans or
+  // from a snapshot. A readLoansSlim that started before the bump must not
+  // paint over them: slim rows are a strict subset and would push every card
+  // click back onto a per-loan round-trip.
+  _fullStamp: 0,
+  snapshotAt: 0,       // generatedAt of the applied snapshot (ms epoch)
+  snapshotExpired: false, // the Worker rejected our token — nothing to renew with
+  snapshotError: null, // last refreshSnapshot() failure reason, for the strip
+  lastWriteAt: 0,      // ms epoch of our last successful write; a snapshot built
+                       // before this must never paint over what we just saved
   _submittedEmis: {}, // local-only: { loanId_emiNum: true }
+  _loadingLoans: false, // local-only: true while a loan fetch is genuinely running
+  // True from login until snapshot.js has decided whether the five Google boot
+  // reads are still needed. Navigation must not fire one in that window — the
+  // decision would cancel it a second later.
+  _booting: false,
+  _actionLog: {},       // local-only, session-scoped: { key: 'done'|'unconfirmed'|'failed' }
+                        // Never persisted — a page refresh falls back to the server
+                        // as the source of truth.
 };
 
 let pid = 100; // auto-increment for pending IDs
