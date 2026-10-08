@@ -44,7 +44,17 @@ function setStockFilter(f) {
 }
 
 async function loadStock() {
-  // Fast paint from the server's cache (≤15 min old), then a silent force-refresh.
+  // Every snapshot already carries stock: pushSnapshot() runs readStock with
+  // forceRefresh=1, and readStock opens the other spreadsheet itself by ID
+  // (SpreadsheetApp.openById(STOCK_SHEET_ID)), so a separate worksheet is no
+  // obstacle. Paint it and return — zero network calls.
+  if (S.snapStock && S.snapStock.headers) {
+    applyStock(S.snapStock);
+    if (!_stock.headers.length) showAlert('Stock sheet is empty.', 'e');
+    return;
+  }
+  // Fallback: snapshot never landed (or the Worker is down). Keep the old
+  // behaviour rather than show nothing.
   showLoader();
   let wasEmpty = false;
   try {

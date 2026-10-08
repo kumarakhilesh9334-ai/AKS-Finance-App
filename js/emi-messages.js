@@ -13,32 +13,47 @@ function parseDate(str) {
   return isNaN(d) ? null : d;
 }
 
-async function initEmiMsgsPage() {
+// Shared by initEmiMsgsPage and the live path: turns Config's lastMessageSent
+// into the From date plus an explanation of where it came from.
+function applyMsgConfig(lastSent, today) {
+  const last = parseDate(lastSent);
+  if (lastSent && last) {
+    last.setDate(last.getDate() + 1);
+    $('emsg-from').value = ymd(last);
+    $('emsg-from-label').textContent = '(last marked: ' + lastSent + ', +1 day)';
+  } else if (lastSent) {
+    $('emsg-from').value = today;
+    $('emsg-from-label').textContent = '(invalid last-sent date)';
+  } else {
+    $('emsg-from').value = today;
+    $('emsg-from-label').textContent = '(no last-sent date)';
+  }
+}
+
+// No network in the happy path. S.snapConfig is carried by every snapshot (and
+// persisted by CACHE_KEYS), and #emsg-from has no HTML default — so painting it
+// synchronously is the whole difference between "instant" and "blank until
+// readConfig comes back". readConfig is asked only when the snapshot has not
+// produced a value yet (first ever load, or the Worker is down).
+function initEmiMsgsPage() {
   const today = ymd(new Date());
   $('emsg-start').value = today;
   $('emsg-results').innerHTML = '';
   $('emsg-mark-wrap').style.display = 'none';
-  try {
-    const data = await gasGet('readConfig');
-    if (data.ok && data.lastMessageSent) {
-      const last = parseDate(data.lastMessageSent);
-      if (last) {
-        last.setDate(last.getDate() + 1);
-        const from = ymd(last);
-        $('emsg-from').value = from;
-        $('emsg-from-label').textContent = '(last marked: ' + data.lastMessageSent + ', +1 day)';
-      } else {
-        $('emsg-from').value = today;
-        $('emsg-from-label').textContent = '(invalid last-sent date)';
-      }
-    } else {
-      $('emsg-from').value = today;
-      $('emsg-from-label').textContent = '(no last-sent date)';
-    }
-  } catch(e) {
-    $('emsg-from').value = today;
-    $('emsg-from-label').textContent = '(could not load config)';
+
+  if (S.snapConfig !== undefined && S.snapConfig !== null) {
+    applyMsgConfig(S.snapConfig, today);
+    return;
   }
+  applyMsgConfig('', today);   // field is never left blank while we wait
+  if (!S.sheetsUrl) return;
+  gasGet('readConfig').then(d => {
+    if (d && d.ok) {
+      S.snapConfig = d.lastMessageSent;
+      cacheState();
+      if ($('emsg-from')) applyMsgConfig(d.lastMessageSent, today);
+    }
+  }).catch(() => {});
 }
 
 async function generateMessages() {
@@ -53,20 +68,35 @@ async function generateMessages() {
 
   showLoader();
   try {
-    const [lData, rData] = await Promise.all([
-      gasGet('readAllLoansForMsgs'),
-      gasGet('readRevisedDates'),
-    ]);
-    if (!lData.ok) {
-      // A transport failure is not a confirmed failure — say so, and don't
-      // dress it up as a data error.
-      if (lData.transport) showAlert("Couldn't reach Google to load loans. Refresh the page to retry.", 'w');
-      else showAlert('Failed to load loans: ' + (lData.error||''), 'e');
-      return;
-    }
+    let loans = null;
+    let revisedEntries = null;
 
-    const loans = lData.loans || [];
-    const revisedEntries = (rData.ok && rData.dates) ? rData.dates : [];
+    // readAllLoansForMsgs is the same 93-column buildFullLoan() output that
+    // readAllLoans produces — which every snapshot already carries — and
+    // readAllLoans additionally merges lockRemoved and enriches miscType, so it
+    // is a strict superset. When full rows are in hand there is nothing worth
+    // fetching: render straight from memory instead of waiting on a duplicate
+    // ~20 s read.
+    if (S._fullLoaded && Array.isArray(S.sheetLoans) && S.sheetLoans.length) {
+      loans = S.sheetLoans;
+      revisedEntries = Array.isArray(S.revisedDates) ? S.revisedDates : [];
+    } else {
+      // Fallback: snapshot never landed (or the Worker is down) — keep the
+      // old behaviour rather than show nothing.
+      const [lData, rData] = await Promise.all([
+        gasGet('readAllLoansForMsgs'),
+        gasGet('readRevisedDates'),
+      ]);
+      if (!lData.ok) {
+        // A transport failure is not a confirmed failure — say so, and don't
+        // dress it up as a data error.
+        if (lData.transport) showAlert("Couldn't reach Google to load loans. Refresh the page to retry.", 'w');
+        else showAlert('Failed to load loans: ' + (lData.error||''), 'e');
+        return;
+      }
+      loans = lData.loans || [];
+      revisedEntries = (rData.ok && rData.dates) ? rData.dates : [];
+    }
 
     // Build lookup: loanId -> { emiNum, note }[]
     const revisedLookup = {};
@@ -291,6 +321,10 @@ async function markMessagesDone() {
     const next = parseDate(today);
     if (next) { next.setDate(next.getDate() + 1); $('emsg-from').value = ymd(next); }
     $('emsg-from-label').textContent = '(last marked: ' + today + ', +1 day)';
+    // Persist locally so re-opening the tab shows the new From date immediately
+    // instead of the value baked into the last snapshot.
+    S.snapConfig = today;
+    cacheState();
     $('emsg-results').innerHTML = '<div class="card" style="text-align:center;color:#888;font-size:13px">Marked as done.</div>';
     $('emsg-mark-wrap').style.display = 'none';
     showAlert('Last message sent date updated to ' + today);

@@ -87,7 +87,9 @@ const PRIORITY_DEFAULT = 5;
 // `snapshotAt` is the generatedAt of the last snapshot we applied — it is what
 // the "Data as of" strip renders, and it must survive a reload so the strip is
 // honest before any network call has happened.
-const CACHE_KEYS = ['sheetLoans','pending','revisedDates','approvedPartials','snapshotAt'];
+// `snapConfig` is the Config sheet's lastMessageSent — a few bytes, and it lets
+// the EMI msgs From date paint on the very first frame instead of after readConfig.
+const CACHE_KEYS = ['sheetLoans','pending','revisedDates','approvedPartials','snapshotAt','snapConfig'];
 
 function cacheState() {
   try {
