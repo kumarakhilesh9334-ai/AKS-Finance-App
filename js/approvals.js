@@ -63,10 +63,18 @@ function gasDrain() {
 // content-service 302 is normal and must not be treated as an error; the real
 // bug was a later hop answering 404 with an HTML error page, which used to
 // surface as "Unexpected token '<'".
+//
+// A DEFINITE non-2xx status means the script did not run, so the write did not
+// land — that is a confirmed failure, not an unknown. It is tagged with
+// `httpStatus` and deliberately NOT with `transport`, so runAction records
+// 'failed' (retryable, message carries the code) instead of 'unconfirmed'
+// (sticky for the whole session). `transport` is reserved for the two cases
+// where we genuinely cannot know: the network broke, or Google answered HTML
+// instead of JSON.
 async function gasReadJson(res) {
   if (!res.ok) {
     const e = new Error('HTTP ' + res.status + (res.redirected ? ' (Google redirect)' : ''));
-    e.transport = true;
+    e.httpStatus = res.status;
     throw e;
   }
   try {
@@ -81,10 +89,12 @@ async function gasReadJson(res) {
 // Google Apps Script POST helper — uses a form submission trick to
 // bypass CORS while still sending a parseable body.
 // Apps Script receives the JSON in e.parameter.payload
-// Returns { ok:true, ... } | { ok:false, error } | { ok:false, transport:true }.
+// Returns { ok:true, ... } | { ok:false, error, httpStatus? } | { ok:false, transport:true }.
 // `transport:true` means the request itself broke: the script may well have run
 // during the 302 leg, so the caller must treat the outcome as UNKNOWN, not
-// failed. POSTs are never retried — they are not idempotent.
+// failed. A definite HTTP error status is NOT transport — it carries
+// `httpStatus` and is a confirmed failure the caller may retry. POSTs are
+// never retried by the transport — they are not idempotent.
 // login and restoreSession ride on POST but are pure reads. Treating them as
 // writes had two real costs: restoreSession bumped the loan-write generation on
 // every page load, which discarded the fresh readAllLoans that raced with it
@@ -98,13 +108,13 @@ async function gasPost(payload, opts) {
   payload._userId = S.cu ? S.cu.id : '';
   payload._pin    = S.cu ? S.cu.pin : '';
   form.append('payload', JSON.stringify(payload));
-  // Every mutation takes priority over the background full-data load, and any
-  // read already in flight becomes a stale pre-write snapshot that must not be
-  // painted. lastWriteAt is what tells applySnapshot() to reject a snapshot
-  // that was built before this write landed.
+  // Writes must never be followed by a read. noteLoanWrite() bumps the loan-write
+  // generation so any read already in flight is discarded as a stale pre-write
+  // snapshot instead of being painted. lastWriteAt is what tells applySnapshot()
+  // to reject a snapshot that was built before this write landed. The full-load
+  // machinery is deliberately left alone here — see scheduleFullLoadsRetry.
   const isMutation = !GAS_SESSION_ACTIONS[payload.action];
   if (isMutation) {
-    preemptFullLoadRetry();
     noteLoanWrite();
     S.lastWriteAt = Date.now();
   }
@@ -114,6 +124,11 @@ async function gasPost(payload, opts) {
     const res = await fetch(S.sheetsUrl, { method:'POST', body: form });
     return await gasReadJson(res);
   } catch (err) {
+    // Preserve a definite status code as a confirmed failure; only genuine
+    // network/parse breaks are "unknown".
+    if (err && err.httpStatus) {
+      return { ok: false, error: err.message || ('HTTP ' + err.httpStatus), httpStatus: err.httpStatus };
+    }
     return { ok: false, transport: true, error: err.message || 'Network error' };
   } finally {
     gasRelease();
@@ -159,7 +174,13 @@ async function gasGet(action, params = {}, opts = {}) {
           return await gasReadJson(res);
         } catch (err) {
           if (signal && signal.aborted) return { ok: false, error: 'aborted', aborted: true };
-          if (attempt === DELAY.length - 1) return { ok: false, transport: true, error: err.message || 'Network error' };
+          if (attempt === DELAY.length - 1) {
+            // A definite status is a confirmed miss (still worth the retries above
+            // — Google answers 404 under congestion); only network/HTML breaks are
+            // transport-level.
+            if (err && err.httpStatus) return { ok: false, error: err.message, httpStatus: err.httpStatus };
+            return { ok: false, transport: true, error: err.message || 'Network error' };
+          }
         } finally {
           gasRelease();
         }
@@ -291,7 +312,6 @@ async function approve(id, type) {
       renderApprovals($('appr-search') ? $('appr-search').value : '');
       rerenderActiveTab();
       showAlert('Approved ✓');
-      fetchApprovedPartials();   // background refresh — never blocks the UI
     } else {
       const err = r.res && r.res.error;
       if (err === 'duplicate_emi') {
@@ -322,6 +342,12 @@ async function reject(id, type) {
       // Server confirmed — mark rejected locally, no extra round-trips.
       item.status = 'rejected';
       item.note   = note;
+      // The submission is no longer pending, so the local "already submitted"
+      // marker must go too — otherwise the Submit for approval button stays
+      // greyed until a full page reload.
+      if (item.type === 'emi' && S._submittedEmis && item.data) {
+        delete S._submittedEmis[item.data.loanId + '_' + item.data.emiNum];
+      }
       cacheState();
       refreshNav();
       renderApprovals($('appr-search') ? $('appr-search').value : '');

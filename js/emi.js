@@ -86,6 +86,7 @@ function scheduleFullLoadsRetry(force) {
   if (_fullLoadP) return _fullLoadP;
   if (_fullLoadRetryTimer) { clearTimeout(_fullLoadRetryTimer); _fullLoadRetryTimer = null; }
   if (!force && S._fullLoaded) return null;
+  const genAtStart = _loanWriteGen;
   const ctl = new AbortController();
   _fullLoadCtl = ctl;
   _fullLoadP = loadFullLoans({ signal: ctl.signal })
@@ -94,16 +95,22 @@ function scheduleFullLoadsRetry(force) {
       // Only the current attempt may clear state — a preempted one must not
       // stomp the attempt that replaced it.
       if (_fullLoadCtl === ctl) { _fullLoadCtl = null; _fullLoadP = null; }
-      if (status === 'failed') armFullLoadRetry(5000);
-      else if (status === 'stale') armFullLoadRetry(800);
-      // 'aborted' → preemptFullLoadRetry already armed the resume.
+      // A write never re-arms a read. If one landed while this attempt was out,
+      // its optimistic local update already reflects the change and the next
+      // card click or boot will pick up the rest — resuming here would be a GET
+      // issued by a POST, which is exactly what we removed.
+      const wroteDuringLoad = _loanWriteGen !== genAtStart;
+      if (status === 'failed') { if (!wroteDuringLoad) armFullLoadRetry(5000); }
+      // 'stale' and 'aborted' → deliberately no resume.
       return status;
     });
   return _fullLoadP;
 }
 
-// Called before any user-initiated work that must not queue behind the
-// background load: a card click in slim mode, and every write/submit.
+// Called before user-initiated work that must not queue behind the background
+// load: a card click in slim mode. Deliberately NOT called from gasPost — a
+// write must never be followed by a read (that resume is armed by the caller's
+// next interaction instead).
 function preemptFullLoadRetry() {
   if (_fullLoadRetryTimer) { clearTimeout(_fullLoadRetryTimer); _fullLoadRetryTimer = null; }
   if (_fullLoadCtl) { try { _fullLoadCtl.abort(); } catch(e) {} }
@@ -909,7 +916,6 @@ async function logRemainingPartial(id, currentAmount) {
         });
         cacheState();
       }
-      fetchApprovedPartials();   // background refresh — never blocks the UI
       refreshNav();
       rerenderActiveTab();
       renderApprovals($('appr-search') ? $('appr-search').value : '');
@@ -1266,10 +1272,9 @@ async function submitRevisedDate() {
     } else if (r.outcome === 'unconfirmed') {
       showAlert("Couldn't confirm the save — it may still have gone through. Refresh the page to check.", 'w');
     } else if (r.outcome === 'done') {
-      // Response carries the fresh dates — no follow-up readRevisedDates GET.
+      // Response carries the fresh dates — no follow-up readRevisedDates GET,
+      // and no selectEmiLoan() re-read either: a write is never followed by a read.
       if (r.res.dates) S.revisedDates = r.res.dates;
-      // Re-render loan detail and cards
-      selectEmiLoan(loanId);
       rerenderActiveTab();
       renderApprovals($('appr-search') ? $('appr-search').value : '');
       showAlert('Revised date saved.');
@@ -1294,7 +1299,6 @@ async function toggleLockApp() {
     const res = await gasPost({ action: 'setLockRemoved', loanId, removed: target });
     if (res.ok) {
       if (loan) loan.lockRemoved = target ? true : undefined;
-      selectOverviewLoan(loanId);
       rerenderActiveTab();
       showAlert(target ? 'Lock app marked as removed.' : 'Lock app restored.');
     } else {
@@ -2152,9 +2156,12 @@ async function submitOverviewEmi() {
       } else {
         showAlert('Submission failed: ' + ((r.res && r.res.error) || 'Unknown error'), 'e');
       }
+      // The panel closes only on success. On blocked/unconfirmed/failed it stays
+      // up with Submit for approval enabled, so the user can correct and retry
+      // instead of finding the form (and the button) gone.
+      if (r.outcome === 'done') closeOverviewDetail();
     }
   } finally { hideLoader(); }
-  closeOverviewDetail();
 }
 
 function clearOverviewRevisedDateField() {
@@ -2326,9 +2333,9 @@ async function submitMobileJabt() {
   try {
     const res = await gasPost({ action: 'setRevisedDate', loanId, emiNum: 0, revisedDate: '', amount: 0, note: 'Mobile Jabt' });
     if (res.ok) {
-      // Response carries the fresh dates — no follow-up readRevisedDates GET.
+      // Response carries the fresh dates — no follow-up readRevisedDates GET,
+      // and no selectEmiLoan() re-read either: a write is never followed by a read.
       if (res.dates) S.revisedDates = res.dates;
-      selectEmiLoan(loanId);
       rerenderActiveTab();
       renderApprovals($('appr-search') ? $('appr-search').value : '');
       showAlert('Loan marked as Mobile Jabt.');

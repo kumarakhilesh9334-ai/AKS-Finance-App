@@ -1,8 +1,12 @@
 let blockedUsers = [];
 
-async function renderUsers() {
+// `skipBlockedFetch` is passed by the handlers that just wrote to the sheet: a
+// write is never followed by a read, and those flows already have what they
+// need (unblockUser updates blockedUsers locally, add/removeUser don't change
+// it). Plain navigation passes nothing and refreshes as before.
+async function renderUsers(skipBlockedFetch) {
   // Fetch blocked users
-  if (S.cu && S.cu.role === 'admin') {
+  if (!skipBlockedFetch && S.cu && S.cu.role === 'admin') {
     const d = await gasGet('readBlockedUsers').catch(() => null);
     if (d && d.ok) blockedUsers = d.blocked || [];
   }
@@ -30,7 +34,7 @@ async function renderUsers() {
 async function unblockUser(username) {
   if (!confirm('Unblock @' + username + '?')) return;
   const res = await gasPost({ action: 'unblockUser', username });
-  if (res.ok) { showAlert('@' + username + ' unblocked.'); blockedUsers = blockedUsers.filter(u => u !== username); renderUsers(); }
+  if (res.ok) { showAlert('@' + username + ' unblocked.'); blockedUsers = blockedUsers.filter(u => u !== username); renderUsers(true); }
   else showWriteFailure(res, 'Unblock');
 }
 
@@ -72,7 +76,7 @@ async function addUser() {
   $('nu-user').value = '';
   $('nu-pin').value  = '';
   $('nu-name').value = '';
-  renderUsers();
+  renderUsers(true);
   showAlert('User added.');
 }
 
@@ -91,7 +95,7 @@ async function removeUser(id) {
     }
   } catch(e) { console.warn('Sheet removeUser failed:', e.message); }
 
-  renderUsers();
+  renderUsers(true);
 }
 
 async function syncUsersFromSheet() {

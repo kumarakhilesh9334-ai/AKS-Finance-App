@@ -6,6 +6,8 @@
 //                          signed token. No token, bad signature, expired, or
 //                          revoked  ->  401 with an empty body.
 //   POST /                accepts a push from the Apps Script (pushSnapshot()).
+//                          The body is either plain JSON or a ZIP containing it;
+//                          the Worker always stores the plain JSON in KV.
 //
 // SETUP (about 5 minutes, no card, no billing)
 //   1. https://dash.cloudflare.com  ->  Workers & Pages  ->  Create  ->  Worker
@@ -105,7 +107,24 @@ async function handlePush(request, env, cors) {
     return new Response('KV binding AKS_SNAPSHOT missing', { status: 500, headers: cors() });
   }
 
-  const text = await request.text();
+  // The push arrives either as plain JSON or as a ZIP-wrapped deflate of that
+  // same JSON (Apps Script zips to cut a ~4.6 MB upload down to ~0.5 MB). The
+  // ZIP magic bytes decide, not a header, so either version of either side can
+  // talk to the other. KV always stores the inflated JSON, so the read path
+  // below and every client stay byte-for-byte identical.
+  const buf = await request.arrayBuffer();
+  const head = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
+  let text;
+  if (head.length === 4 && head[0] === 0x50 && head[1] === 0x4B &&
+      head[2] === 0x03 && head[3] === 0x04) {
+    try {
+      text = await unzipFirstEntry(buf);
+    } catch (e) {
+      return new Response('invalid zip: ' + e.message, { status: 400, headers: cors() });
+    }
+  } else {
+    text = new TextDecoder().decode(buf);
+  }
   let body;
   try {
     body = JSON.parse(text);
@@ -133,6 +152,45 @@ async function handlePush(request, env, cors) {
     status: 200,
     headers: cors({ 'Content-Type': 'application/json' }),
   });
+}
+
+// Inflates the first entry of a ZIP archive. Only used on the push path, and
+// supports exactly what Utilities.zip() emits: one entry, method 8 (deflate) or
+// 0 (stored). Sizes come from the central directory, which stays authoritative
+// even when the local header carries a data descriptor (bit 3).
+async function unzipFirstEntry(buf) {
+  const dv = new DataView(buf);
+  const dec = new TextDecoder();
+
+  // Walk back to the End Of Central Directory record (0x06054b50). Its comment
+  // is at most 65535 bytes, so a bounded scan is enough.
+  let eocd = -1;
+  const floor = Math.max(0, buf.byteLength - 22 - 65535);
+  for (let i = buf.byteLength - 22; i >= floor; i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error('no end-of-central-directory');
+
+  const total = dv.getUint16(eocd + 10, true);
+  const cdOff = dv.getUint32(eocd + 16, true);
+  if (total < 1) throw new Error('archive is empty');
+  if (dv.getUint32(cdOff, true) !== 0x02014b50) throw new Error('bad central directory');
+
+  const method   = dv.getUint16(cdOff + 10, true);
+  const compSize = dv.getUint32(cdOff + 20, true);
+  const locOff   = dv.getUint32(cdOff + 42, true);
+  if (dv.getUint32(locOff, true) !== 0x04034b50) throw new Error('bad local header');
+
+  const start = locOff + 30 + dv.getUint16(locOff + 26, true) + dv.getUint16(locOff + 28, true);
+  const end = start + compSize;
+  if (end > buf.byteLength) throw new Error('entry runs past the end of the archive');
+  const raw = buf.slice(start, end);
+
+  if (method === 0) return dec.decode(raw);
+  if (method !== 8) throw new Error('unsupported compression method ' + method);
+
+  const stream = new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return await new Response(stream).text();
 }
 
 function bearer(request) {

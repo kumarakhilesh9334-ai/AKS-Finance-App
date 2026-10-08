@@ -13,8 +13,7 @@ const LOGGED_EMI_SHEET     = 'logged EMI';
 const USERS_SHEET          = 'Users';
 const REVISED_DATES_SHEET  = 'Revised_Dates';
 const LOCK_STATUS_SHEET    = 'LockAppStatus';
-const STOCK_SHEET_ID   = '1HXvWKCy8F5xVgPlnB4R0zq9ufMUaqnx69OqGXjRXLDA';
-const STOCK_SHEET_TAB  = 'Data';
+const STOCK_SHEET          = 'Stock';
 
 // Column map for Data tab (0-based, column A = 0)
 const C = {
@@ -56,6 +55,85 @@ function tmStart()   { _T = { t0: Date.now(), last: Date.now(), out: {} }; }
 function tm(name)    { if (!_T) return; const n = Date.now(); _T.out[name] = n - _T.last; _T.last = n; }
 function tmFlag(k,v) { if (_T) _T.out[k] = v; }
 function tmEnd()     { if (!_T) return null; const o = _T.out; o.total = Date.now() - _T.t0; _T = null; return o; }
+
+// ── Config-driven sheet bounds ─────────────────────────────────────────────
+// Config!A = tab name, Config!B = rows in that tab, Config!C = columns in that
+// tab. getLastRow()/getLastColumn() each cost a separate round-trip to Google's
+// servers (~100-400 ms) no matter how small the tab is, so the small tabs read
+// their bounds from Config and ask for the exact rectangle in ONE getRange().
+//
+// _CFG_BOUNDS is filled at most once per execution. Apps Script hands every run
+// a fresh global scope, so a stale value can never leak into the next run.
+//
+// A missing Config entry, an unreadable Config tab, or a count that no longer
+// matches the sheet all fall back to getLastRow()/getLastColumn() - the slow
+// path of today. A wrong Config costs speed, never data: rows are over-read (one
+// blank row, which every filter below discards) instead of truncated, and
+// `minCols` stops a column count that under-counts from cutting off a column
+// the mapping code actually dereferences.
+let _CFG_BOUNDS = null;
+
+function configBounds(ss) {
+  if (_CFG_BOUNDS) return _CFG_BOUNDS;
+  const map = {};
+  try {
+    const cfg = ss.getSheetByName('Config');
+    if (cfg) {
+      // Read from row 1 so it does not matter whether row 1 holds a header or
+      // your first entry: a text header simply fails the numeric test below.
+      const vals = cfg.getRange('A1:C100').getValues();
+      for (let i = 0; i < vals.length; i++) {
+        const name = String(vals[i][0] || '').trim();
+        const n = parseInt(vals[i][1], 10);
+        const c = parseInt(vals[i][2], 10);
+        if (name && n > 0 && c > 0) map[name] = { rows: n, cols: c };
+      }
+    }
+  } catch (e) { /* unreadable Config -> every tab uses the real bounds */ }
+  _CFG_BOUNDS = map;
+  return map;
+}
+
+// Reads data rows from `startRow` down. Three attempts:
+//   1. Config rows x max(cols, minCols)  - the count is taken as-is.
+//   2. (rows - 1) x same cols            - Config counted the header row too,
+//                                          or the grid was trimmed to the used
+//                                          range so row rows+1 does not exist.
+//   3. getDataRange(), minus the rows above `startRow`
+//                                          - Config is missing or simply wrong.
+// `minCols` only ever applies to attempts 1 and 2, where Config is the authority
+// and could under-count; on attempt 3 the sheet itself is the authority.
+function readDataRows(sheet, startRow, b, minCols, p) {
+  if (b && b.rows > 0 && b.cols > 0) {
+    const cols = Math.max(b.cols, minCols);
+    try {
+      const rows = sheet.getRange(startRow, 1, b.rows, cols).getValues();
+      if (p) tm(p + 'values');
+      return rows;
+    } catch (e1) {
+      try {
+        const rows = sheet.getRange(startRow, 1, b.rows - 1, cols).getValues();
+        if (p) tm(p + 'values');
+        return rows;
+      } catch (e2) { /* Config no longer matches this sheet */ }
+    }
+  }
+  // Old behaviour: one getDataRange() + one getValues(), then drop the header.
+  // A `fallback` mark in the profile means this tab had no usable Config row.
+  if (p) tm(p + 'fallback');
+  const rows = sheet.getDataRange().getValues().slice(startRow - 1);
+  if (p) tm(p + 'values');
+  return rows;
+}
+
+// Row count for a bounded getRange() that the caller writes itself. Needed by
+// the handleGet loan reads, which sit between two existing tm() marks and
+// therefore cannot go through readDataRows' marked path without changing the
+// _t key set timing-test asserts.
+function dataRowCount(sheet, startRow, b) {
+  if (b && b.rows > 0) return b.rows;
+  return Math.max(sheet.getLastRow() - startRow + 1, 0);
+}
 
 // ── GET ───────────────────────────────────────────────────────────────────
 // The real handler, renamed out of doGet so pushSnapshot() can call it and the
@@ -100,10 +178,14 @@ function handleGet(e, opts) {
       tmFlag('cached', false);
 
       const sheet = ss.getSheetByName(DATA_SHEET);
-      if (!sheet || sheet.getLastRow() < 2) return jsonResponse({ok:true,loans:[]});
-      const nRows = sheet.getLastRow() - 1;
+      if (!sheet) return jsonResponse({ok:true,loans:[]});
+      const b   = configBounds(ss)[DATA_SHEET];
+      let nRows = dataRowCount(sheet, 2, b);
+      if (nRows < 1) return jsonResponse({ok:true,loans:[]});
       tm('meta');
-      const raw   = sheet.getRange(2, 1, nRows, 49).getValues();
+      let raw;
+      try   { raw = sheet.getRange(2, 1, nRows, 49).getValues(); }
+      catch (e) { raw = sheet.getRange(2, 1, dataRowCount(sheet, 2, null), 49).getValues(); }
       tm('read');
       const loans = raw
         .filter(r => r[C.loanId] && String(r[C.loanId]).trim())
@@ -160,10 +242,15 @@ function handleGet(e, opts) {
       tmFlag('cached', false);
 
       const sheet = ss.getSheetByName(DATA_SHEET);
-      if (!sheet || sheet.getLastRow() < 2) return jsonResponse({ok:true,loans:[]});
+      if (!sheet) return jsonResponse({ok:true,loans:[]});
       const nCols = 93;
+      const b   = configBounds(ss)[DATA_SHEET];
+      let nRows = dataRowCount(sheet, 2, b);
+      if (nRows < 1) return jsonResponse({ok:true,loans:[]});
       tm('meta');
-      const raw   = sheet.getRange(2, 1, sheet.getLastRow()-1, nCols).getValues();
+      let raw;
+      try   { raw = sheet.getRange(2, 1, nRows, nCols).getValues(); }
+      catch (e) { raw = sheet.getRange(2, 1, dataRowCount(sheet, 2, null), nCols).getValues(); }
       tm('read');
       const loans = raw.filter(r => r[C.loanId] && String(r[C.loanId]).trim()).map(r => buildFullLoan(r));
       tm('build');
@@ -203,14 +290,20 @@ function handleGet(e, opts) {
       }
 
       const sheet = ss.getSheetByName(DATA_SHEET);
-      if (!sheet || sheet.getLastRow() < 2) return jsonResponse({ok:false,error:'No data'});
-      const lastRow = sheet.getLastRow();
-      const nCols   = sheet.getLastColumn();
+      if (!sheet) return jsonResponse({ok:false,error:'No data'});
+      const b     = configBounds(ss)[DATA_SHEET];
+      const nRows = dataRowCount(sheet, 2, b);
+      if (nRows < 1) return jsonResponse({ok:false,error:'No data'});
+      // The full loan row needs every column; a Config count that under-counts is
+      // raised to the 93 the mapping reads, and an over-count is caught below.
+      const nCols = (b && b.cols > 0) ? Math.max(b.cols, 93) : sheet.getLastColumn();
 
       // Targeted lookup: read only the loanId column to locate the row, then read
       // that single row. Previously this read every row x every column and searched
       // in JS, which cost 4-5s per card click.
-      const ids = sheet.getRange(2, C.loanId + 1, lastRow - 1, 1).getValues();
+      let ids;
+      try   { ids = sheet.getRange(2, C.loanId + 1, nRows, 1).getValues(); }
+      catch (e) { ids = sheet.getRange(2, C.loanId + 1, dataRowCount(sheet, 2, null), 1).getValues(); }
       const want = String(loanId).trim();
       let rel = -1;
       for (let i = 0; i < ids.length; i++) {
@@ -218,7 +311,9 @@ function handleGet(e, opts) {
       }
       if (rel === -1) return jsonResponse({ok:false,error:'Not found'});
 
-      const row = sheet.getRange(rel + 2, 1, 1, nCols).getValues()[0];
+      let row;
+      try   { row = sheet.getRange(rel + 2, 1, 1, nCols).getValues()[0]; }
+      catch (e) { row = sheet.getRange(rel + 2, 1, 1, sheet.getLastColumn()).getValues()[0]; }
       const loan = buildFullLoan(row);
 
       // Merge lock-app-removed status from LockAppStatus tab (Data stays read-only)
@@ -254,15 +349,19 @@ function handleGet(e, opts) {
   if (action === 'readApprovedPartials') {
     try {
       const sheet = ss.getSheetByName(UNAPP_EMI_SHEET);
-      if (!sheet || sheet.getLastRow() < 2) return jsonResponse({ok:true, partials:[]});
-      const rows = sheet.getDataRange().getValues();
-      const partials = rows.slice(1)
+      tm('part.sheet');
+      if (!sheet) return jsonResponse({ok:true, partials:[]});
+      const b = configBounds(ss)[UNAPP_EMI_SHEET];
+      tm('part.cfg');
+      const rows = readDataRows(sheet, 2, b, 17, 'part.');
+      const partials = rows
         .filter(r => String(r[1]).toLowerCase()==='approved' && String(r[16]||'').toLowerCase()==='partial payment')
         .map(r => ({
           id: String(r[0]), loanId: String(r[5]||'').replace(/_\d+$/,''),
           customerName: r[6], emiNum: r[9], emiDate: fmtDate(r[10]),
           receivedDate: fmtDate(r[13]), amount: parseFloat(r[15])||0,
         }));
+      tm('part.filter');
       return jsonResponse({ok:true, partials});
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
@@ -307,9 +406,14 @@ function handleGet(e, opts) {
   if (action === 'readAllLoansForMsgs') {
     try {
       const sheet = ss.getSheetByName(DATA_SHEET);
-      if (!sheet || sheet.getLastRow() < 2) return jsonResponse({ok:true, loans:[]});
+      if (!sheet) return jsonResponse({ok:true, loans:[]});
       const nCols = 93; // up to revisedDateMsg (index 92)
-      const raw   = sheet.getRange(2, 1, sheet.getLastRow()-1, nCols).getValues();
+      const b   = configBounds(ss)[DATA_SHEET];
+      let nRows = dataRowCount(sheet, 2, b);
+      if (nRows < 1) return jsonResponse({ok:true, loans:[]});
+      let raw;
+      try   { raw = sheet.getRange(2, 1, nRows, nCols).getValues(); }
+      catch (e) { raw = sheet.getRange(2, 1, dataRowCount(sheet, 2, null), nCols).getValues(); }
       const loans = raw.map(r => buildFullLoan(r));
       // Merge lock-app-removed status from LockAppStatus tab (Data stays read-only)
       const lockMap = readLockStatus(ss);
@@ -341,21 +445,34 @@ function handleGet(e, opts) {
       const cached = (!forceRefresh) ? cache.get('stock_data_t') : null;
       if (cached) return jsonResponse({ok:true, stock: JSON.parse(cached)});
 
-      const stockSs  = SpreadsheetApp.openById(STOCK_SHEET_ID);
-      const sheet = stockSs.getSheetByName(STOCK_SHEET_TAB);
-      if (!sheet || sheet.getLastRow() < 1) return jsonResponse({ok:true, stock:{headers:[],rows:[]}});
+      const sheet = ss.getSheetByName(STOCK_SHEET);
+      tm('stock.sheet');
+      if (!sheet) return jsonResponse({ok:true, stock:{headers:[],rows:[]}});
+      const b = configBounds(ss)[STOCK_SHEET];
+      tm('stock.cfg');
 
-      // Read only through column T (20 cols); stop at the first empty cell in column A
+      // Read only through column T (20 cols) and stop at the first empty cell in
+      // column A. This used to be getLastRow() + a whole-column A scan + a second
+      // getRange; Config bounds make it one read, and the gap test below runs on
+      // what came back, so a blank row in column A still ends the table.
       const MAX_COLS = 20;
-      const aCol = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues().map(r => r[0]);
+      let all;
+      try {
+        all = (b && b.rows > 0) ? sheet.getRange(1, 1, b.rows, MAX_COLS).getValues()
+                                : sheet.getRange(1, 1, sheet.getLastRow(), MAX_COLS).getValues();
+      } catch (e) {
+        all = sheet.getRange(1, 1, sheet.getLastRow(), MAX_COLS).getValues();
+      }
+      tm('stock.values');
+      if (!all.length) return jsonResponse({ok:true, stock:{headers:[],rows:[]}});
       let lastDataRow = 0;
-      for (let i = 0; i < aCol.length; i++) {
-        if (aCol[i] === null || aCol[i] === undefined || String(aCol[i]).trim() === '') break;
+      for (let i = 0; i < all.length; i++) {
+        const a = all[i][0];
+        if (a === null || a === undefined || String(a).trim() === '') break;
         lastDataRow = i + 1;
       }
       if (lastDataRow < 1) return jsonResponse({ok:true, stock:{headers:[],rows:[]}});
 
-      const all     = sheet.getRange(1, 1, lastDataRow, MAX_COLS).getValues();
       const headers = all[0].map(h => String(h||'').trim());
       const dateCols = {};
       headers.forEach((h,i) => {
@@ -363,7 +480,7 @@ function handleGet(e, opts) {
         if (lh === 'month sold') dateCols[i] = 'm';
         else if (lh === 'order date' || lh === 'delivery date' || lh === 'selling date' || lh === 'billing date') dateCols[i] = 'd';
       });
-      const rows = all.slice(1).map(r => r.map((c,i) => {
+      const rows = all.slice(1, lastDataRow).map(r => r.map((c,i) => {
         if (c instanceof Date && !isNaN(c)) {
           return dateCols[i] === 'm' ? Utilities.formatDate(c, 'IST', 'MMM yy') : fmtDate(c);
         }
@@ -1011,8 +1128,8 @@ function fixDuplicatePids() {
 // TOP-LEVEL helper — must live outside doGet/doPost so both handlers can call it.
 function readLockStatus(ss) {
   const sheet = ss.getSheetByName(LOCK_STATUS_SHEET);
-  if (!sheet || sheet.getLastRow() < 2) return {};
-  const rows = sheet.getRange(2, 1, sheet.getLastRow()-1, 2).getValues();
+  if (!sheet) return {};
+  const rows = readDataRows(sheet, 2, configBounds(ss)[LOCK_STATUS_SHEET], 2, 'lock.');
   const map = {};
   rows.forEach(r => {
     const lid = String(r[0]||'').trim();
@@ -1023,8 +1140,11 @@ function readLockStatus(ss) {
 
 function readAllRevisedDates(ss) {
   const sheet = ss.getSheetByName(REVISED_DATES_SHEET);
-  if (!sheet || sheet.getLastRow() < 2) return [];
-  const rows = sheet.getRange(2, 1, sheet.getLastRow()-1, 6).getValues();
+  tm('rev.sheet');
+  if (!sheet) return [];
+  const b = configBounds(ss)[REVISED_DATES_SHEET];
+  tm('rev.cfg');
+  const rows = readDataRows(sheet, 2, b, 6, 'rev.');
   return rows.filter(r => r[0] && String(r[0]).trim()).map(r => ({
     loanId: String(r[0]||'').trim(),
     emiNum: parseInt(r[1])||0,
@@ -1040,6 +1160,14 @@ function readAllRevisedDates(ss) {
 // The lock-status, logged-EMI and revised-date sheets are the same for every
 // loan, so they are cached for 5 min instead of being re-read per click.
 const DETAIL_CACHE_TTL = 300;
+
+// The logged-EMI sheet is re-read by every 10-minute snapshot push, via
+// buildFullLoan() -> applyMiscTypes() -> getCachedEmiLogByLoan(). A 300 s
+// lifetime was therefore guaranteed to have expired before the next push
+// arrived, so the full ~850 ms read ran every single time. Every write path
+// already calls bustLoanDataCaches(), which removes this key outright, so a
+// longer life can only ever serve data that has not been touched.
+const EMI_LOG_CACHE_TTL = 900;
 
 function loanDetailCacheKey(loanId) {
   return 'loan_dtl_' + String(loanId || '').replace(/[^A-Za-z0-9_-]/g, '_');
@@ -1079,8 +1207,8 @@ function getCachedEmiLogByLoan(ss) {
   const byLoan = {};
   try {
     const logSheet = ss.getSheetByName(LOGGED_EMI_SHEET);
-    if (logSheet && logSheet.getLastRow() > 1) {
-      const logData = logSheet.getRange(2, 1, logSheet.getLastRow()-1, 12).getValues();
+    if (logSheet) {
+      const logData = readDataRows(logSheet, 2, configBounds(ss)[LOGGED_EMI_SHEET], 12, 'emilog.');
       logData.forEach(r => {
         const lid = String(r[0]||'').replace(/_\d+$/, '');
         if (!byLoan[lid]) byLoan[lid] = [];
@@ -1088,7 +1216,7 @@ function getCachedEmiLogByLoan(ss) {
       });
     }
   } catch(e) { /* non-critical */ }
-  cachePutIfSmall(cache, 'emi_log_byloan', byLoan, DETAIL_CACHE_TTL);
+  cachePutIfSmall(cache, 'emi_log_byloan', byLoan, EMI_LOG_CACHE_TTL);
   return byLoan;
 }
 
@@ -1143,11 +1271,19 @@ function readAllPending(ss) {
 
 // ── Read unapproved sheet into pending items ───────────────────────────────
 function readUnapproved(ss, sheetName, type) {
+  // Per-sheet marks: getLastRow/getLastColumn are SERVER round-trips and this
+  // function was making four of them for what is usually a tiny sheet. Config
+  // bounds collapse all four into one getRange(); `Unapproved_Loan.cfg` shows
+  // the one-off Config read and a `lastRow` mark means Config had no entry and
+  // the old round-trips were used instead.
+  const p = sheetName + '.';
   const sheet = ss.getSheetByName(sheetName);
-  if (!sheet || sheet.getLastRow() < 2) return [];
-  const nCols = sheet.getLastColumn();
-  const rows  = sheet.getRange(2,1,sheet.getLastRow()-1,nCols).getValues();
-  return rows
+  tm(p + 'sheet');
+  if (!sheet) return [];
+  const b = configBounds(ss)[sheetName];
+  tm(p + 'cfg');
+  const rows = readDataRows(sheet, 2, b, type === 'loan' ? 21 : 17, p);
+  const out = rows
     .filter(r => r[0] && String(r[1]).toLowerCase() === 'pending')
     .map(r => {
       let data = {};
@@ -1186,6 +1322,8 @@ function readUnapproved(ss, sheetName, type) {
                submittedBy:String(r[2]), submittedAt:String(r[3]),
                note:String(r[4]||''), data };
     });
+  tm(p + 'map');
+  return out;
 }
 
 // ── Append approved loan to Input sheet ───────────────────────────────────
@@ -1365,13 +1503,19 @@ function fmtDate(val) {
 }
 
 function readAllUsers(ss) {
+  const DEFAULT_ADMIN = [{ id:'u1', username:'AKS', pin:'0000', name:'AKS (You)', role:'admin',
+    perms:{ loan:true, allLoans:true, approvals:true, submit:true, stock:true } }];
   const sheet = ss.getSheetByName(USERS_SHEET);
-  if (!sheet || sheet.getLastRow() < 2) {
-    return [{ id:'u1', username:'AKS', pin:'0000', name:'AKS (You)', role:'admin',
-      perms:{ loan:true, allLoans:true, approvals:true, submit:true, stock:true } }];
-  }
-  const lastCol = sheet.getLastColumn();
-  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h || '').trim().toLowerCase());
+  if (!sheet) return DEFAULT_ADMIN;
+  // Header + every data row in ONE read. This used to be getLastRow(),
+  // getLastColumn(), a header getValues(), getLastRow() again, then a data
+  // getValues() - five separate round-trips on a tab that a single push reads
+  // twice (here, and again through usersFingerprint). minCols=10 is the widest
+  // of the columns the mapping below looks for, so an under-counting Config
+  // cannot make col() report -1 for a column that really is there.
+  const all = readDataRows(sheet, 1, configBounds(ss)[USERS_SHEET], 10, 'users.');
+  if (all.length < 2) return DEFAULT_ADMIN;
+  const headers = all[0].map(h => String(h || '').trim().toLowerCase());
   const col = name => {
     const i = headers.indexOf(name);
     return i === -1 ? -1 : i;
@@ -1381,7 +1525,7 @@ function readAllUsers(ss) {
   const read = (r, key, def) => ci[key] >= 0 ? String(r[ci[key]] || '').trim() : def;
   const readBool = (r, key) => read(r, key, '').toUpperCase() === 'TRUE';
 
-  const raw = sheet.getRange(2, 1, sheet.getLastRow()-1, lastCol).getValues();
+  const raw = all.slice(1);
   const users = raw.filter(r => r[0] && String(r[0]).trim()).map(r => ({
     id: read(r, 'id', String(r[0]).trim()),
     username: read(r, 'username'),
@@ -1517,8 +1661,168 @@ function usersFingerprint(ss) {
     .map(hex2).join('');
 }
 
+// ── pushSnapshot profiling ────────────────────────────────────────────────
+// doPost never calls tmStart(), so the marks handleGet already emits (open,
+// auth, read, build, str …) are no-ops during a push — that is why only the
+// total was ever visible. We start and stop a timer around EACH source and key
+// it by action name, so the eight sources cannot overwrite one another, and the
+// inner marks come back nested under their own action.
+
+// Byte length of a value, or null if it is not serialisable. Only called when
+// the caller asked for byte counts (one extra stringify per source).
+function byteLen(v) {
+  try { return JSON.stringify(v).length; } catch (e) { return null; }
+}
+
+// The single call site that passes internal:true. Reads every snapshot source
+// through handleGet() — i.e. exactly the code path the API itself serves — and
+// records `{ ms, marks, bytes }` per action into `timings`. snapshot-test
+// enforces that this appears exactly once in the file, so do not repeat the
+// literal opts object in any comment.
+function runSnapshotSources(timings, measureBytes) {
+  const data = {};
+  SNAPSHOT_SOURCES.forEach(src => {
+    const t0 = Date.now();
+    tmStart();
+    let resp = null, failure = null;
+    try {
+      resp = handleGet(
+        { parameter: Object.assign({ action: src.action }, src.params || {}) },
+        { internal: true }
+      );
+    } catch (e) {
+      failure = e;
+    }
+    const marks = tmEnd() || {};
+    const ms = Date.now() - t0;
+    if (failure) throw failure;
+    if (!resp || resp.ok !== true) {
+      throw new Error(src.action + ' failed: ' + ((resp && resp.error) || 'unknown'));
+    }
+    data[src.key] = resp[src.out];
+    timings[src.action] = {
+      ms: ms,
+      marks: marks,
+      bytes: measureBytes ? byteLen(resp[src.out]) : null,
+    };
+  });
+  return data;
+}
+
+// Safe logger for the profile. Logger is the canonical Apps Script API and
+// exists on every runtime (V8 and legacy); console is the fallback. Neither
+// branch may ever throw — reporting must not be able to break a push, and a
+// failure inside the catch block would hide the real error from the log.
+function profLog(msg) {
+  try { Logger.log(msg); return; } catch (e) {}
+  try { console.log(msg); } catch (e2) {}
+}
+
+// Prints the action-wise breakdown. Shows up both when you run
+// profilePushSnapshot() from the editor and in the Executions log for a
+// trigger-driven push.
+function logPushProfile(timings, opts) {
+  try {
+    const names = Object.keys(timings).filter(function (k) {
+      return k.charAt(0) !== '_' || k === '__error';
+    });
+    const total = timings.__total || 0;
+
+    const rows = names.filter(function (k) { return typeof timings[k] === 'object'; })
+      .map(function (k) {
+        return { k: k, ms: timings[k].ms, bytes: timings[k].bytes };
+      })
+      .sort(function (a, b) { return b.ms - a.ms; });
+
+    const fixed = Object.keys(timings).filter(function (k) {
+      // __total is the header, __error is text, __workerHttp is a status code
+      // (already printed there), and __rawBytes/__zipBytes are sizes, not costs.
+      // Only real millisecond costs belong in this section.
+      return k.charAt(0) === '_' && k !== '__total' && k !== '__error' &&
+             k !== '__workerHttp' && k !== '__rawBytes' && k !== '__zipBytes' &&
+             typeof timings[k] === 'number';
+    }).sort(function (a, b) { return timings[b] - timings[a]; });
+
+    const pct = function (ms) {
+      return total ? Math.round((ms / total) * 100) + '%' : '—';
+    };
+    const pad = function (s, n) { s = String(s); while (s.length < n) s += ' '; return s; };
+    const kb = function (n) {
+      if (n === null || n === undefined) return '';
+      if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+      if (n >= 1024)    return Math.round(n / 1024) + ' KB';
+      return n + ' B';
+    };
+    const ms = function (n) { return n.toLocaleString('en-US') + ' ms'; };
+
+    const lines = [];
+    lines.push('');
+    lines.push('=== pushSnapshot profile  ' + new Date().toISOString().slice(0, 19).replace('T', ' ') +
+               (opts && opts.profile ? '  [profile]' : '') + ' ===');
+    lines.push(pad('total', 24) + pad(ms(total), 14) + pad('100%', 7) +
+               (timings.__workerHttp !== undefined ? 'HTTP ' + timings.__workerHttp : ''));
+    if (timings.__error) lines.push('FAILED: ' + timings.__error);
+
+    rows.forEach(function (r) {
+      lines.push('  ' + pad(r.k, 22) + pad(ms(r.ms), 14) + pad(pct(r.ms), 7) +
+                 pad(kb(r.bytes), 9));
+    });
+
+    if (fixed.length) {
+      lines.push('  -- fixed --');
+      fixed.forEach(function (k) {
+        lines.push('  ' + pad(k.replace(/^__/, ''), 22) + pad(ms(timings[k]), 14) +
+                   pad(pct(timings[k]), 7));
+      });
+    }
+    if (timings.__rawBytes !== undefined && timings.__zipBytes !== undefined) {
+      let pl = '  payload sent ' + kb(timings.__zipBytes);
+      if (timings.__rawBytes) {
+        pl += ', ' + kb(timings.__rawBytes) + ' uncompressed';
+        if (timings.__zipBytes < timings.__rawBytes) {
+          pl += ' (' + Math.round((1 - timings.__zipBytes / timings.__rawBytes) * 100) + '% smaller)';
+        }
+      }
+      lines.push(pl);
+    }
+    if (opts && opts.profile && timings.__stringify !== undefined) {
+      lines.push('  (byte counts cost ' + ms(timings.__stringify) + ' extra — profile only)');
+    }
+    lines.push('');
+    profLog(lines.join('\n'));
+  } catch (e) {
+    // Never let a reporting problem fail the push itself.
+    profLog('pushSnapshot profile unavailable: ' + e);
+  }
+}
+
 // Runs on the trigger. Throws on failure so the Apps Script error log records it.
-function pushSnapshot() {
+//
+// The profile is printed ONLY for an explicit profile run. The 10-minute
+// trigger and pushSnapshotNow take the same code path as the original
+// pushSnapshot and log nothing — timing is still collected (a handful of
+// Date.now() calls) but never rendered, so the production path cannot be
+// broken by a reporting problem.
+function pushSnapshot(opts) {
+  const timings = {};
+  const t0 = Date.now();
+  const profile = !!(opts && opts.profile);
+  try {
+    const r = pushSnapshotBody(timings, opts);
+    timings.__total = Date.now() - t0;
+    if (profile) logPushProfile(timings, opts);
+    return r;
+  } catch (e) {
+    timings.__error = String((e && e.message) || e);
+    timings.__total = Date.now() - t0;
+    if (profile) logPushProfile(timings, opts);
+    throw e;
+  }
+}
+
+function pushSnapshotBody(timings, opts) {
+  const measure = !!(opts && opts.profile);
+
   const props = ScriptProperties;
   const secret = props.getProperty('SNAPSHOT_SECRET');
   const url    = props.getProperty('SNAPSHOT_WORKER_URL');
@@ -1529,35 +1833,35 @@ function pushSnapshot() {
   // refused instead of paying for a duplicate 15 s rebuild.
   props.setProperty('SNAPSHOT_LAST_PUSH', String(Date.now()));
 
+  let mark = Date.now();
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  timings.__openById = Date.now() - mark;
 
+  mark = Date.now();
   const fp = usersFingerprint(ss);
+  timings.__usersFingerprint = Date.now() - mark;
+
+  mark = Date.now();
   let epoch = parseInt(props.getProperty('SNAPSHOT_EPOCH') || '0', 10);
   if (fp !== props.getProperty('SNAPSHOT_USERS_FP')) {
     epoch++;
     props.setProperty('SNAPSHOT_EPOCH', String(epoch));
     props.setProperty('SNAPSHOT_USERS_FP', fp);
   }
+  timings.__epoch = Date.now() - mark;
 
-  const data = {};
-  SNAPSHOT_SOURCES.forEach(src => {
-    const resp = handleGet(
-      { parameter: Object.assign({ action: src.action }, src.params || {}) },
-      { internal: true }
-    );
-    if (!resp || resp.ok !== true) {
-      throw new Error(src.action + ' failed: ' + ((resp && resp.error) || 'unknown'));
-    }
-    data[src.key] = resp[src.out];
-  });
+  const data = runSnapshotSources(timings, measure);
 
   // HARD RULE: `users` must be the public projection. readAllUsers() returns
   // raw PINs — the snapshot would publish every password in the sheet.
+  mark = Date.now();
   const users = data.users;
   if (Array.isArray(users) && users.some(u => u && Object.prototype.hasOwnProperty.call(u, 'pin'))) {
     throw new Error('refusing to push: snapshot users payload contains a pin');
   }
+  timings.__pinScan = Date.now() - mark;
 
+  mark = Date.now();
   const body = JSON.stringify({
     v: 1,
     generatedAt: Date.now(),
@@ -1565,20 +1869,77 @@ function pushSnapshot() {
     usersFingerprint: fp,
     data: data,
   });
+  timings.__stringify = Date.now() - mark;
+  timings.__rawBytes = body.length;
 
+  // Deflate before the upload. The body is ~4.6 MB of plain JSON, and the
+  // Apps Script -> Worker hop was costing ~3 s just to move those bytes.
+  // Utilities.zip() wraps the JSON in a ZIP entry (deflate method), which the
+  // Worker inflates and then stores as plain JSON in KV - so the read path,
+  // the token path and every client are completely untouched. If zipping is
+  // unavailable for any reason we send the plain JSON instead: the Worker
+  // accepts both, decided by the ZIP magic bytes rather than a flag, so an old
+  // Worker and a new Apps Script (or the reverse) can never disagree.
+  mark = Date.now();
+  let payload = body;
+  let contentType = 'application/json';
+  try {
+    payload = Utilities.zip([Utilities.newBlob(body, 'application/json', 'snapshot.json')]);
+    contentType = 'application/zip';
+  } catch (zipErr) {
+    payload = body;
+    contentType = 'application/json';
+  }
+  // An Apps Script Blob exposes no `length`, so the compressed size has to come
+  // from getBytes(). The plain-JSON fallback is a string, and reports its own
+  // length, which keeps the profile line honest in both cases.
+  const zipBytes = (payload && typeof payload.getBytes === 'function')
+    ? payload.getBytes().length
+    : (payload ? String(payload).length : 0);
+  timings.__zip = Date.now() - mark;
+  timings.__zipBytes = zipBytes;
+
+  mark = Date.now();
   const res = UrlFetchApp.fetch(url, {
     method: 'post',
-    contentType: 'application/json',
+    contentType: contentType,
     headers: { Authorization: 'Bearer ' + secret },
-    payload: body,
+    payload: payload,
     muteHttpExceptions: true,
   });
   const code = res.getResponseCode();
+  timings.__workerFetch = Date.now() - mark;
+  timings.__workerHttp = code;
   if (code < 200 || code >= 300) {
     throw new Error('worker rejected push: HTTP ' + code + ' ' +
                     String(res.getContentText()).slice(0, 200));
   }
-  return { ok: true, epoch: epoch, bytes: body.length, sources: SNAPSHOT_SOURCES.length };
+  return { ok: true, epoch: epoch, bytes: body.length, sentBytes: timings.__zipBytes,
+           sources: SNAPSHOT_SOURCES.length };
+}
+
+// Run from the Apps Script editor (▶ profilePushSnapshot) to see where the
+// ~15 s of a push actually goes. Does EXACTLY the same work as the 10-minute
+// trigger, so the numbers are representative — the only extra cost is one
+// extra JSON.stringify per source, to report payload sizes.
+//
+// The failure is re-thrown with a `profilePushSnapshot failed -> ` prefix so
+// the Executions ROW states a real reason without you having to click into the
+// log. If a failed run shows no such prefix, this function never started —
+// which means the script did not compile or did not save, not that a read broke.
+function profilePushSnapshot() {
+  profLog('profilePushSnapshot: start');
+  try {
+    return pushSnapshot({ profile: true });
+  } catch (e) {
+    const reason = (e && e.message) ? e.message : String(e);
+    // pushSnapshot() has already printed its FAILED line; this adds the stack,
+    // which is what actually tells you the offending line number.
+    profLog('profilePushSnapshot: ' + (e && e.stack ? e.stack : e));
+    const err = new Error('profilePushSnapshot failed -> ' + reason);
+    if (e && e.stack) err.stack = 'profilePushSnapshot failed -> ' + reason + '\n' + e.stack;
+    throw err;
+  }
 }
 
 // Run ONCE from the Apps Script editor, passing the Worker URL. Idempotent:
