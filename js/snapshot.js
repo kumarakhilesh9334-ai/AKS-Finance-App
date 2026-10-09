@@ -206,6 +206,10 @@ function snapErrText(reason) {
 // cache would have fired all five reads on every ordinary app open.
 const SNAP_FRESH_MS = 10 * 60 * 1000;   // matches createSnapshotTrigger()'s interval
 const BOOT_DECIDE_MS = 8000;            // safety net if restoreSession hangs
+// An on-demand rebuild is a full Apps Script push, which takes a few seconds.
+// The safety net has to outlast it, or every approvals user's page load would
+// fall back to the slow Google reads while the rebuild was still in flight.
+const LIVE_DECIDE_MS = 45000;
 
 function snapshotIsFresh() {
   if (!SNAP_URL) return false;
@@ -223,17 +227,19 @@ function snapshotIsFresh() {
 
 let _bootDecided = false;
 
-// Called once per login, right after first paint. The snapshot gets the first
-// chance to answer; the Google reads follow only if it cannot.
+// Called once per login and once per page reload, right after first paint.
+// The snapshot gets the first chance to answer; the Google reads follow only
+// if it cannot. An approvals user instead gets an on-demand rebuild first.
 function scheduleBootRefresh() {
   _bootDecided = false;
   S._booting = true;
   if (!S.sheetsUrl || !S.cu) { _bootDecided = true; S._booting = false; return; }
   const decide = () => maybeBootRefresh();
-  refreshSnapshot().then(decide, decide);
+  const live = canAskForLive();
+  (live ? liveRebuild() : refreshSnapshot()).then(decide, decide);
   // Safety net: a hung restoreSession must not leave the screen on cache with
   // nothing running and no retry armed.
-  setTimeout(decide, BOOT_DECIDE_MS);
+  setTimeout(decide, live ? LIVE_DECIDE_MS : BOOT_DECIDE_MS);
 }
 
 function maybeBootRefresh() {
@@ -246,21 +252,30 @@ function maybeBootRefresh() {
   fetchUsersFromSheets();
 }
 
-// ── Manual refresh (the "Data as of" strip) ────────────────────────────────
-// The strip is the app's only refresh control. It deliberately does NOT call
-// readAllLoans / readPending / readUsers / readRevisedDates / readApprovedPartials:
-// it asks the sheet to rebuild the snapshot, the sheet does all of those reads
-// inside pushSnapshot() and ships the result to the Worker, and only then does
-// this tab read anything — from the Worker. Same data, one path, and Google is
-// never touched directly by a refresh.
+// ── On-demand rebuild for approvals users ──────────────────────────────────
+// There is no refresh button anywhere in the app. The "Data as of" strip is a
+// plain timestamp and is not clickable. What an approvals user does instead is
+// simply reload the page: completeLogin() -> scheduleBootRefresh() ->
+// liveRebuild() asks the sheet to rebuild the snapshot right now, and this tab
+// then reads the result from the Worker. Same data, one path — this tab never
+// asks Google directly for loans, pending, users, revised dates or partials.
 //
-// Cost is ~15 s (8 sources, ~93 columns). The sheet floors pushes at 30 s, so
-// mashing the strip — or ten people doing it at once — cannot burn the 5400 s
-// Apps Script budget; a throttled request comes straight back and we simply
-// read whatever the Worker already holds.
+// Who qualifies is decided by the same rule that shows the Approvals tab, so
+// the two can never disagree. Everyone else keeps the normal behaviour: the
+// published snapshot gets first refusal and the Google reads follow only if it
+// could not answer.
+//
+// Cost is ~7-15 s per rebuild. The sheet floors pushes at 30 s, so refreshing
+// repeatedly — or a whole team doing it at once — cannot burn the 5400 s Apps
+// Script budget; a throttled request comes straight back and we simply read
+// whatever the Worker already holds.
 let _stripBusy = false;
 
-async function stripRefresh() {
+function canAskForLive() {
+  return !!(S.cu && S.cu.perms && (S.cu.role === 'admin' || S.cu.perms.approvals));
+}
+
+async function liveRebuild() {
   if (_stripBusy) return;
   if (!SNAP_URL || !S.sheetsUrl || !S.cu) return;
   _stripBusy = true;
@@ -276,7 +291,7 @@ async function stripRefresh() {
     if (!s.ok) throw new Error(snapErrText(s.reason));
   } catch (e) {
     if (!S.snapshotError) S.snapshotError = 'manual';
-    console.warn('[snapshot] manual refresh failed:', e.message);
+    console.warn('[snapshot] live rebuild failed:', e.message);
   } finally {
     _stripBusy = false;
     renderDataAsOf();
@@ -284,6 +299,8 @@ async function stripRefresh() {
 }
 
 // ── "Data as of" strip ──────────────────────────────────────────────────────
+// Display only. It reports how old the numbers on screen are; it is not a
+// control, carries no click handler, and says nothing about "tapping" it.
 function renderDataAsOf() {
   const el = document.getElementById('data-asof');
   if (!el) return;
@@ -291,13 +308,13 @@ function renderDataAsOf() {
   if (_stripBusy) {
     el.style.display = '';
     el.className = 'data-asof asof-busy';
-    el.textContent = '⟳ Pulling the latest data. Wait for about 15 sec';
+    el.textContent = '⟳ Fetching the latest data...';
     return;
   }
   if (S.snapshotExpired || (S.snapshotError && !S.snapshotAt)) {
     el.style.display = '';
     el.className = 'data-asof asof-expired';
-    el.textContent = snapErrText(S.snapshotError || 'unauthorized') + '. Tap to retry';
+    el.textContent = snapErrText(S.snapshotError || 'unauthorized');
     return;
   }
   if (S.snapshotError && S.snapshotAt) {
@@ -305,16 +322,14 @@ function renderDataAsOf() {
     // pretending the session died.
     el.style.display = '';
     el.className = 'data-asof asof-stale';
-    el.textContent = snapErrText(S.snapshotError) +
-      ', last update ' + fmtAgo(S.snapshotAt) + '. Tap to retry';
+    el.textContent = snapErrText(S.snapshotError) + ', last update ' + fmtAgo(S.snapshotAt);
     return;
   }
   if (!S.snapshotAt) { el.style.display = 'none'; return; }
   el.style.display = '';
   el.className = 'data-asof ' + (ageMinutes(S.snapshotAt) > 15 ? 'asof-stale' : 'asof-ok');
-  el.textContent = ageMinutes(S.snapshotAt) < 2 ? '✓ Live. Tap to re-check'
-    : 'Data as of ' + fmtClock(S.snapshotAt) + ', ' + ageMinutes(S.snapshotAt) +
-      ' min old. Tap to refresh';
+  el.textContent = ageMinutes(S.snapshotAt) < 2 ? '✓ Live'
+    : 'Data as of ' + fmtClock(S.snapshotAt) + ', ' + ageMinutes(S.snapshotAt) + ' min old';
 }
 
 function ageMinutes(ts) {
