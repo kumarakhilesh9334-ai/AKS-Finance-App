@@ -7,7 +7,7 @@
 <link rel="icon" href="LOGO.jpeg" sizes="any">
 <link rel="apple-touch-icon" href="LOGO.jpeg">
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="css/styles.css?v=8">
+<link rel="stylesheet" href="css/styles.css?v=10">
 <style>
   #install-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:99999;align-items:center;justify-content:center}
   #install-overlay.show{display:flex}
@@ -30,7 +30,7 @@
 <style>.s #auth-screen{display:none!important}.s #app{display:block!important}</style>
 <script>(function(){try{if(!localStorage.getItem('aks_cu')&&!localStorage.getItem('aks_token'))document.documentElement.className=''}catch(e){document.documentElement.className=''}})()</script>
 
-<!-- ── AUTH SCREEN ─────────────────────────────────────────────────────── -->
+<!-- â”€â”€ AUTH SCREEN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
 <div id="auth-screen">
   <div class="auth-card">
     <img src="LOGO.jpeg" alt="AKS Finance" style="width:100%;max-width:200px;display:block;margin:0 auto 1rem;border-radius:12px">
@@ -43,7 +43,7 @@
   </div>
 </div>
 
-<!-- ── APP SHELL ───────────────────────────────────────────────────────── -->
+<!-- â”€â”€ APP SHELL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
 <div id="app" style="display:none">
   <div class="header">
     <img src="LOGO.jpeg" alt="" style="height:28px;width:auto;border-radius:6px;margin-right:8px">
@@ -55,7 +55,7 @@
     </div>
   </div>
   <div class="nav" id="nav"></div>
-  <!-- "Data as of" — how old the numbers on screen are. Display only: it is
+  <!-- "Data as of" â€” how old the numbers on screen are. Display only: it is
        not a button and carries no click handler. An approvals user refreshes
        the data by reloading the page. Rendered by snapshot.js -->
   <div id="data-asof" class="data-asof" style="display:none"></div>
@@ -64,7 +64,7 @@
   <div class="main">
     <div id="alert-box"></div>
 
-    <!-- ── NEW LOAN ──────────────────────────────────────────────────── -->
+    <!-- â”€â”€ NEW LOAN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div class="page" id="page-new-loan">
       <div style="font-size:15px;font-weight:500;margin-bottom:1rem">New loan application</div>
       <div class="new-loan-layout">
@@ -74,9 +74,9 @@
           <div class="fg fg-2">
             <div class="form-section">Customer details</div>
 
-            <!-- Aadhaar/PAN with autocomplete — FIRST field -->
+            <!-- Aadhaar/PAN with autocomplete â€” FIRST field -->
             <div id="idnum-wrap" style="position:relative">
-              <label>Aadhaar / PAN <span style="color:#A32D2D">*</span> <span style="font-size:11px;color:#888">— type to search existing customers</span></label>
+              <label>Aadhaar / PAN <span style="color:#A32D2D">*</span> <span style="font-size:11px;color:#888">â€” type to search existing customers</span></label>
               <input type="text" id="f-idnum" placeholder="Aadhaar or PAN" autocomplete="off" oninput="onIdNumInput();genLoanId()" required>
               <div id="idnum-dropdown" class="idnum-dd" style="display:none"></div>
               <div id="customer-loans-panel" class="idnum-dd" style="display:none"></div>
@@ -85,7 +85,7 @@
             <div><label>Customer name <span style="color:#A32D2D">*</span></label><input type="text" id="f-cname" placeholder="Full name" oninput="genLoanId()" required></div>
             <div><label>Mobile number <span style="color:#A32D2D">*</span></label><input type="text" id="f-phone" placeholder="10-digit" maxlength="10" required></div>
             <div id="guarantor-wrap" style="position:relative">
-              <label>Guarantor name <span style="font-size:11px;color:#888">— type to search existing customers</span></label>
+              <label>Guarantor name <span style="font-size:11px;color:#888">â€” type to search existing customers</span></label>
               <input type="text" id="f-guarantor-name" placeholder="Search by customer name" autocomplete="off" oninput="onGuarantorInput()">
               <div id="guarantor-dropdown" class="idnum-dd" style="display:none"></div>
             </div>
@@ -98,10 +98,10 @@
                 <option>Mobile</option><option>TV</option><option>Sound Box</option><option>Fridge</option><option>AC</option><option>Washing Machine</option><option>Air Cooler</option><option>Induction</option><option>Mixer</option><option>Gas Stove</option><option>Inverter Battery</option><option>Inverter</option><option>Inverter &amp; Battery</option><option>Loan</option><option>Fan</option><option>Other</option>
               </select>
             </div>
-            <div><label>Device amount (₹) <span style="color:#A32D2D">*</span></label><input type="number" id="f-price" placeholder="0" oninput="calcLoan()" required></div>
-            <div><label>Down payment (₹) <span style="color:#A32D2D">*</span></label><input type="number" id="f-down" placeholder="0" oninput="calcLoan()" required></div>
-            <div><label>Processing fee (₹) <span style="color:#A32D2D">*</span></label><input type="number" id="f-pfee" oninput="calcLoan()" required></div>
-            <div><label>App lock charge (₹) <span style="color:#A32D2D">*</span></label><input type="number" id="f-applock" oninput="calcLoan()" required></div>
+            <div><label>Device amount (â‚¹) <span style="color:#A32D2D">*</span></label><input type="number" id="f-price" placeholder="0" oninput="calcLoan()" required></div>
+            <div><label>Down payment (â‚¹) <span style="color:#A32D2D">*</span></label><input type="number" id="f-down" placeholder="0" oninput="calcLoan()" required></div>
+            <div><label>Processing fee (â‚¹) <span style="color:#A32D2D">*</span></label><input type="number" id="f-pfee" oninput="calcLoan()" required></div>
+            <div><label>App lock charge (â‚¹) <span style="color:#A32D2D">*</span></label><input type="number" id="f-applock" oninput="calcLoan()" required></div>
 
             <div class="form-section">Loan details</div>
             <div>
@@ -109,11 +109,11 @@
               <input type="number" id="f-tenure" placeholder="e.g. 6" oninput="calcLoan()" required>
             </div>
             <div>
-              <label>Monthly EMI (₹) <span style="color:#A32D2D">*</span></label>
+              <label>Monthly EMI (â‚¹) <span style="color:#A32D2D">*</span></label>
               <input type="number" id="f-monthly-emi" placeholder="e.g. 2500" oninput="calcLoan()" required>
             </div>
             <div>
-              <label>Interest (₹) <span style="font-size:11px;color:#aaa">— auto-computed</span></label>
+              <label>Interest (â‚¹) <span style="font-size:11px;color:#aaa">â€” auto-computed</span></label>
               <input type="number" id="f-int" placeholder="auto" readonly style="background:#f5f5f3;color:#999;cursor:not-allowed">
             </div>
             <div>
@@ -135,9 +135,9 @@
           <!-- Summary box -->
           <div class="calc-box" id="calc-preview" style="display:none;margin-top:0.75rem">
             <div style="font-size:11px;font-weight:500;color:#534AB7;margin-bottom:6px">Summary</div>
-            <div class="calc-row"><span>Finance amount</span><span id="cp-finance">—</span></div>
-            <div class="calc-row"><span>Total EMI amount</span><span id="cp-total">—</span></div>
-            <div class="calc-row total"><span>Monthly EMI</span><span id="cp-emi">—</span></div>
+            <div class="calc-row"><span>Finance amount</span><span id="cp-finance">â€”</span></div>
+            <div class="calc-row"><span>Total EMI amount</span><span id="cp-total">â€”</span></div>
+            <div class="calc-row total"><span>Monthly EMI</span><span id="cp-emi">â€”</span></div>
           </div>
 
           <div class="submit-row">
@@ -148,7 +148,7 @@
       </div>
     </div>
 
-    <!-- ── ALL LOANS (merged overview) ─────────────────────────────────── -->
+    <!-- â”€â”€ ALL LOANS (merged overview) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div class="page" id="page-all-loans">
       <div class="ov-header">
         <div class="ov-row1">
@@ -164,39 +164,39 @@
       <div class="ov-sticky">
         <div class="ov-row2">
           <div class="emi-search-wrap" style="flex:1;margin-bottom:0">
-            <span class="emi-search-icon">🔍</span>
-            <input type="text" id="ov-search" placeholder="Search Loan ID or customer…" oninput="onSearchInput(this.value)">
+            <span class="emi-search-icon">ðŸ”</span>
+            <input type="text" id="ov-search" placeholder="Search Loan ID or customerâ€¦" oninput="onSearchInput(this.value)">
           </div>
           <button class="btn btn-clear" onclick="clearOverviewSearch()" title="Clear search">Clear</button>
         </div>
         <div class="mob-five-tabs" id="ov-tabs">
-            <button class="mob-five-tab active" id="mob-tab-ov-all"       onclick="mobSwitchOvCol('all')">🔵 All</button>
-            <button class="mob-five-tab"        id="mob-tab-ov-overdue"   onclick="mobSwitchOvCol('overdue')">🔴 Overdue</button>
-            <button class="mob-five-tab"        id="mob-tab-ov-upcoming"  onclick="mobSwitchOvCol('upcoming')">🟢 Upcoming</button>
-            <button class="mob-five-tab"        id="mob-tab-ov-defaulted" onclick="mobSwitchOvCol('defaulted')">⚠️ Defaulted</button>
-            <button class="mob-five-tab"        id="mob-tab-ov-closed"    onclick="mobSwitchOvCol('closed')">⚪ Closed</button>
+            <button class="mob-five-tab active" id="mob-tab-ov-all"       onclick="mobSwitchOvCol('all')">ðŸ”µ All</button>
+            <button class="mob-five-tab"        id="mob-tab-ov-overdue"   onclick="mobSwitchOvCol('overdue')">ðŸ”´ Overdue</button>
+            <button class="mob-five-tab"        id="mob-tab-ov-upcoming"  onclick="mobSwitchOvCol('upcoming')">ðŸŸ¢ Upcoming</button>
+            <button class="mob-five-tab"        id="mob-tab-ov-defaulted" onclick="mobSwitchOvCol('defaulted')">âš ï¸ Defaulted</button>
+            <button class="mob-five-tab"        id="mob-tab-ov-closed"    onclick="mobSwitchOvCol('closed')">âšª Closed</button>
           </div>
         </div>
         <div class="emi-five-col">
             <div class="emi-col-wrap mob-active" id="ov-col-all">
-              <div class="emi-col-hd" style="background:#534AB7;color:#fff"><span>🔵 All</span><span class="emi-section-count" id="ov-all-count">0</span></div>
-              <div class="emi-col-body" id="ov-all-list"><div class="emi-col-empty">Loading…</div></div>
+              <div class="emi-col-hd" style="background:#534AB7;color:#fff"><span>ðŸ”µ All</span><span class="emi-section-count" id="ov-all-count">0</span></div>
+              <div class="emi-col-body" id="ov-all-list"><div class="emi-col-empty">Loadingâ€¦</div></div>
             </div>
             <div class="emi-col-wrap" id="ov-col-overdue">
-              <div class="emi-col-hd overdue-hd"><span>🔴 Overdue</span><span class="emi-section-count" id="ov-overdue-count">0</span></div>
-              <div class="emi-col-body" id="ov-overdue-list"><div class="emi-col-empty">Loading…</div></div>
+              <div class="emi-col-hd overdue-hd"><span>ðŸ”´ Overdue</span><span class="emi-section-count" id="ov-overdue-count">0</span></div>
+              <div class="emi-col-body" id="ov-overdue-list"><div class="emi-col-empty">Loadingâ€¦</div></div>
             </div>
             <div class="emi-col-wrap" id="ov-col-upcoming">
-              <div class="emi-col-hd upcoming-hd"><span>🟢 Upcoming</span><span class="emi-section-count" id="ov-upcoming-count">0</span></div>
-              <div class="emi-col-body" id="ov-upcoming-list"><div class="emi-col-empty">Loading…</div></div>
+              <div class="emi-col-hd upcoming-hd"><span>ðŸŸ¢ Upcoming</span><span class="emi-section-count" id="ov-upcoming-count">0</span></div>
+              <div class="emi-col-body" id="ov-upcoming-list"><div class="emi-col-empty">Loadingâ€¦</div></div>
             </div>
             <div class="emi-col-wrap" id="ov-col-defaulted">
-              <div class="emi-col-hd defaulted-hd"><span>⚠️ Defaulted</span><span class="emi-section-count" id="ov-defaulted-count">0</span></div>
-              <div class="emi-col-body" id="ov-defaulted-list"><div class="emi-col-empty">Loading…</div></div>
+              <div class="emi-col-hd defaulted-hd"><span>âš ï¸ Defaulted</span><span class="emi-section-count" id="ov-defaulted-count">0</span></div>
+              <div class="emi-col-body" id="ov-defaulted-list"><div class="emi-col-empty">Loadingâ€¦</div></div>
             </div>
             <div class="emi-col-wrap" id="ov-col-closed">
-              <div class="emi-col-hd closed-hd"><span>⚪ Closed</span><span class="emi-section-count" id="ov-closed-count">0</span></div>
-              <div class="emi-col-body" id="ov-closed-list"><div class="emi-col-empty">Loading…</div></div>
+              <div class="emi-col-hd closed-hd"><span>âšª Closed</span><span class="emi-section-count" id="ov-closed-count">0</span></div>
+              <div class="emi-col-body" id="ov-closed-list"><div class="emi-col-empty">Loadingâ€¦</div></div>
             </div>
           </div>
           <div id="ov-revised-view" style="display:none;margin-top:0.75rem"></div>
@@ -215,7 +215,7 @@
                 <div style="font-size:14px;font-weight:600;color:#534AB7" id="ov-detail-collect-main"></div>
                 <div style="font-size:12px;color:#888;margin-top:2px" id="ov-detail-collect-sub"></div>
               </div>
-              <button class="btn btn-sm" onclick="closeOverviewDetail()">✕ Close</button>
+              <button class="btn btn-sm" onclick="closeOverviewDetail()">âœ• Close</button>
             </div>
             <div class="divider" style="margin-bottom:0.75rem"></div>
             <div id="ov-emi-slots-wrap" style="margin-bottom:0.75rem">
@@ -233,7 +233,7 @@
             <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px" id="ov-next-label"></div>
             <div id="ov-emi-form-wrap">
             <div class="fg fg-2">
-              <div><label>Amount received (₹)</label><input type="number" id="ov-emi-amt" placeholder="0" oninput="checkOverviewEmiDiff()"></div>
+              <div><label>Amount received (â‚¹)</label><input type="number" id="ov-emi-amt" placeholder="0" oninput="checkOverviewEmiDiff()"></div>
               <div><label>Payment date</label><input type="date" id="ov-emi-date"></div>
             </div>
             <div class="fg fg-3" style="margin-bottom:0.75rem">
@@ -252,7 +252,7 @@
             </div>
             <div id="ov-emi-reason-wrap" style="display:none"><label>Reason for difference <span style="color:#A32D2D">*</span></label>
               <select id="ov-emi-reason" onchange="checkOverviewEmiReason()">
-                <option value="">— Select reason —</option>
+                <option value="">â€” Select reason â€”</option>
                 <option>Late payment fine included</option><option>Extra EMI received</option>
                 <option>Early loan closing settlement</option><option>Partial payment</option><option>Default Adjustment</option>
                 <option>Multiple EMI Payment</option>
@@ -288,51 +288,51 @@
       </div>
     </div>
 
-    <!-- ── APPROVALS (admin) ─────────────────────────────────────────── -->
+    <!-- â”€â”€ APPROVALS (admin) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div class="page" id="page-approvals">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
         <span style="font-size:15px;font-weight:500">Pending approvals</span>
       </div>
       <div class="emi-search-wrap">
-        <span class="emi-search-icon">🔍</span>
-        <input type="text" id="appr-search" placeholder="Search Loan ID or customer…" oninput="renderApprovals(this.value)">
+        <span class="emi-search-icon">ðŸ”</span>
+        <input type="text" id="appr-search" placeholder="Search Loan ID or customerâ€¦" oninput="renderApprovals(this.value)">
       </div>
       <!-- Mobile tab switcher -->
       <div class="mob-two-tabs" id="appr-mob-tabs">
-        <button class="mob-two-tab active" id="mob-tab-loan" onclick="mobSwitchApprCol('loan')">📋 New Loans <span class="emi-section-count" id="mob-appr-loan-count">0</span></button>
-        <button class="mob-two-tab"        id="mob-tab-emi"  onclick="mobSwitchApprCol('emi')">💰 Logged EMIs <span class="emi-section-count" id="mob-appr-emi-count">0</span></button>
+        <button class="mob-two-tab active" id="mob-tab-loan" onclick="mobSwitchApprCol('loan')">ðŸ“‹ New Loans <span class="emi-section-count" id="mob-appr-loan-count">0</span></button>
+        <button class="mob-two-tab"        id="mob-tab-emi"  onclick="mobSwitchApprCol('emi')">ðŸ’° Logged EMIs <span class="emi-section-count" id="mob-appr-emi-count">0</span></button>
       </div>
       <div class="approvals-two-col">
         <!-- New Loans -->
         <div class="appr-col-wrap" id="appr-col-loan">
           <div class="appr-col-hd loan-appr-hd">
-            <span>📋 New Loans</span>
+            <span>ðŸ“‹ New Loans</span>
             <span class="emi-section-count" id="appr-loan-count">0</span>
           </div>
           <div id="approvals-loans-list" class="appr-col-body">
-            <div class="empty" style="padding:1.5rem;color:#aaa;font-size:13px;text-align:center">Loading…</div>
+            <div class="empty" style="padding:1.5rem;color:#aaa;font-size:13px;text-align:center">Loadingâ€¦</div>
           </div>
         </div>
         <!-- Logged EMIs -->
         <div class="appr-col-wrap" id="appr-col-emi">
           <div class="appr-col-hd emi-appr-hd">
-            <span>💰 Logged EMIs</span>
+            <span>ðŸ’° Logged EMIs</span>
             <span class="emi-section-count" id="appr-emi-count">0</span>
           </div>
           <div id="approvals-emis-list" class="appr-col-body">
-            <div class="empty" style="padding:1.5rem;color:#aaa;font-size:13px;text-align:center">Loading…</div>
+            <div class="empty" style="padding:1.5rem;color:#aaa;font-size:13px;text-align:center">Loadingâ€¦</div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- ── MY SUBMISSIONS ─────────────────────────────────────────────── -->
+    <!-- â”€â”€ MY SUBMISSIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div class="page" id="page-my-subs">
       <div style="font-size:15px;font-weight:500;margin-bottom:1rem">My submissions</div>
       <div id="my-subs-list"></div>
     </div>
 
-    <!-- ── EMI MESSAGES (admin only) ─────────────────────────────────── -->
+    <!-- â”€â”€ EMI MESSAGES (admin only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div class="page" id="page-emi-msgs">
       <div style="font-size:15px;font-weight:500;margin-bottom:1rem">EMI Messages</div>
       <div class="card" style="margin-bottom:0.75rem">
@@ -346,27 +346,28 @@
       </div>
       <div id="emsg-results"></div>
       <div id="emsg-mark-wrap" style="display:none;margin-top:0.75rem;text-align:center">
-        <button class="btn btn-primary" onclick="markMessagesDone()" style="padding:12px 32px;font-size:15px;font-weight:600">✓ Mark as done</button>
+        <button class="btn btn-primary" onclick="markMessagesDone()" style="padding:12px 32px;font-size:15px;font-weight:600">âœ“ Mark as done</button>
       </div>
     </div>
 
-    <!-- ── STOCK (admin) ─────────────────────────────────────────────── -->
+    <!-- â”€â”€ STOCK (admin) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div class="page" id="page-stock">
       <div style="font-size:15px;font-weight:500;margin-bottom:0.75rem">Stock</div>
       <div class="stock-tabs" id="stock-pills">
-        <button class="stock-tab active" data-f="available" onclick="setStockFilter('available')">Available</button>
-        <button class="stock-tab" data-f="sold" onclick="setStockFilter('sold')">Sold</button>
+          <button class="stock-tab active" data-f="available" onclick="setStockFilter('available')">Available</button>
+          <button class="stock-tab" data-f="costsheet" onclick="setStockFilter('costsheet')">Cost Sheet</button>
+          <button class="stock-tab" data-f="sold" onclick="setStockFilter('sold')">Sold</button>
         <button class="stock-tab" data-f="undelivered" onclick="setStockFilter('undelivered')">Undelivered</button>
       </div>
       <div id="stock-results"></div>
     </div>
 
-    <!-- ── EDIT MODAL ────────────────────────────────────────────────── -->
+    <!-- â”€â”€ EDIT MODAL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div id="edit-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;align-items:flex-end;justify-content:center">
       <div style="background:#fff;border-radius:16px 16px 0 0;width:100%;max-width:600px;max-height:85vh;overflow-y:auto;padding:1.25rem">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
           <span style="font-size:14px;font-weight:600;color:#534AB7" id="edit-modal-title">Edit entry</span>
-          <button class="btn btn-sm" onclick="closeEditModal()">✕ Close</button>
+          <button class="btn btn-sm" onclick="closeEditModal()">âœ• Close</button>
         </div>
         <div id="edit-modal-body"></div>
         <div class="submit-row" style="margin-top:1rem">
@@ -376,7 +377,7 @@
       </div>
     </div>
 
-    <!-- ── USERS (admin) ─────────────────────────────────────────────── -->
+    <!-- â”€â”€ USERS (admin) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div class="page" id="page-users">
       <div style="font-size:15px;font-weight:500;margin-bottom:1rem">User management</div>
       <div class="card"><div id="users-list"></div></div>
@@ -385,7 +386,7 @@
         <div class="fg fg-2">
           <div><label>Username</label><input id="nu-user" type="text" placeholder="e.g. ravi"></div>
           <div><label>Display name</label><input id="nu-name" type="text" placeholder="e.g. Ravi Kumar"></div>
-          <div><label>PIN</label><input id="nu-pin" type="password" placeholder="4–6 digit PIN"></div>
+          <div><label>PIN</label><input id="nu-pin" type="password" placeholder="4â€“6 digit PIN"></div>
           <div><label>Role</label><select id="nu-role"><option value="agent">Agent</option><option value="admin">Admin</option></select></div>
           <div class="full">
             <label style="margin-bottom:6px">Tab access</label>
@@ -417,7 +418,7 @@
       <div><label>Revised Date</label>
         <input type="date" id="revised-date">
       </div>
-      <div><label>Amount (₹)</label>
+      <div><label>Amount (â‚¹)</label>
         <input type="number" id="revised-amt" placeholder="Full EMI amount">
       </div>
       <div><label>Note</label>
@@ -434,7 +435,7 @@
   </div>
 </div>
 
-<!-- ── SCRIPTS (order matters) ────────────────────────────────────────── -->
+<!-- â”€â”€ SCRIPTS (order matters) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
 <script src="js/state.js?v=16"></script>
 <script src="js/snapshot.js?v=8"></script>
 <script src="js/auth.js?v=8"></script>
@@ -444,15 +445,15 @@
 <script src="js/approvals.js?v=12"></script>
 <script src="js/my-subs.js?v=4"></script>
 <script src="js/emi-messages.js?v=6"></script>
-<script src="js/stock.js?v=9"></script>
+<script src="js/stock.js?v=14"></script>
 <script src="js/users.js?v=7"></script>
 
-<!-- ── Install Banner ─────────────────────────────────────────────────── -->
+<!-- â”€â”€ Install Banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
 <div id="install-overlay">
   <div id="install-banner">
-    <div class="ib-icon">₹</div>
+    <div class="ib-icon">â‚¹</div>
     <h3>Install AKS Finance</h3>
-    <div class="ib-desc">Add to your home screen for quick access — works just like an app.</div>
+    <div class="ib-desc">Add to your home screen for quick access â€” works just like an app.</div>
     <div class="ib-btns">
       <button class="ib-dismiss" id="ib-dismiss">Not now</button>
       <button class="ib-install" id="ib-install">Install</button>

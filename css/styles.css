@@ -263,9 +263,18 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 .st-dev-cell:hover { color: #534AB7; }
 .st-brand-cell { cursor: pointer; white-space: nowrap; }
 .st-brand-cell:hover { color: #534AB7; }
+.st-model-cell { cursor: pointer; white-space: nowrap; }
+.st-model-cell:hover { color: #534AB7; }
+.st-spec-cell { cursor: pointer; white-space: nowrap; }
+.st-spec-cell:hover { color: #534AB7; }
 .st-month-cell { cursor: pointer; white-space: nowrap; }
 .st-month-cell:hover { color: #534AB7; }
 .st-chev { font-size: 9px; color: #888; margin-right: 2px; }
+
+/* Available pill: Device and Model hold real product names, so give those two
+   columns room instead of letting the table squeeze them into a sliver. */
+.stock-wide-device { min-width: 130px; }
+.stock-wide-model  { min-width: 200px; }
 
 /* Sold stock table: keep a comfortable width and scroll horizontally
    so the far-right totals (Kunal Telecom / AKS Share) are fully reachable */

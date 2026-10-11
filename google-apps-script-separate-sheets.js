@@ -456,12 +456,27 @@ function handleGet(e, opts) {
       // getRange; Config bounds make it one read, and the gap test below runs on
       // what came back, so a blank row in column A still ends the table.
       const MAX_COLS = 20;
+      // A hand-added column (Specification) can push the tab past this floor, so
+      // Config's column count wins whenever it is the wider of the two.
+      const wantCols = Math.max(MAX_COLS, (b && b.cols > 0) ? b.cols : 0);
       let all;
       try {
-        all = (b && b.rows > 0) ? sheet.getRange(1, 1, b.rows, MAX_COLS).getValues()
-                                : sheet.getRange(1, 1, sheet.getLastRow(), MAX_COLS).getValues();
+        all = (b && b.rows > 0) ? sheet.getRange(1, 1, b.rows, wantCols).getValues()
+                                : sheet.getRange(1, 1, sheet.getLastRow(), wantCols).getValues();
       } catch (e) {
-        all = sheet.getRange(1, 1, sheet.getLastRow(), MAX_COLS).getValues();
+        all = sheet.getRange(1, 1, sheet.getLastRow(), wantCols).getValues();
+      }
+      // Filled every column we asked for, so the tab may be wider than we know:
+      // read the real width once instead of silently dropping the newest column.
+      const hdr0 = all[0] || [];
+      if (hdr0.length && String(hdr0[hdr0.length - 1]).trim() !== '') {
+        try {
+          const realCols = sheet.getLastColumn();
+          if (realCols > wantCols) {
+            const wide = sheet.getRange(1, 1, all.length, realCols).getValues();
+            if (wide && wide.length) all = wide;
+          }
+        } catch (e2) { /* keep what we already have */ }
       }
       tm('stock.values');
       if (!all.length) return jsonResponse({ok:true, stock:{headers:[],rows:[]}});
