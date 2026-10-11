@@ -227,15 +227,36 @@ function snapshotIsFresh() {
 
 let _bootDecided = false;
 
-// Called once per login and once per page reload, right after first paint.
-// The snapshot gets the first chance to answer; the Google reads follow only
-// if it cannot. An approvals user instead gets an on-demand rebuild first.
+// Opens the app and reloads the page are both "a page load" — the browser is
+// the only thing that knows which one it was. Navigation Timing records it:
+// 'reload' means F5 / Ctrl+R / mobile pull-to-refresh, 'navigate' means a
+// bookmark, a typed URL, a link or a fresh sign-in, 'back_forward' is the back
+// button. Only an actual reload counts here.
+function isPageReload() {
+  try {
+    if (typeof performance !== 'undefined' && performance.getEntriesByType) {
+      const nav = performance.getEntriesByType('navigation')[0];
+      if (nav && nav.type) return nav.type === 'reload';
+    }
+    // Engines predating Navigation Timing only had performance.navigation.
+    if (typeof performance !== 'undefined' && performance.navigation) {
+      return performance.navigation.type === 1; // TYPE_RELOAD
+    }
+  } catch (e) { /* treat as an ordinary open */ }
+  return false;
+}
+
+// Called once per login and once per page load, right after first paint.
+// The published snapshot gets the first chance to answer; the Google reads
+// follow only if it could not. An on-demand rebuild — which republishes the
+// shared Worker snapshot for everyone — is reserved for an explicit page
+// reload by an approvals user. Opening the app never triggers one.
 function scheduleBootRefresh() {
   _bootDecided = false;
   S._booting = true;
   if (!S.sheetsUrl || !S.cu) { _bootDecided = true; S._booting = false; return; }
   const decide = () => maybeBootRefresh();
-  const live = canAskForLive();
+  const live = canAskForLive() && isPageReload();
   (live ? liveRebuild() : refreshSnapshot()).then(decide, decide);
   // Safety net: a hung restoreSession must not leave the screen on cache with
   // nothing running and no retry armed.
@@ -255,10 +276,16 @@ function maybeBootRefresh() {
 // ── On-demand rebuild for approvals users ──────────────────────────────────
 // There is no refresh button anywhere in the app. The "Data as of" strip is a
 // plain timestamp and is not clickable. What an approvals user does instead is
-// simply reload the page: completeLogin() -> scheduleBootRefresh() ->
-// liveRebuild() asks the sheet to rebuild the snapshot right now, and this tab
-// then reads the result from the Worker. Same data, one path — this tab never
-// asks Google directly for loans, pending, users, revised dates or partials.
+// reload the page: scheduleBootRefresh() -> liveRebuild() asks the sheet to
+// rebuild the snapshot right now, and this tab then reads the result from the
+// Worker. Same data, one path — this tab never asks Google directly for loans,
+// pending, users, revised dates or partials.
+//
+// Opening the app does NOT rebuild anything. Arriving at the URL — bookmark,
+// typed link, first sign-in, back button — only reads whatever the 10-minute
+// trigger last published. The rebuild fires on an explicit reload and nothing
+// else, so the shared Worker snapshot is republished exactly when an approvals
+// user asks for it, not on every visit.
 //
 // Who qualifies is decided by the same rule that shows the Approvals tab, so
 // the two can never disagree. Everyone else keeps the normal behaviour: the
