@@ -847,7 +847,7 @@ async function submitEmi() {
         refreshNav();
         rerenderActiveTab();
         showAlert('EMI payment submitted for approval.');
-        // Revised date syncs quietly in the background (response carries fresh dates).
+        // Revised date syncs quietly in the background (recorded locally on success).
         const revDt = $('emi-next-revised-date');
         const revVal = revDt ? revDt.value : '';
         if (revVal && emiNum < (sheetLoan ? sheetLoan.emiDuration : 0)) {
@@ -856,8 +856,8 @@ async function submitEmi() {
           runAction(actionKey('setRevisedDate', loanId, nextNum2),
             { action: 'setRevisedDate', loanId, emiNum: nextNum2, revisedDate: revVal, amount: nextAmt || 0, note: '' })
             .then(revRes => {
-              if (revRes.outcome === 'done' && revRes.res.dates) {
-                S.revisedDates = revRes.res.dates;
+              if (revRes.outcome === 'done') {
+                noteLocalRevisedDate(loanId, nextNum2, ymdToSheetDate(revVal), nextAmt || 0, '');
                 rerenderActiveTab();
               }
             })
@@ -1246,6 +1246,27 @@ function closeRevisedDateForm() {
   if (modal) modal.style.display = 'none';
 }
 
+// setRevisedDate answers with a lean {ok:true} — the row is in the sheet, but
+// the sheet is never read back to prove it, because a write is never followed
+// by a read. Record what we just saved locally so the tab is correct right now,
+// in the same shape readAllRevisedDates() would have returned. Pushed onto the
+// end, so every "last revision wins" lookup picks it up.
+function noteLocalRevisedDate(loanId, emiNum, revisedDate, amount, note) {
+  if (!Array.isArray(S.revisedDates)) S.revisedDates = [];
+  S.revisedDates.push({ loanId: loanId, emiNum: emiNum, revisedDate: revisedDate,
+                        amount: amount || 0, note: note || '',
+                        createdAt: new Date().toISOString() });
+}
+
+// Mirrors fmtDateFromYMD() in Apps Script, so a locally recorded row formats
+// exactly like the same row read back from the sheet: '2026-08-16' -> '16-Aug-26'.
+function ymdToSheetDate(str) {
+  const m = String(str || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return str || '';
+  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return parseInt(m[3], 10) + '-' + M[parseInt(m[2], 10) - 1] + '-' + String(parseInt(m[1], 10)).slice(-2);
+}
+
 async function submitRevisedDate() {
   const loanId = S.selectedEmiLoanId;
   if (!loanId) return;
@@ -1272,9 +1293,9 @@ async function submitRevisedDate() {
     } else if (r.outcome === 'unconfirmed') {
       showAlert("Couldn't confirm the save — it may still have gone through. Refresh the page to check.", 'w');
     } else if (r.outcome === 'done') {
-      // Response carries the fresh dates — no follow-up readRevisedDates GET,
-      // and no selectEmiLoan() re-read either: a write is never followed by a read.
-      if (r.res.dates) S.revisedDates = r.res.dates;
+      // Lean {ok:true} — record the row we just wrote locally instead of
+      // reading the sheet back: no follow-up GET, no selectEmiLoan() re-read.
+      noteLocalRevisedDate(loanId, emiNum, ymdToSheetDate(revisedDate), amount, note);
       rerenderActiveTab();
       renderApprovals($('appr-search') ? $('appr-search').value : '');
       showAlert('Revised date saved.');
@@ -2137,7 +2158,7 @@ async function submitOverviewEmi() {
         refreshNav();
         rerenderActiveTab();
         showAlert('EMI payment submitted for approval.');
-        // Revised date syncs quietly in the background (response carries fresh dates).
+        // Revised date syncs quietly in the background (recorded locally on success).
         const revDt = $('ov-emi-next-revised-date');
         const revVal = revDt ? revDt.value : '';
         if (revVal && emiNum < (loan.emiDuration || 0)) {
@@ -2146,8 +2167,8 @@ async function submitOverviewEmi() {
           runAction(actionKey('setRevisedDate', loanId, nextNum2),
             { action: 'setRevisedDate', loanId, emiNum: nextNum2, revisedDate: revVal, amount: nextAmt || 0, note: '' })
             .then(revRes => {
-              if (revRes.outcome === 'done' && revRes.res.dates) {
-                S.revisedDates = revRes.res.dates;
+              if (revRes.outcome === 'done') {
+                noteLocalRevisedDate(loanId, nextNum2, ymdToSheetDate(revVal), nextAmt || 0, '');
                 rerenderActiveTab();
               }
             })
@@ -2333,9 +2354,10 @@ async function submitMobileJabt() {
   try {
     const res = await gasPost({ action: 'setRevisedDate', loanId, emiNum: 0, revisedDate: '', amount: 0, note: 'Mobile Jabt' });
     if (res.ok) {
-      // Response carries the fresh dates — no follow-up readRevisedDates GET,
-      // and no selectEmiLoan() re-read either: a write is never followed by a read.
-      if (res.dates) S.revisedDates = res.dates;
+      // Lean {ok:true} — record it locally instead of reading the sheet back:
+      // no follow-up GET, and no selectEmiLoan() re-read either (a write is
+      // never followed by a read).
+      noteLocalRevisedDate(loanId, 0, '', 0, 'Mobile Jabt');
       rerenderActiveTab();
       renderApprovals($('appr-search') ? $('appr-search').value : '');
       showAlert('Loan marked as Mobile Jabt.');

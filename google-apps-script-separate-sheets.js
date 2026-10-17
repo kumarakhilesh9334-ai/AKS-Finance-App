@@ -1054,17 +1054,17 @@ function doPost(e) {
         String(note||'').trim(),
         new Date().toISOString(),
       ]);
+      // Lean response, exactly like saveLoan/saveEmi: the row is committed, so
+      // nothing that runs afterwards may decide the outcome. This used to
+      // re-read the whole Revised_Dates sheet and ship it back as `dates`; any
+      // failure in that window fell through to the handler-level catch below
+      // and was reported as a failed write even though the row was already in
+      // the sheet. The caller records its own row locally instead — a write is
+      // never followed by a read.
       try { CacheService.getScriptCache().remove('loans_slim'); } catch(e) {}
       try { CacheService.getScriptCache().remove('loans_full'); } catch(e) {}
       bustLoanDataCaches(loanId);
-      // Return fresh dates in the same response — saves the follow-up
-      // readRevisedDates GET. The row is already appended at this point, so a
-      // failure reading the dates back must NOT be reported as a failed write:
-      // that is exactly how the client ended up red-flagging a save that had
-      // already succeeded. Omit the field instead and let the client fetch later.
-      let dates = null;
-      try { dates = readAllRevisedDates(ss); } catch(e) { dates = null; }
-      return jsonResponse(dates ? {ok:true, dates:dates} : {ok:true});
+      return jsonResponse({ok:true});
     }
 
     // ── Set lock app removed state (loan-level toggle, upsert into LockAppStatus) ──
