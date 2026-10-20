@@ -2318,14 +2318,27 @@ function renderOverviewOverdue() {
       }
       const cardIndent = sameDate ? 'margin-left:16px' : '';
       const rightShift = sameDate ? 'margin-left:-16px;' : '';
+      // One 12px line: customer name | bill date | Locking App | device name.
+      // Customer name and Locking App are bold; bill date and device name are
+      // not. `  |  ` is a flex gap either side of the pipe. An empty value
+      // takes its separator with it, so no dangling pipes are left behind.
+      const cell = (t, weight, colour) => `<span style="font-size:12px;font-weight:${weight};color:${colour};flex:0 0 auto;line-height:14px;white-space:nowrap">${t}</span>`;
+      const pipe = '<span style="font-size:12px;color:rgba(255,255,255,0.4);flex:0 0 auto;line-height:14px">|</span>';
+      const lockTxt = String(l.lockingApp || '').trim();
+      const lead = [];
+      if (l.billDate) lead.push(cell(fmtDisplayDate(l.billDate), 400, 'rgba(255,255,255,0.75)'));
+      if (lockTxt)    lead.push(cell(lockTxt, 700, '#fff'));
+      const leadHtml = lead.join(pipe);
+      const modelTxt = l.model || '';
+      const sepAfterName   = (leadHtml && l.customerName) ? pipe : '';
+      const sepBeforeModel = (leadHtml && modelTxt) ? pipe : '';
       cardHtml += `<div class="emi-card overdue" data-loanid="${l.loanId}" style="cursor:pointer;background:${color};border-left:3px solid rgba(255,255,255,0.3);border:1px solid ${color};margin-bottom:4px;padding:8px 10px;${cardIndent}">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;height:14px">
           <span style="font-size:11px;font-weight:500;color:#fff;flex:0 0 auto;white-space:nowrap;line-height:14px">${l.nextEmiDate ? fmtDisplayDate(l.nextEmiDate) : '—'}</span>
           <div style="display:flex;flex:1;align-items:center;gap:8px;${rightShift}">
             ${revBadge}
-            <span style="font-weight:500;font-size:12px;color:#fff;flex:0 0 auto;line-height:14px">${l.customerName}</span>
-            <span style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.6);flex:0 0 auto;line-height:14px;white-space:nowrap">${l.billDate ? fmtDisplayDate(l.billDate) : ''}</span>
-            <span style="font-size:11px;color:rgba(255,255,255,0.75);text-align:right;flex:1 1 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:14px">${l.model || ''}</span>
+            <span style="font-weight:700;font-size:12px;color:#fff;flex:0 0 auto;line-height:14px">${l.customerName}</span>${sepAfterName}${leadHtml}${sepBeforeModel}
+            <span style="font-size:12px;font-weight:400;color:rgba(255,255,255,0.75);text-align:left;flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:14px">${modelTxt}</span>
           </div>
         </div>
       </div>`;
