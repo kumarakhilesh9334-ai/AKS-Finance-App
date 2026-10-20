@@ -98,12 +98,13 @@ async function generateMessages() {
       revisedEntries = (rData.ok && rData.dates) ? rData.dates : [];
     }
 
-    // Build lookup: loanId -> { emiNum, note }[]
+    // Build lookup: loanId -> { emiNum, note, revisedDate }[]
     const revisedLookup = {};
     revisedEntries.forEach(entry => {
       const id = entry.loanId || '';
       if (!revisedLookup[id]) revisedLookup[id] = [];
-      revisedLookup[id].push({ emiNum: entry.emiNum, note: entry.note });
+      revisedLookup[id].push({ emiNum: entry.emiNum, note: entry.note,
+                               revisedDate: entry.revisedDate || '' });
     });
 
     const messages = [];
@@ -125,19 +126,26 @@ async function generateMessages() {
         'Revised Date': loan.revisedDateMsg,
       };
 
+      // `label` is the SECTION the row lands in; `extra.tplKey` is the template
+      // it is written from. They are usually the same, but a revised EMI's
+      // reminder/last-date messages belong in the Revised Date section while
+      // still being written from the reminder/last-date templates.
+      // `extra.date` is the DUE date the text should quote — `dateStr` is only
+      // the day the message goes out (7/2/1 day(s) earlier for a reminder).
       function addIfInRange(label, dateStr, extra) {
-        const template = loanTemplates[label];
+        const template = loanTemplates[(extra && extra.tplKey) || label];
         if (!dateStr || !template) return;
         const dt = parseSheetDate(dateStr);
         if (!dt) return;
         const t = dt.getTime();
         if (t < startDate.getTime() || t > endDate.getTime()) return;
         const amt = extra && extra.amount != null ? extra.amount : (loan.monthlyEmi || '');
+        const dueForText = (extra && extra.date) || dateStr;
         let msg = template
           .replace(/\{customer\}/g, name)
           .replace(/\{loan\}/g, li)
           .replace(/\{amount\}/g, amt)
-          .replace(/\{date\}/g, fmtDisplayDate(dateStr))
+          .replace(/\{date\}/g, fmtDisplayDate(dueForText))
           .replace(/\{total\}/g, loan.totalPending != null ? loan.totalPending : amt);
         if (extra && extra.emiNum != null) {
           msg = msg.replace(/\{emi\}/g, extra.emiNum);
@@ -170,8 +178,22 @@ async function generateMessages() {
               return slot && !slot.received;
             });
             if (anyUnreceived || revs.length === 0) {
-              const emiLabels = revs.map(r => r.note === 'Mobile Jabt' ? 'Mobile Jabt' : r.emiNum).filter(v => v != null);
-              const emiLabel = emiLabels.length ? emiLabels.join(', ') : '';
+              // `revisedDateData` is ONE date for the whole loan, so the EMI
+              // column has to name the EMI that this date belongs to. Listing
+              // every EMI the loan has ever revised showed "3, 3, 4, 4, 5" for
+              // a message that is only about one of them.
+              const revMs = revDt ? revDt.getTime() : null;
+              const forThisDate = revMs === null ? [] : revs.filter(r => {
+                const d = parseSheetDate(r.revisedDate);
+                return d && d.getTime() === revMs;
+              });
+              const emiLabels = [];
+              forThisDate.forEach(r => {
+                const v = r.note === 'Mobile Jabt' ? 'Mobile Jabt' : r.emiNum;
+                if (v == null || emiLabels.indexOf(v) !== -1) return;
+                emiLabels.push(v);
+              });
+              const emiLabel = emiLabels.join(', ');
               addIfInRange('Revised Date', loan.revisedDateData, { amount: loan.monthlyEmi, emiNum: emiLabel || undefined });
             }
           }
@@ -182,45 +204,81 @@ async function generateMessages() {
       const slots = loan.slots || [];
       const unreceived = slots.filter(s => !s.received).map(s => s.num);
       const firstDue = unreceived.length ? Math.min(...unreceived) : Infinity;
+      const loanRevs = revisedLookup[li] || [];
       slots.forEach(slot => {
         const sd = slot.scheduledDate;
         if (!sd) return;
         const sdDt = parseSheetDate(sd);
         if (!sdDt) return;
-        const sdTime = sdDt.getTime();
+
+        // scheduledDate is only ever the EMI start date plus N months — it never
+        // sees the Revised_Dates sheet. Anything keyed off it (Last Date, the
+        // reminder offsets) therefore fired on the ORIGINAL due date: a loan
+        // revised from 22-Oct to 19-Oct still sent its -7 reminder on 15-Oct.
+        // The sheet is append-only in time order, so the last row recorded for
+        // this EMI number is the revision that is actually in force.
+        let dueStr = sd, dueDt = sdDt, wasRevised = false;
+        for (const r of loanRevs) {
+          if (r.emiNum !== slot.num || !r.revisedDate) continue;
+          const rd = parseSheetDate(r.revisedDate);
+          if (rd) { dueStr = r.revisedDate; dueDt = rd; wasRevised = true; }
+        }
+        const dueTime = dueDt.getTime();
+
+        // A revised EMI's messages belong in the Revised Date section — Last Date
+        // and EMI Reminder would put a date that has already been moved under the
+        // original schedule. The wording still comes from those two templates.
+        const section    = wasRevised ? 'Revised Date' : 'Last Date';
+        const remindSec  = wasRevised ? 'Revised Date' : 'EMI Reminder';
 
         // Last Date and EMI Reminder: only for the first unreceived slot
-        if (slot.num === firstDue && !slot.received && sdTime >= endDate.getTime()) {
-          const lastDateInRange = sdTime >= startDate.getTime() && sdTime <= endDate.getTime();
+        if (slot.num === firstDue && !slot.received && dueTime >= endDate.getTime()) {
+          const lastDateInRange = dueTime >= startDate.getTime() && dueTime <= endDate.getTime();
           if (lastDateInRange)
-            addIfInRange('Last Date', sd, { emiNum: slot.num });
+            addIfInRange(section, dueStr, { emiNum: slot.num, tplKey: 'Last Date' });
 
           // EMI Reminder: suppressed if Last Date is in range for this slot
           if (!lastDateInRange) {
             const reminderOffsets = [-7, -2, -1];
             let selectedOffset = null;
             for (const offset of reminderOffsets) {
-              const d = new Date(sdDt);
+              const d = new Date(dueDt);
               d.setDate(d.getDate() + offset);
               const t = d.getTime();
               if (t >= startDate.getTime() && t <= endDate.getTime()) selectedOffset = offset;
             }
             if (selectedOffset !== null) {
-              const rd = new Date(sdDt);
+              const rd = new Date(dueDt);
               rd.setDate(rd.getDate() + selectedOffset);
-              addIfInRange('EMI Reminder', ymd(rd), { emiNum: slot.num, amount: loan.monthlyEmi });
+              // Sent on rd, but {date} in the text must quote the DUE date.
+              addIfInRange(remindSec, ymd(rd),
+                { emiNum: slot.num, amount: loan.monthlyEmi, date: dueStr, tplKey: 'EMI Reminder' });
             }
           }
         }
-
-        if (slot.received && slot.receivedDate) {
-          const td = parseSheetDate(slot.receivedDate);
-          if (td) { td.setDate(td.getDate() + 1); addIfInRange('Thank You', ymd(td), { emiNum: slot.num }); }
-        }
       });
 
+      const rcvSlots = slots.filter(s => s.received && s.receivedDate);
+
+      // Thank You: exactly ONE per loan — for the most recently paid EMI. It used
+      // to be emitted inside the slot loop, so a multi-EMI payment (or any
+      // customer who paid twice inside the window) produced one message per
+      // covered EMI. Latest receivedDate wins; a same-day payment covering
+      // several EMIs falls back to the highest EMI number.
+      if (rcvSlots.length) {
+        let lastPaid = rcvSlots[0];
+        for (let i = 1; i < rcvSlots.length; i++) {
+          const a = parseSheetDate(lastPaid.receivedDate);
+          const b = parseSheetDate(rcvSlots[i].receivedDate);
+          const at = a ? a.getTime() : 0;
+          const bt = b ? b.getTime() : 0;
+          if (bt > at || (bt === at && rcvSlots[i].num > lastPaid.num)) lastPaid = rcvSlots[i];
+        }
+        const td = parseSheetDate(lastPaid.receivedDate);
+        if (td) { td.setDate(td.getDate() + 1); addIfInRange('Thank You', ymd(td), { emiNum: lastPaid.num }); }
+      }
+
       if (loan.emiCompleted) {
-        const rcvSlots = slots.filter(s => s.received && s.receivedDate);
         const lastRcv = rcvSlots[rcvSlots.length - 1];
         if (lastRcv && lastRcv.receivedDate) {
           const cd = parseSheetDate(lastRcv.receivedDate);

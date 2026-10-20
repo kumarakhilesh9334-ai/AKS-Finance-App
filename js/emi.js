@@ -1623,6 +1623,7 @@ async function selectOverviewLoan(loanId) {
       ${loan.latePaymentFine? `<span class="kv-l">Late fine</span><span class="kv-v">${fmtAmt(loan.latePaymentFine)}</span>` : ''}
       <span class="kv-l">AK / AKS</span>      <span class="kv-v">${akPct}% / ${aksPct}%</span>
       ${loan.guarantor ? `<span class="kv-l">Guarantor</span><span class="kv-v">${loan.guarantor}</span>` : ''}
+      <span class="kv-l">Locking App</span>   <span class="kv-v">${loan.lockingApp || '—'}</span>
     `;
 
     // EMI history — tabular
@@ -1847,7 +1848,6 @@ async function selectOverviewLoan(loanId) {
       ['Early Loan Closing Settlement',Mf(loan.earlyClosing)],
       ['Extra EMI Received',           Mf(loan.extraEmiReceived)],
       ['Recovery Charge',              Mf(loan.recoveryCharge)],
-      ['Welcome Message Sent',         Boolf(loan.welcomeMsg)],
       ['Loan Closing Message Sent',    Boolf(loan.closingMsg)],
       ['Lock App Removed',             Boolf(loan.lockRemoved)],
       ['Defaulted',                    Boolf(loan.isDefaulted)],
@@ -1864,7 +1864,7 @@ async function selectOverviewLoan(loanId) {
       'AK Amount', 'AK Paid to Kunal', 'AKS Amount', 'AKS Paid to Kunal',
       'Remaining Principal', 'Remaining Interest', 'Received Principal', 'Received Interest',
       'Late Payment Fine', 'Early Loan Closing Settlement', 'Extra EMI Received',
-      'Recovery Charge', 'Welcome Message Sent', 'Loan Closing Message Sent',
+      'Recovery Charge', 'Loan Closing Message Sent',
       'Default Comment', 'Final ROI', 'AK Share of EMI', 'AKS Share of EMI',
       'Drive Link', 'Down Payment %',
     ]);

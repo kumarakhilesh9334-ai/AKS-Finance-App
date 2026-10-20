@@ -371,6 +371,17 @@ function editSubmission(id, type) {
   $('edit-modal').style.display = 'flex';
 }
 
+const DEVICE_TYPES = ['Mobile','TV','Sound Box','Fridge','AC','Washing Machine','Air Cooler',
+  'Induction','Mixer','Gas Stove','Inverter Battery','Inverter','Inverter & Battery','Loan','Fan','Other'];
+const LOCKER_OPTIONS = ['101 Locker','YOGIC Locker','ZTE Locker','Other'];
+const AK_SHARE_OPTIONS = [['0','0% (AKS only)'],['50','50%'],['100','100% (AK only)'],['custom','Custom']];
+
+function escAttr(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 function populateEditModal(item) {
   const d = item.data;
   $('edit-modal-title').textContent = item.type === 'loan'
@@ -379,21 +390,41 @@ function populateEditModal(item) {
 
   let html = '';
   if (item.type === 'loan') {
+    const isMobile   = String(d.deviceType||'').trim() === 'Mobile';
+    const akShare    = parseFloat(d.akShare)||0;
+    const akShareSel = (akShare===0 || akShare===50 || akShare===100) ? String(akShare) : 'custom';
+    const lockApp    = String(d.lockingApp||'').trim();
+    const lockAppSel = LOCKER_OPTIONS.includes(lockApp) ? lockApp : (lockApp ? 'Other' : LOCKER_OPTIONS[0]);
+
     html = editField('Customer name',    'ed-cname',    d.customerName)
          + editField('Phone',            'ed-phone',    d.phone)
          + editField('Aadhaar/PAN',      'ed-idnum',    d.idNum)
          + editField('Bill date',        'ed-billdate', ymdFromDD(d.billDate), 'date')
          + editField('Model',            'ed-model',    d.model)
-         + editField('Device type',      'ed-dtype',    d.deviceType)
-         + editField('Device amount ₹',  'ed-price',    d.price,    'number')
-         + editField('Down payment ₹',   'ed-down',     d.downPayment, 'number')
-         + editField('Processing fee ₹', 'ed-pfee',     d.processingFee, 'number')
+         + editSelect('Device type',     'ed-dtype',    DEVICE_TYPES, d.deviceType, 'onEditDeviceTypeChange()')
+         + editField('Device amount ₹',  'ed-price',    d.price,    'number', 'onEditEmiCalc()')
+         + editField('Down payment ₹',   'ed-down',     d.downPayment, 'number', 'onEditEmiCalc()')
+         + editField('Processing fee ₹', 'ed-pfee',     d.processingFee, 'number', 'onEditEmiCalc()')
          + editField('App lock ₹',       'ed-applock',  d.appLockCharge, 'number')
-         + editField('EMI duration',     'ed-tenure',   d.tenure,   'number')
-         + editField('Monthly EMI ₹',    'ed-emi',      d.monthlyEmi, 'number')
-         + editField('Interest ₹',       'ed-int',      d.interest, 'number')
-         + editField('EMI start date',   'ed-emistart', ymdFromDD(d.emiStart), 'date')
-         + editField('AK share %',       'ed-akshare',  d.akShare,  'number')
+         + `<div id="ed-lockapp-wrap" style="margin-bottom:0.6rem;${isMobile?'':'display:none'}">
+              <label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Locking App <span style="color:#A32D2D">*</span></label>
+              <select id="ed-lockapp" onchange="onEditLockAppChange()" style="width:100%;padding:8px 10px;border:0.5px solid #ccc;border-radius:8px;font-size:13px;background:#fff">${
+                LOCKER_OPTIONS.map(o => `<option${o===lockAppSel?' selected':''}>${o}</option>`).join('')
+              }</select>
+            </div>`
+         + `<div id="ed-lockapp-other-wrap" style="margin-bottom:0.6rem;${(isMobile && lockAppSel==='Other')?'':'display:none'}">
+              <label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Other Locker name <span style="color:#A32D2D">*</span></label>
+              <input type="text" id="ed-lockapp-other" value="${escAttr(lockAppSel==='Other'?d.lockingApp:'')}" placeholder="Enter locker name" style="width:100%;padding:8px 10px;border:0.5px solid #ccc;border-radius:8px;font-size:13px">
+            </div>`
+         + editField('EMI duration',     'ed-tenure',   d.tenure,   'number', 'onEditEmiCalc()')
+         + editField('Monthly EMI ₹',    'ed-emi',      d.monthlyEmi, 'number', 'onEditEmiCalc()')
+         + editField('Interest ₹',       'ed-int',      d.interest, 'number', '', '', 'background:#f5f5f3;color:#999;cursor:not-allowed', 'readonly')
+         + editField('EMI start date',   'ed-emistart', ymdFromDD(d.emiStart), 'date', '', 'onEditEmiStartChange()')
+         + editSelect('AK share (%)',    'ed-akshare',  AK_SHARE_OPTIONS, akShareSel, 'onEditAkShareChange()')
+         + `<div id="ed-akcustom-wrap" style="margin-bottom:0.6rem;${akShareSel==='custom'?'':'display:none'}">
+              <label style="font-size:12px;color:#666;display:block;margin-bottom:3px">AK custom share (%)</label>
+              <input type="number" id="ed-akcustom" value="${akShareSel==='custom'?escAttr(akShare):''}" min="0" max="100" placeholder="0-100" style="width:100%;padding:8px 10px;border:0.5px solid #ccc;border-radius:8px;font-size:13px">
+            </div>`
          + editField('Guarantor',        'ed-guar',     d.guarantor);
   } else {
     html = editField('Loan ID',        'ed-loanid',   d.loanId)
@@ -407,14 +438,63 @@ function populateEditModal(item) {
          + editField('Reason',         'ed-misctype', d.miscType || d.reason);
   }
   $('edit-modal-body').innerHTML = html;
+  if (item.type === 'loan') { onEditLockAppChange(); onEditAkShareChange(); }
 }
 
-function editField(label, id, value, type='text') {
+function editField(label, id, value, type='text', oninput='', onchange='', inputStyle='', extra='') {
   const val = value != null ? value : '';
   return `<div style="margin-bottom:0.6rem">
     <label style="font-size:12px;color:#666;display:block;margin-bottom:3px">${label}</label>
-    <input type="${type}" id="${id}" value="${val}" style="width:100%;padding:8px 10px;border:0.5px solid #ccc;border-radius:8px;font-size:13px">
+    <input type="${type}" id="${id}" value="${escAttr(val)}"${oninput?` oninput="${oninput}"`:''}${onchange?` onchange="${onchange}"`:''} style="width:100%;padding:8px 10px;border:0.5px solid #ccc;border-radius:8px;font-size:13px${inputStyle?`;${inputStyle}`:''}"${extra?' '+extra:''}>
   </div>`;
+}
+
+function editSelect(label, id, options, sel, onchange='') {
+  const opts = options.map(opt => {
+    const val  = Array.isArray(opt) ? opt[0] : String(opt);
+    const text = Array.isArray(opt) ? opt[1] : String(opt);
+    return `<option value="${escAttr(val)}"${val===String(sel)?' selected':''}>${escAttr(text)}</option>`;
+  }).join('');
+  return `<div style="margin-bottom:0.6rem">
+    <label style="font-size:12px;color:#666;display:block;margin-bottom:3px">${label}</label>
+    <select id="${id}"${onchange?` onchange="${onchange}"`:''} style="width:100%;padding:8px 10px;border:0.5px solid #ccc;border-radius:8px;font-size:13px;background:#fff">${opts}</select>
+  </div>`;
+}
+
+// ── Edit-modal field rules (mirror the New Loan form) ─────────────────────
+function onEditDeviceTypeChange() {
+  $('ed-applock').value = ($('ed-dtype').value === 'Mobile') ? 299 : 0;
+  const wrap = $('ed-lockapp-wrap');
+  if (wrap) wrap.style.display = ($('ed-dtype').value === 'Mobile') ? '' : 'none';
+  onEditLockAppChange();
+  onEditEmiCalc();
+}
+
+function onEditLockAppChange() {
+  const wrap = $('ed-lockapp-other-wrap');
+  if (wrap) wrap.style.display = ($('ed-lockapp').value === 'Other') ? '' : 'none';
+}
+
+function onEditAkShareChange() {
+  const wrap = $('ed-akcustom-wrap');
+  if (wrap) wrap.style.display = ($('ed-akshare').value === 'custom') ? '' : 'none';
+}
+
+function onEditEmiCalc() {
+  const emi     = parseFloat($('ed-emi').value)||0;
+  const tenure  = parseFloat($('ed-tenure').value)||0;
+  const price   = parseFloat($('ed-price').value)||0;
+  const down    = parseFloat($('ed-down').value)||0;
+  const pfee    = parseFloat($('ed-pfee').value)||0;
+  $('ed-int').value = Math.max(0, Math.round(emi*tenure - (price-down) - pfee));
+}
+
+function onEditEmiStartChange() {
+  const val = $('ed-emistart').value; if (!val) return;
+  if (![5,10,15,20,25].includes(parseInt(val.split('-')[2]))) {
+    $('ed-emistart').value = '';
+    showAlert('EMI start date must be on 5, 10, 15, 20 or 25.','e');
+  }
 }
 
 async function saveEdit() {
@@ -425,23 +505,75 @@ async function saveEdit() {
   const d = item.data;
 
   if (item.type === 'loan') {
-    d.customerName  = $('ed-cname').value.trim();
-    d.phone         = $('ed-phone').value.trim();
-    d.idNum         = $('ed-idnum').value.trim();
-    d.billDate      = $('ed-billdate').value;
-    d.model         = $('ed-model').value.trim();
-    d.deviceType    = $('ed-dtype').value.trim();
-    d.price         = parseFloat($('ed-price').value)||0;
-    d.downPayment   = parseFloat($('ed-down').value)||0;
-    d.processingFee = parseFloat($('ed-pfee').value)||0;
-    d.appLockCharge = parseFloat($('ed-applock').value)||0;
-    d.tenure        = parseFloat($('ed-tenure').value)||0;
-    d.monthlyEmi    = parseFloat($('ed-emi').value)||0;
-    d.interest      = parseFloat($('ed-int').value)||0;
-    d.emiStart      = $('ed-emistart').value;
-    d.akShare       = parseFloat($('ed-akshare').value)||0;
-    d.aksShare      = 100 - d.akShare;
-    d.guarantor     = $('ed-guar').value.trim();
+    const cname      = $('ed-cname').value.trim();
+    const phone      = $('ed-phone').value.trim();
+    const idNum      = $('ed-idnum').value.trim();
+    const billDate   = $('ed-billdate').value;
+    const model      = $('ed-model').value.trim();
+    const dtype      = $('ed-dtype').value;
+    const price      = parseFloat($('ed-price').value);
+    const down       = parseFloat($('ed-down').value);
+    const pfee       = parseFloat($('ed-pfee').value);
+    const applock    = parseFloat($('ed-applock').value);
+    const tenure     = parseFloat($('ed-tenure').value);
+    const monthlyEmi = parseFloat($('ed-emi').value);
+    const emiStart   = $('ed-emistart').value;
+    const akSel      = $('ed-akshare').value;
+    const guar       = $('ed-guar').value.trim();
+    const lockApp    = $('ed-lockapp') ? $('ed-lockapp').value : '';
+    const lockOther  = $('ed-lockapp-other') ? $('ed-lockapp-other').value.trim() : '';
+
+    // Same gates as the New Loan form
+    if (!cname||!phone||!idNum||!billDate||!model||!dtype||!price||!tenure||!monthlyEmi) {
+      showAlert('Please fill in all required fields.','e'); return;
+    }
+    if (isNaN(down))    { showAlert('Please fill in Down payment.','e'); return; }
+    if (isNaN(pfee))    { showAlert('Please fill in Processing fee.','e'); return; }
+    if (isNaN(applock)) { showAlert('Please fill in App lock charge.','e'); return; }
+    const akPct = akSel === 'custom' ? parseFloat($('ed-akcustom').value) : parseFloat(akSel);
+    if (isNaN(akPct) || akPct < 0 || akPct > 100) {
+      showAlert('Please enter the custom AK share percentage (0-100).','e'); return;
+    }
+    if (!emiStart) {
+      showAlert('Please select an EMI start date.','e'); return;
+    }
+    if (![5,10,15,20,25].includes(parseInt(emiStart.split('-')[2]))) {
+      showAlert('EMI start date must be on 5, 10, 15, 20 or 25.','e'); return;
+    }
+    if (dtype === 'Mobile') {
+      if (!lockApp) { showAlert('Please select the Locking App.','e'); return; }
+      if (lockApp === 'Other' && !lockOther) {
+        showAlert('Please enter the Other Locker name.','e'); return;
+      }
+    }
+    const bd = new Date(billDate + 'T00:00:00');
+    const es = new Date(emiStart + 'T00:00:00');
+    const diffDays = Math.round((es - bd) / (1000*60*60*24));
+    if (diffDays < 20) {
+      if (!confirm('EMI starting in just ' + diffDays + ' day' + (diffDays===1?'':'s') + ' from bill date.\nPlease verify bill date and EMI start date are correct.\n\nSave anyway?')) return;
+    } else if (diffDays > 40) {
+      if (!confirm('EMI starting in ' + diffDays + ' days from bill date (>40 days gap).\nPlease verify bill date and EMI start date are correct.\n\nSave anyway?')) return;
+    }
+
+    const interest = Math.max(0, Math.round(monthlyEmi*tenure - (price-down) - pfee));
+    d.customerName  = cname;
+    d.phone         = phone;
+    d.idNum         = idNum;
+    d.billDate      = billDate;
+    d.model         = model;
+    d.deviceType    = dtype;
+    d.price         = price||0;
+    d.downPayment   = down||0;
+    d.processingFee = pfee||0;
+    d.appLockCharge = applock||0;
+    d.tenure        = tenure||0;
+    d.monthlyEmi    = monthlyEmi||0;
+    d.interest      = interest;
+    d.emiStart      = emiStart;
+    d.akShare       = akPct;
+    d.aksShare      = 100 - akPct;
+    d.guarantor     = guar;
+    d.lockingApp    = dtype === 'Mobile' ? (lockApp === 'Other' ? lockOther : lockApp) : '';
     d.financeAmount = d.price - d.downPayment + d.appLockCharge;
     d.totalAmount   = d.financeAmount + d.processingFee + d.interest;
     d.akAmount      = Math.round(d.financeAmount * d.akShare  / 100);
@@ -515,6 +647,7 @@ function subCard(p, showActions, hideRoi) {
         <span class="kv-l">Monthly EMI</span>   <span class="kv-v">${fmt((d.price - d.downPayment + d.processingFee + d.interest) / (d.tenure||1))}</span>
         <span class="kv-l">EMI start</span>     <span class="kv-v">${fmtDateDD(d.emiStart)}</span>
         <span class="kv-l">App lock</span>      <span class="kv-v">${fmt(d.appLockCharge)}</span>
+        ${d.lockingApp?`<span class="kv-l">Locking App</span><span class="kv-v">${d.lockingApp}</span>`:''}
         <span class="kv-l">AK share</span>      <span class="kv-v">${d.akShare}%</span>
         ${d.guarantor?`<span class="kv-l">Guarantor</span><span class="kv-v">${d.guarantor}</span>`:''}
       </div>

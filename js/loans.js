@@ -32,6 +32,22 @@ function initNewLoanPage() {
   $('idnum-dropdown').style.display        = 'none';
   $('guarantor-dropdown').style.display    = 'none';
   $('emistart-err').style.display          = 'none';
+  $('f-lockapp').selectedIndex    = 0;
+  $('f-lockapp-other').value      = '';
+  updateLockAppVisibility();
+}
+
+// ── Locking App (Mobile only) ─────────────────────────────────────────────
+function updateLockAppVisibility() {
+  const isMobile = $('f-dtype').value === 'Mobile';
+  $('lockapp-wrap').style.display      = isMobile ? '' : 'none';
+  $('lockapp-other-wrap').style.display =
+    (isMobile && $('f-lockapp').value === 'Other') ? '' : 'none';
+}
+
+function onLockAppChange() {
+  $('lockapp-other-wrap').style.display =
+    ($('f-lockapp').value === 'Other') ? '' : 'none';
 }
 
 // ── Aadhaar/PAN autocomplete ──────────────────────────────────────────────
@@ -151,6 +167,7 @@ document.addEventListener('click', e => {
 // ── Device type → app lock default ───────────────────────────────────────
 function onDeviceTypeChange() {
   $('f-applock').value = ($('f-dtype').value === 'Mobile') ? 299 : 0;
+  updateLockAppVisibility();
   calcLoan();
 }
 
@@ -257,6 +274,15 @@ async function submitLoan() {
   if (!applock && applock !== 0) {
     showAlert('Please fill in App lock charge.','e'); return;
   }
+  const lockApp = v('f-lockapp');
+  if (dtype === 'Mobile') {
+    if (!lockApp) {
+      showAlert('Please select the Locking App.','e'); return;
+    }
+    if (lockApp === 'Other' && !v('f-lockapp-other')) {
+      showAlert('Please enter the Other Locker name.','e'); return;
+    }
+  }
   if (!emiStart) {
     showAlert('Please select an EMI start date.','e'); return;
   }
@@ -289,6 +315,7 @@ async function submitLoan() {
     loanId, billDate, customerName:cname, phone, idNum:idnum,
     model, deviceType:dtype, price, downPayment:down,
     processingFee:pfee, appLockCharge:applock, interest:Math.round(interest),
+    lockingApp: dtype === 'Mobile' ? (lockApp === 'Other' ? v('f-lockapp-other').trim() : lockApp) : '',
     rateOfInterest:parseFloat(roi.toFixed(2)), tenure, emiStart,
     guarantor:guar, akShare:akPct, aksShare:aksPct,
     financeAmount, totalAmount, monthlyEmi,
