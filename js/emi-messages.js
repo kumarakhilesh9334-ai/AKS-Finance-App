@@ -3,6 +3,20 @@
 
 const UPI_ID = 'paytmqr6njiga@ptys';
 
+// ── UPI QR ────────────────────────────────────────────────────────────────
+// The Send button is a wa.me click-to-chat link, and that link carries TEXT
+// ONLY - a web page cannot paste an image into WhatsApp. So the QR is opened
+// here, copied by hand (right-click > Copy Image), and pasted into the chat.
+function openQrModal() {
+  const m = $('qr-modal');
+  if (m) m.style.display = 'flex';
+}
+
+function closeQrModal() {
+  const m = $('qr-modal');
+  if (m) m.style.display = 'none';
+}
+
 function ymd(dt) {
   return dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0');
 }
@@ -291,6 +305,22 @@ async function generateMessages() {
     const closingLoans = new Set(messages.filter(m => m.label === 'Loan Closing').map(m => m.loanId));
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].label === 'Thank You' && closingLoans.has(messages[i].loanId)) messages.splice(i, 1);
+    }
+
+    // One row per loan, per section, per send day. A revised loan can reach the
+    // Revised Date section twice on the same day: once from the loan-level
+    // `revisedDateData` announcement and once from the revised EMI's own Last
+    // Date / reminder message (both were routed here deliberately). The table
+    // shows no message text, so the admin just saw the same loan twice with no
+    // way to tell them apart. The announcement is written for exactly this
+    // event, so it stays and the second one goes. `emiNum` is deliberately NOT
+    // in the key: the announcement names EMIs as '3, 4' while the EMI message
+    // carries the number 3, and they are still the same message.
+    const seenMsg = new Set();
+    for (let i = 0; i < messages.length; ) {
+      const key = messages[i].label + '|' + messages[i].loanId + '|' + messages[i].date;
+      if (seenMsg.has(key)) messages.splice(i, 1);
+      else { seenMsg.add(key); i++; }
     }
 
     const TYPE_ORDER = { 'Welcome':1, 'Loan Closing':2, 'Thank You':3, 'Revised Date':4, 'Last Date':5, 'EMI Reminder':5 };

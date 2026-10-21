@@ -351,7 +351,8 @@
           <div><label>To</label><input type="date" id="emsg-start"></div>
         </div>
         <div class="submit-row" style="margin-top:0.5rem">
-          <button class="btn btn-primary" onclick="generateMessages()">Generate</button>
+          <button class="btn" onclick="openQrModal()">QR Code</button>
+          <button class="btn btn-primary" style="margin-left:6px" onclick="generateMessages()">Generate</button>
         </div>
       </div>
       <div id="emsg-results"></div>
@@ -445,6 +446,20 @@
   </div>
 </div>
 
+<!-- UPI QR modal -->
+<div id="qr-modal" class="modal-overlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center" onclick="if(event.target===this)closeQrModal()">
+  <div class="card" style="width:90%;max-width:380px;margin:0;padding:16px" onclick="event.stopPropagation()">
+    <div style="font-size:14px;font-weight:600;color:#534AB7;margin-bottom:10px">Payment QR Code</div>
+    <div style="text-align:center">
+      <img id="qr-modal-img" src="assets/upi-qr.png?v=1" alt="UPI QR code" style="width:100%;max-width:260px;border:1px solid #eee;border-radius:8px;background:#fff;-webkit-touch-callout:default;user-select:auto;-webkit-user-drag:auto">
+    </div>
+    <div style="font-size:11px;color:#888;text-align:center;margin-top:8px">Right-click (or long-press) the image and choose Copy Image, then paste it into the WhatsApp chat.</div>
+    <div class="submit-row" style="margin-top:12px">
+      <button class="btn" style="width:100%" onclick="closeQrModal()">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── SCRIPTS (order matters) ────────────────────────────────────────── -->
 <script src="js/state.js?v=16"></script>
 <script src="js/snapshot.js?v=8"></script>
@@ -454,7 +469,7 @@
 <script src="js/emi.js?v=23"></script>
 <script src="js/approvals.js?v=14"></script>
 <script src="js/my-subs.js?v=4"></script>
-<script src="js/emi-messages.js?v=9"></script>
+<script src="js/emi-messages.js?v=15"></script>
 <script src="js/stock.js?v=14"></script>
 <script src="js/users.js?v=7"></script>
 
