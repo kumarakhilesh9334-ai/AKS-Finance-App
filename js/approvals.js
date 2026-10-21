@@ -376,6 +376,16 @@ const DEVICE_TYPES = ['Mobile','TV','Sound Box','Fridge','AC','Washing Machine',
 const LOCKER_OPTIONS = ['101 Locker','YOGIC Locker','ZTE Locker','Other'];
 const AK_SHARE_OPTIONS = [['0','0% (AKS only)'],['50','50%'],['100','100% (AK only)'],['custom','Custom']];
 
+// Mirror the EMI recording form (ov-emi-* in index.html).
+const EMI_RECEIVED_OPTIONS = ['TRUE','FALSE'];
+const EMI_MODE_OPTIONS     = ['Cash','UPI','Bank transfer','Other'];
+const EMI_REASON_MULTI     = 'Multiple EMI Payment';
+const EMI_REASON_OPTIONS   = [['','- Select reason -'],
+  'Late payment fine included','Extra EMI received','Early loan closing settlement',
+  'Partial payment','Default Adjustment', EMI_REASON_MULTI];
+// Shared look for inputs the user must not type into (derived from the loan).
+const EDIT_RO_STYLE = 'background:#f5f5f3;color:#999;cursor:not-allowed';
+
 function escAttr(s) {
   return String(s == null ? '' : s)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
@@ -418,7 +428,7 @@ function populateEditModal(item) {
             </div>`
          + editField('EMI duration',     'ed-tenure',   d.tenure,   'number', 'onEditEmiCalc()')
          + editField('Monthly EMI ₹',    'ed-emi',      d.monthlyEmi, 'number', 'onEditEmiCalc()')
-         + editField('Interest ₹',       'ed-int',      d.interest, 'number', '', '', 'background:#f5f5f3;color:#999;cursor:not-allowed', 'readonly')
+         + editField('Interest ₹',       'ed-int',      d.interest, 'number', '', '', EDIT_RO_STYLE, 'readonly')
          + editField('EMI start date',   'ed-emistart', ymdFromDD(d.emiStart), 'date', '', 'onEditEmiStartChange()')
          + editSelect('AK share (%)',    'ed-akshare',  AK_SHARE_OPTIONS, akShareSel, 'onEditAkShareChange()')
          + `<div id="ed-akcustom-wrap" style="margin-bottom:0.6rem;${akShareSel==='custom'?'':'display:none'}">
@@ -427,18 +437,49 @@ function populateEditModal(item) {
             </div>`
          + editField('Guarantor',        'ed-guar',     d.guarantor);
   } else {
-    html = editField('Loan ID',        'ed-loanid',   d.loanId)
+    // Reason may be stored as "Multiple EMI Payment (3)" -- approve() parses
+    // the count back out of it, so split it apart and rebuild it on save.
+    const miscType   = String(d.miscType || d.reason || '');
+    const isMulti    = miscType.indexOf(EMI_REASON_MULTI) === 0;
+    const multiCount = (miscType.match(/\((\d+)\)/) || [])[1] || '';
+    const reasonBase = isMulti ? EMI_REASON_MULTI : miscType;
+    const reasonSel  = EMI_REASON_OPTIONS.some(o => (Array.isArray(o)?o[0]:String(o)) === reasonBase) ? reasonBase : '';
+    const rcvd       = String(d.received).toLowerCase() !== 'false' ? 'TRUE' : 'FALSE';
+    const modeRaw    = String(d.mode||'').trim();
+
+    // Loan ID, EMI number and Expected are derived from the loan in the
+    // recording form; editing them here would corrupt EMI_ID / MISC.
+    html = editField('Loan ID',        'ed-loanid',   d.loanId,         'text', '', '', EDIT_RO_STYLE, 'readonly')
          + editField('Customer name',  'ed-cname',    d.customerName)
          + editField('Mobile model',   'ed-model',    d.model)
-         + editField('EMI number',     'ed-eminum',   d.emiNum,   'number')
-         + editField('EMI start date', 'ed-emistart', ymdFromDD(d.emiStartDate), 'date')
-         + editField('Expected ₹',     'ed-expamt',   d.expectedAmount, 'number')
-         + editField('Received ₹',     'ed-amount',   d.amount,   'number')
+         + editField('EMI number',     'ed-eminum',   d.emiNum,         'number', '', '', EDIT_RO_STYLE, 'readonly')
+         + editField('EMI start date', 'ed-emistart', ymdFromDD(d.emiStartDate), 'date', '', '', EDIT_RO_STYLE, 'readonly')
+         + editField('Expected ₹',     'ed-expamt',   d.expectedAmount, 'number', '', '', EDIT_RO_STYLE, 'readonly')
+         + editField('Received ₹',     'ed-amount',   d.amount,         'number', 'onEditEmiDiffChange()')
          + editField('Payment date',   'ed-date',     ymdFromDD(d.date), 'date')
-         + editField('Reason',         'ed-misctype', d.miscType || d.reason);
+         + editSelect('Received',      'ed-rcvd',     EMI_RECEIVED_OPTIONS, rcvd)
+         + editSelect('Payment mode',  'ed-mode',     EMI_MODE_OPTIONS, EMI_MODE_OPTIONS.includes(modeRaw) ? modeRaw : EMI_MODE_OPTIONS[0])
+         + editField('Notes',          'ed-notes',    d.notes)
+         + `<div id="ed-reason-wrap" style="margin-bottom:0.6rem;display:none">
+               <label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Reason for difference <span style="color:#A32D2D">*</span></label>
+               <select id="ed-reason" onchange="onEditEmiReasonChange()" style="width:100%;padding:8px 10px;border:0.5px solid #ccc;border-radius:8px;font-size:13px;background:#fff">${
+                 EMI_REASON_OPTIONS.map(o => {
+                   const val  = Array.isArray(o) ? o[0] : String(o);
+                   const text = Array.isArray(o) ? o[1] : String(o);
+                   return `<option value="${escAttr(val)}"${val===reasonSel?' selected':''}>${escAttr(text)}</option>`;
+                 }).join('')
+               }</select>
+             </div>`
+         + `<div id="ed-multi-wrap" style="margin-bottom:0.6rem;display:none">
+               <label style="font-size:12px;color:#666;display:block;margin-bottom:3px">How many EMIs does this amount cover? <span style="color:#A32D2D">*</span></label>
+               <input type="number" id="ed-multicount" min="2" value="${escAttr(multiCount)}" placeholder="e.g. 3" style="width:100%;padding:8px 10px;border:0.5px solid #ccc;border-radius:8px;font-size:13px">
+               <div id="ed-multi-hint" style="font-size:11px;color:#888;margin-top:4px"></div>
+             </div>`
+         + `<div id="ed-diff-wrap" style="margin-bottom:0.6rem;display:none"><div class="diff-warn" id="ed-diff-text"></div></div>`;
   }
   $('edit-modal-body').innerHTML = html;
   if (item.type === 'loan') { onEditLockAppChange(); onEditAkShareChange(); }
+  else { onEditEmiDiffChange(); }
 }
 
 function editField(label, id, value, type='text', oninput='', onchange='', inputStyle='', extra='') {
@@ -494,6 +535,61 @@ function onEditEmiStartChange() {
   if (![5,10,15,20,25].includes(parseInt(val.split('-')[2]))) {
     $('ed-emistart').value = '';
     showAlert('EMI start date must be on 5, 10, 15, 20 or 25.','e');
+  }
+}
+
+function editEmiItem_() {
+  return S.pending.find(p => p.id === S.editingId && (!S.editingType || p.type === S.editingType));
+}
+
+function editEmiLoan_() {
+  const item = editEmiItem_();
+  if (!item || item.type !== 'emi') return null;
+  const loanId = item.data.loanId;
+  return (S.sheetLoans && S.sheetLoans.find(l => l.loanId === loanId)) || null;
+}
+
+// Mirror checkOverviewEmiDiff(): the reason dropdown only matters when the
+// amount differs from the standard EMI.
+function onEditEmiDiffChange() {
+  const wrap = $('ed-reason-wrap');
+  const dw   = $('ed-diff-wrap');
+  if (!wrap) return;
+  const raw = $('ed-amount') ? $('ed-amount').value : '';
+  const expected = parseFloat(($('ed-expamt') || {}).value) || 0;
+  if (raw === '') {
+    wrap.style.display = 'none';
+    dw.style.display   = 'none';
+    onEditEmiReasonChange();
+    return;
+  }
+  const diff = (parseFloat(raw) || 0) - expected;
+  if (Math.abs(diff) > 1) {
+    wrap.style.display = '';
+    dw.style.display   = '';
+    if ($('ed-diff-text'))
+      $('ed-diff-text').textContent = 'Differs from standard EMI ' + fmt(expected) + ' by ' + (diff>0?'+':'-') + fmt(Math.abs(diff)) + '. Please select a reason.';
+  } else {
+    wrap.style.display = 'none';
+    dw.style.display   = 'none';
+  }
+  onEditEmiReasonChange();
+}
+
+// Mirror checkOverviewEmiReason(): the "how many EMIs" box only appears for
+// Multiple EMI Payment, and only while the reason dropdown is itself visible.
+function onEditEmiReasonChange() {
+  const wrap = $('ed-multi-wrap');
+  if (!wrap) return;
+  const rwrap = $('ed-reason-wrap');
+  const isMulti = !!($('ed-reason') && $('ed-reason').value === EMI_REASON_MULTI)
+               && !!rwrap && rwrap.style.display !== 'none';
+  wrap.style.display = isMulti ? '' : 'none';
+  if (isMulti) {
+    const loan = editEmiLoan_();
+    const remaining = loan ? Math.max(0, (loan.emiDuration||0) - (loan.numReceivedEmi||0)) : 0;
+    const hint = $('ed-multi-hint');
+    if (hint) hint.textContent = 'EMIs remaining for this loan: ' + remaining + '. Minimum 2.';
   }
 }
 
@@ -579,17 +675,59 @@ async function saveEdit() {
     d.akAmount      = Math.round(d.financeAmount * d.akShare  / 100);
     d.aksAmount     = Math.round(d.financeAmount * d.aksShare / 100);
   } else {
-    d.loanId        = $('ed-loanid').value.trim();
-    d.customerName  = $('ed-cname').value.trim();
-    d.model         = $('ed-model').value.trim();
-    d.emiNum        = parseInt($('ed-eminum').value)||d.emiNum;
-    d.emiStartDate  = $('ed-emistart').value;
-    d.expectedAmount= parseFloat($('ed-expamt').value)||0;
-    d.amount        = parseFloat($('ed-amount').value)||0;
-    d.misc          = d.amount - d.expectedAmount;
-    d.date          = $('ed-date').value;
-    d.miscType      = $('ed-misctype').value.trim();
-    d.reason        = d.miscType;
+    const loanId    = $('ed-loanid').value.trim();
+    const cname     = $('ed-cname').value.trim();
+    const model     = $('ed-model').value.trim();
+    const emiNum    = parseInt($('ed-eminum').value) || d.emiNum;
+    const emiStart  = $('ed-emistart').value;
+    const expected  = parseFloat($('ed-expamt').value);
+    const amtRaw    = $('ed-amount').value;
+    const amount    = parseFloat(amtRaw);
+    const payDate   = $('ed-date').value;
+    const reasonSel = $('ed-reason') ? $('ed-reason').value : '';
+
+    // Same gates as the EMI recording form (submitOverviewEmi).
+    if (!loanId || !cname || !model || !emiNum || !emiStart) {
+      showAlert('Please fill in all required fields.','e'); return;
+    }
+    if (isNaN(expected)) { showAlert('Please fill in Expected.','e'); return; }
+    if (amtRaw === '' || isNaN(amount)) { showAlert('Please enter the amount received.','e'); return; }
+    if (!payDate) { showAlert('Please enter the payment date.','e'); return; }
+
+    const diff = amount - expected;
+    let miscType = '';
+    if (Math.abs(diff) > 1) {
+      if (!reasonSel) { showAlert('Please select a reason for the amount difference.','e'); return; }
+      if (reasonSel === EMI_REASON_MULTI) {
+        const multiCount = parseInt(($('ed-multicount')||{}).value) || 0;
+        const loan = editEmiLoan_();
+        const remaining = loan ? Math.max(0, (loan.emiDuration||0) - (loan.numReceivedEmi||0)) : 0;
+        if (multiCount < 2) { showAlert('Please enter how many EMIs this amount covers (minimum 2).','e'); return; }
+        if (multiCount > remaining) { showAlert('This loan has only ' + remaining + ' EMI(s) remaining.','e'); return; }
+        if (Math.abs(amount - expected * multiCount) > 1) {
+          if (!confirm(fmt(amount) + ' will be split as ' + fmt(expected) + ' per EMI across ' + multiCount + ' EMIs. Continue?')) return;
+        }
+        miscType = EMI_REASON_MULTI + ' (' + multiCount + ')';
+      } else {
+        miscType = reasonSel;
+      }
+    }
+    // No difference -> no reason. Clears any stale one left on an earlier edit.
+
+    d.loanId         = loanId;
+    d.customerName   = cname;
+    d.model          = model;
+    d.emiNum         = emiNum;
+    d.emiStartDate   = emiStart;
+    d.expectedAmount = expected;
+    d.amount         = amount;
+    d.misc           = amount - expected;
+    d.date           = payDate;
+    d.received       = $('ed-rcvd').value !== 'FALSE';
+    d.mode           = $('ed-mode').value;
+    d.notes          = $('ed-notes').value;
+    d.miscType       = miscType;
+    d.reason         = miscType;
   }
 
   closeEditModal();
@@ -671,6 +809,9 @@ function subCard(p, showActions, hideRoi) {
         <span class="kv-l">Std EMI</span>    <span class="kv-v">${fmt(d.expectedAmount)}</span>
         ${adjExpected!==d.expectedAmount?`<span class="kv-l">Expected</span><span class="kv-v">${fmt(adjExpected)}</span>`:''}
         <span class="kv-l">Reason for difference</span><span class="kv-v">${d.miscType||d.reason||'—'}</span>
+        <span class="kv-l">Received</span><span class="kv-v">${String(d.received).toLowerCase()!=='false'?'TRUE':'FALSE'}</span>
+        ${d.mode?`<span class="kv-l">Payment mode</span><span class="kv-v">${d.mode}</span>`:''}
+        ${d.notes?`<span class="kv-l">Notes</span><span class="kv-v">${d.notes}</span>`:''}
       </div>
     </div>`;
   }

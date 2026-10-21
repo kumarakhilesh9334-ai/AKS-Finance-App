@@ -650,13 +650,16 @@ function doPost(e) {
     if (payload.action === 'saveEmi') {
       const p = payload.item, d = p.data;
       // Columns: EMI_ID, Customer Name, Mobile Model, EMI_Start_Date, EMI_Number,
-      // EMI_Date, Loan ID, Received, Received_date, MISC, Cashflow, MISC Type
+      // EMI_Date, Loan ID, Received, Received_date, MISC, Cashflow, MISC Type,
+      // Payment Mode, Notes
       const headers = [
         'ID','Status','SubmittedBy','SubmittedAt','Note',
         'EMI_ID','Customer Name','Mobile Model','EMI_Start_Date','EMI_Number',
-        'EMI_Date','Loan ID','Received','Received_date','MISC','Cashflow','MISC Type'
+        'EMI_Date','Loan ID','Received','Received_date','MISC','Cashflow','MISC Type',
+        'Payment Mode','Notes'
       ];
       const sheet = ensureSheet(ss, UNAPP_EMI_SHEET, headers);
+      ensureEmiCols_(sheet);
 
       // EMI_ID = LoanID_EMINumber  e.g. Roshan0070/1_5
       const emiId = (d.loanId||'') + '_' + (d.emiNum||'');
@@ -694,7 +697,8 @@ function doPost(e) {
       sheet.appendRow([
         p.id, p.status, p.submittedBy, p.submittedAt, '',
         emiId, d.customerName||'', d.model||'', d.emiStartDate||'', d.emiNum||'',
-        emiDateFmt, d.loanId||'', received, receivedDateFmt, misc, d.amount||0, miscType
+        emiDateFmt, d.loanId||'', received, receivedDateFmt, misc, d.amount||0, miscType,
+        d.mode||'Cash', d.notes||''
       ]);
       // Lean response — client updates its local pending list itself.
       return jsonResponse({ok:true});
@@ -706,6 +710,7 @@ function doPost(e) {
       const sheetName = type === 'loan' ? UNAPP_LOAN_SHEET : UNAPP_EMI_SHEET;
       const sheet = ss.getSheetByName(sheetName);
       if (!sheet) return jsonResponse({ok:false,error:'Sheet not found'});
+      if (type !== 'loan') ensureEmiCols_(sheet);
       const rows  = sheet.getDataRange().getValues();
       for (let i=1;i<rows.length;i++){
         if (String(rows[i][0])===String(id)){
@@ -723,14 +728,17 @@ function doPost(e) {
             ]]);
           } else {
             // Sheet: EMI_ID(5), CustomerName(6), Model(7), EMI_Start_Date(8), EMI_Number(9),
-            // EMI_Date(10), LoanID(11), Received(12), Received_date(13), MISC(14), Cashflow(15), MISC_Type(16)
+            // EMI_Date(10), LoanID(11), Received(12), Received_date(13), MISC(14), Cashflow(15),
+            // MISC_Type(16), PaymentMode(17), Notes(18)
+            // EMI_Date / Loan ID stay as-is: they are derived, not user-editable.
             const newMisc = (d.amount||0) - (d.expectedAmount||0);
-            sheet.getRange(i+1,6,1,12).setValues([[
+            sheet.getRange(i+1,6,1,14).setValues([[
               (d.loanId||'')+'_'+(d.emiNum||''),d.customerName||'',d.model||'',
               fmtDateFromYMD(d.emiStartDate),d.emiNum||'',
-              rows[i][10],rows[i][11],rows[i][12],
+              rows[i][10],rows[i][11],d.received!==false,
               fmtDateFromYMD(d.date||''),
-              newMisc,d.amount||0,d.miscType||''
+              newMisc,d.amount||0,d.miscType||'',
+              d.mode||'',d.notes||''
             ]]);
           }
           // Lean response — client already holds the edited data.
@@ -1305,7 +1313,11 @@ function readUnapproved(ss, sheetName, type) {
   if (!sheet) return [];
   const b = configBounds(ss)[sheetName];
   tm(p + 'cfg');
-  const rows = readDataRows(sheet, 2, b, type === 'loan' ? 22 : 17, p);
+  // Unapproved_EMI predates Payment Mode / Notes. Grow it before reading so the
+  // range below doesn't overshoot the sheet (that throws, then falls back to a
+  // wider getDataRange). Skipped entirely once Config reports the new width.
+  if (type !== 'loan' && !(b && b.cols >= 19)) ensureEmiCols_(sheet);
+  const rows = readDataRows(sheet, 2, b, type === 'loan' ? 22 : 19, p);
   const out = rows
     .filter(r => r[0] && String(r[1]).toLowerCase() === 'pending')
     .map(r => {
@@ -1332,7 +1344,8 @@ function readUnapproved(ss, sheetName, type) {
       } else {
         // Cols: ID(0) Status(1) SubmittedBy(2) SubmittedAt(3) Note(4)
         // EMI_ID(5) CustomerName(6) Model(7) EMI_Start_Date(8) EMI_Number(9)
-        // EMI_Date(10) LoanID(11) Received(12) Received_date(13) MISC(14) Cashflow(15) MISC_Type(16)
+        // EMI_Date(10) LoanID(11) Received(12) Received_date(13) MISC(14) Cashflow(15)
+        // MISC_Type(16) PaymentMode(17) Notes(18)
         const cashflow = parseFloat(r[15])||0;
         const misc = parseFloat(r[14])||0;
         const emiIdRaw = String(r[5]||'');
@@ -1341,6 +1354,7 @@ function readUnapproved(ss, sheetName, type) {
           date:fmtDate(r[13]),rowNumber:r[11],received:r[12],
           scheduledDate:fmtDate(r[10]),misc:misc,miscType:r[16],
           amount:cashflow,expectedAmount:cashflow - misc,
+          mode:String(r[17]||'').trim(), notes:String(r[18]||'').trim(),
         };
       }
       return { id:String(r[0]), type, status:String(r[1]),
@@ -1460,6 +1474,15 @@ function ensureSheet(ss, name, headers) {
     sheet.autoResizeColumns(1,headers.length);
   }
   return sheet;
+}
+
+// Unapproved_EMI existed before Payment Mode / Notes were introduced, and
+// ensureSheet() only writes headers when it creates a sheet — so grow the
+// sheet and back-fill those two headers before anything reads or writes them.
+function ensureEmiCols_(sheet) {
+  if (sheet.getMaxColumns() < 19) sheet.insertColumnsAfter(sheet.getMaxColumns(), 19 - sheet.getMaxColumns());
+  if (!String(sheet.getRange(1, 18).getValue() || '').trim()) sheet.getRange(1, 18).setValue('Payment Mode');
+  if (!String(sheet.getRange(1, 19).getValue() || '').trim()) sheet.getRange(1, 19).setValue('Notes');
 }
 
 function deleteFromSheet(ss, sheetName, id) {

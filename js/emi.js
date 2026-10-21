@@ -400,7 +400,7 @@ function emiCard(l, type) {
     const days = Math.round((today - due) / 86400000);
     textColor = '#fff'; subColor = 'rgba(255,255,255,0.75)';
     if (days > 90) {
-      bg = '#000000'; border = '#000000'; overdueLabel = '90+ days overdue';
+      bg = '#5C0000'; border = '#5C0000'; overdueLabel = '90+ days overdue';
     } else if (days > 30) {
       bg = '#980000'; border = '#980000'; overdueLabel = '30+ days overdue';
     } else {
@@ -409,12 +409,13 @@ function emiCard(l, type) {
   } else if (type === 'upcoming' && l.nextEmiDate) {
     const due = new Date(l.nextEmiDate); due.setHours(0,0,0,0);
     if (due.getTime() === today.getTime()) {
-      bg = '#ff9900'; border = '#ff9900'; textColor = '#fff'; subColor = 'rgba(255,255,255,0.75)';
+      bg = '#F5C518'; border = '#F5C518'; textColor = '#1A1A1A'; subColor = 'rgba(0,0,0,0.6)';
     }
   }
 
   const cardStyle = bg ? `background:${bg};border-left-color:${border};border-color:${border}` : '';
-  const pillStyle = bg ? 'background:rgba(255,255,255,0.2);color:#fff' : '';
+  // White pills on the dark fills; the yellow "Due today" card needs dark text.
+  const pillStyle = bg ? (textColor === '#fff' ? 'background:rgba(255,255,255,0.2);color:#fff' : `background:rgba(0,0,0,0.10);color:${textColor}`) : '';
 
   return `<div class="emi-card ${type}" data-loanid="${l.loanId}" style="${cardStyle}">
     ${revisedBadgeHtml(l)}
@@ -426,7 +427,7 @@ function emiCard(l, type) {
     </div>
     <div class="emi-card-name" style="display:flex;justify-content:space-between;align-items:center;color:${textColor};gap:8px">
       <span>${l.customerName}</span>
-      ${overdueLabel ? `<span style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.85);flex-shrink:0">${overdueLabel}</span>` : ''}
+      ${overdueLabel ? `<span style="font-size:10px;font-weight:600;opacity:0.85;flex-shrink:0">${overdueLabel}</span>` : ''}
     </div>
     <div class="emi-card-meta">
       <span class="emi-amt-pill" style="${pillStyle}">${billTxt ? 'Bill: '+billTxt : '—'}</span>
@@ -973,23 +974,25 @@ function cdCard(l, type) {
       const due = new Date(l.nextEmiDate); due.setHours(0,0,0,0);
       const days = Math.round((today - due) / 86400000);
       rightDate = 'Due: ' + fmtDisplayDate(l.nextEmiDate);
-      if (days > 90)        { bg='#000';border='#000';tc='#fff';sc='rgba(255,255,255,0.75)';overdueLabel='90+ days overdue'; }
+      if (days > 90)        { bg='#5C0000';border='#5C0000';tc='#fff';sc='rgba(255,255,255,0.75)';overdueLabel='90+ days overdue'; }
       else if (days > 30)   { bg='#980000';border='#980000';tc='#fff';sc='rgba(255,255,255,0.75)';overdueLabel='30+ days overdue'; }
       else if (days > 0)    { bg='#dd7e6b';border='#dd7e6b';tc='#fff';sc='rgba(255,255,255,0.75)';overdueLabel=days+'d overdue'; }
-      else if (due.getTime()===today.getTime()) { bg='#ff9900';border='#ff9900';tc='#fff';sc='rgba(255,255,255,0.75)';overdueLabel='Due today'; }
+      else if (due.getTime()===today.getTime()) { bg='#F5C518';border='#F5C518';tc='#1A1A1A';sc='rgba(0,0,0,0.6)';overdueLabel='Due today'; }
     } else {
       rightDate = '—';
     }
   } else if (type === 'closed') {
+    // Same blue / near-black ends as overviewCard().
     rightDate = '✓ Closed';
-    tc = '#27500A';
+    bg = '#1565C0'; border = '#1565C0'; tc = '#fff'; sc = 'rgba(255,255,255,0.75)';
   } else {
     rightDate = '⚠️ Defaulted';
-    tc = '#A32D2D';
+    bg = '#1A1A1A'; border = '#1A1A1A'; tc = '#fff'; sc = 'rgba(255,255,255,0.75)';
   }
 
   const cardStyle = bg ? `background:${bg};border-left-color:${border};border-color:${border}` : '';
-  const pillStyle = bg ? 'background:rgba(255,255,255,0.2);color:#fff' : '';
+  // White pills on the dark fills; the yellow "Due today" card needs dark text.
+  const pillStyle = bg ? (tc === '#fff' ? 'background:rgba(255,255,255,0.2);color:#fff' : `background:rgba(0,0,0,0.10);color:${tc}`) : '';
 
   return `<div class="emi-card ${type}" data-loanid="${l.loanId}" data-type="${type}" onclick="openCdDetail('${l.loanId}')" style="cursor:pointer;${cardStyle}">
     ${revisedBadgeHtml(l)}
@@ -1001,7 +1004,7 @@ function cdCard(l, type) {
     </div>
     <div class="emi-card-name" style="display:flex;justify-content:space-between;align-items:center;color:${tc};gap:8px">
       <span>${l.customerName}</span>
-      ${overdueLabel ? `<span style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.85);flex-shrink:0">${overdueLabel}</span>` : ''}
+      ${overdueLabel ? `<span style="font-size:10px;font-weight:600;opacity:0.85;flex-shrink:0">${overdueLabel}</span>` : ''}
     </div>
     <div class="emi-card-meta">
       <span class="emi-amt-pill" style="${pillStyle}">${billTxt ? 'Bill: '+billTxt : '—'}</span>
@@ -1502,23 +1505,27 @@ function overviewCard(l, type) {
       const due = new Date(l.nextEmiDate); due.setHours(0,0,0,0);
       const days = Math.round((today - due) / 86400000);
       rightDate = 'Due: ' + fmtDisplayDate(l.nextEmiDate);
-      if (days > 90)        { bg='#000';border='#000';tc='#fff';sc='rgba(255,255,255,0.75)';overdueLabel='90+ days overdue'; }
+      if (days > 90)        { bg='#5C0000';border='#5C0000';tc='#fff';sc='rgba(255,255,255,0.75)';overdueLabel='90+ days overdue'; }
       else if (days > 30)   { bg='#980000';border='#980000';tc='#fff';sc='rgba(255,255,255,0.75)';overdueLabel='30+ days overdue'; }
       else if (days > 0)    { bg='#dd7e6b';border='#dd7e6b';tc='#fff';sc='rgba(255,255,255,0.75)';overdueLabel=days+'d overdue'; }
-      else if (due.getTime()===today.getTime()) { bg='#ff9900';border='#ff9900';tc='#fff';sc='rgba(255,255,255,0.75)';overdueLabel='Due today'; }
+      else if (due.getTime()===today.getTime()) { bg='#F5C518';border='#F5C518';tc='#1A1A1A';sc='rgba(0,0,0,0.6)';overdueLabel='Due today'; }
     } else {
       rightDate = '—';
     }
   } else if (type === 'closed') {
+    // Best case of the ladder: a finished loan is terminal-good → blue, the one
+    // hue that stays distinct from red for every type of colour blindness.
     rightDate = '✓ Closed';
-    tc = '#27500A';
+    bg = '#1565C0'; border = '#1565C0'; tc = '#fff'; sc = 'rgba(255,255,255,0.75)';
   } else {
+    // Worst case: write-off → near-black, the darkest end of the ramp.
     rightDate = '⚠️ Defaulted';
-    tc = '#A32D2D';
+    bg = '#1A1A1A'; border = '#1A1A1A'; tc = '#fff'; sc = 'rgba(255,255,255,0.75)';
   }
 
   const cardStyle = bg ? `background:${bg};border-left-color:${border};border-color:${border}` : '';
-  const pillStyle = bg ? 'background:rgba(255,255,255,0.2);color:#fff' : '';
+  // White pills on the dark fills; the yellow "Due today" card needs dark text.
+  const pillStyle = bg ? (tc === '#fff' ? 'background:rgba(255,255,255,0.2);color:#fff' : `background:rgba(0,0,0,0.10);color:${tc}`) : '';
 
   return `<div class="emi-card ${type}" data-loanid="${l.loanId}" style="cursor:pointer;${cardStyle}">
     ${revisedBadgeHtml(l)}
@@ -1530,7 +1537,7 @@ function overviewCard(l, type) {
     </div>
     <div class="emi-card-name" style="display:flex;justify-content:space-between;align-items:center;color:${tc};gap:8px">
       <span>${l.customerName}</span>
-      ${overdueLabel ? `<span style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.85);flex-shrink:0">${overdueLabel}</span>` : ''}
+      ${overdueLabel ? `<span style="font-size:10px;font-weight:600;opacity:0.85;flex-shrink:0">${overdueLabel}</span>` : ''}
     </div>
     <div class="emi-card-meta">
       <span class="emi-amt-pill" style="${pillStyle}">${billTxt ? 'Bill: '+billTxt : '—'}</span>
@@ -2355,7 +2362,7 @@ function renderOverviewOverdue() {
   el.innerHTML = `<div style="font-size:12px;color:#888;margin-bottom:0.5rem">${overdue.length} overdue loan(s)</div>`
     + sectionHtml('Less than 30 days', 'less30', '#dd7e6b', '#fdf0ed', '\uD83D\uDD34', less30)
     + sectionHtml('30+ days', 'over30', '#980000', '#fcebeb', '\uD83D\uDD34', over30)
-    + sectionHtml('90+ days', 'over90', '#000', '#f0f0f0', '\uD83D\uDD34', over90);
+    + sectionHtml('90+ days', 'over90', '#5C0000', '#f0f0f0', '\uD83D\uDD34', over90);
 }
 
 async function submitMobileJabt() {

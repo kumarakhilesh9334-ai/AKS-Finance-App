@@ -101,8 +101,8 @@ function renderCustomerLoansPanel(loans) {
     const due = new Date(l.nextEmiDate); due.setHours(0,0,0,0);
     if (due < today) overdue.push(l); else upcoming.push(l);
   });
-  const colorMap = { defaulted:'#BA7517',overdue:'#A32D2D',upcoming:'#0F6E56',closed:'#888' };
-  const bgMap    = { defaulted:'#FAEEDA',overdue:'#FCEBEB',upcoming:'#E1F5EE',closed:'#F1EFE8' };
+  const colorMap = { defaulted:'#1A1A1A',overdue:'#A32D2D',upcoming:'#0F6E56',closed:'#1565C0' };
+  const bgMap    = { defaulted:'#ECECEC',overdue:'#FCEBEB',upcoming:'#E1F5EE',closed:'#E3EEFB' };
   const renderGroup = (items, type, label) => !items.length ? '' :
     `<div style="margin-bottom:6px">
       <div style="font-size:10px;font-weight:600;color:${colorMap[type]};text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">${label}</div>

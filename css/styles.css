@@ -145,7 +145,7 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 .emi-fetch-status.loading{color:#534AB7}
 
 /* ── EMI additional states ────────────────────────────────────────────── */
-.emi-loan-row.defaulted{border-left:3px solid #BA7517}
+.emi-loan-row.defaulted{border-left:3px solid #1A1A1A}
 .emi-loan-row.no-action{cursor:default;opacity:0.6}
 .emi-loan-row.no-action:hover{background:#fff;border-color:#e5e5e5}
 .emi-late-pill{font-size:11px;background:#FAEEDA;color:#633806;border-radius:20px;padding:1px 8px}
@@ -157,8 +157,8 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 .upcoming-hd{background:#E1F5EE;color:#085041}
 .overdue-hd{background:#FCEBEB;color:#791F1F}
 .partials-hd{background:#FFF0E6;color:#A32D2D}
-.closed-hd{background:#F1EFE8;color:#5F5E5A}
-.defaulted-hd{background:#FAEEDA;color:#633806}
+.closed-hd{background:#E3EEFB;color:#0D47A1}
+.defaulted-hd{background:#ECECEC;color:#1A1A1A}
 .emi-col-body{padding:8px;display:flex;flex-direction:column;gap:6px;overflow-y:auto;max-height:460px;flex:1}
 .emi-col-empty{text-align:center;padding:1.5rem 0.5rem;color:#bbb;font-size:12px}
 
@@ -170,8 +170,8 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 .emi-card.no-action:hover{background:#fff;border-color:#e5e5e5}
 .emi-card.upcoming{border-left:3px solid #0F6E56}
 .emi-card.overdue{border-left:3px solid #A32D2D}
-.emi-card.defaulted{border-left:3px solid #BA7517}
-.emi-card.closed{border-left:3px solid #888}
+.emi-card.defaulted{border-left:3px solid #1A1A1A}
+.emi-card.closed{border-left:3px solid #1565C0}
 .emi-card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px}
 .emi-card-id{font-size:12px;font-weight:600;color:#534AB7}
 .emi-card-name{font-size:13px;color:#1a1a1a;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -209,8 +209,8 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 .loan-summary-card:hover{background:#fafafa}
 .loan-summary-card.overdue{border-left:3px solid #A32D2D}
 .loan-summary-card.upcoming{border-left:3px solid #0F6E56}
-.loan-summary-card.defaulted{border-left:3px solid #BA7517}
-.loan-summary-card.closed{border-left:3px solid #888}
+.loan-summary-card.defaulted{border-left:3px solid #1A1A1A}
+.loan-summary-card.closed{border-left:3px solid #1565C0}
 .loan-card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px}
 .loan-expand-hint{font-size:11px;color:#534AB7;margin-left:auto;cursor:pointer;white-space:nowrap}
 .loan-detail-panel .kv{font-size:12px}
