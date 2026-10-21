@@ -457,6 +457,9 @@
     <div class="submit-row" style="margin-top:12px">
       <button class="btn" style="width:100%" onclick="closeQrModal()">Close</button>
     </div>
+    <input type="file" id="qr-file-input" accept="image/png,image/jpeg" style="display:none" onchange="qrFilePicked(this)">
+    <button class="btn btn-sm" style="width:100%;margin-top:6px" onclick="document.getElementById('qr-file-input').click()">Load assets/upi-qr.png</button>
+    <div id="qr-modal-note" style="font-size:10px;color:#999;text-align:center;margin-top:8px"></div>
   </div>
 </div>
 
@@ -469,7 +472,7 @@
 <script src="js/emi.js?v=23"></script>
 <script src="js/approvals.js?v=14"></script>
 <script src="js/my-subs.js?v=4"></script>
-<script src="js/emi-messages.js?v=15"></script>
+<script src="js/emi-messages.js?v=19"></script>
 <script src="js/stock.js?v=14"></script>
 <script src="js/users.js?v=7"></script>
 
