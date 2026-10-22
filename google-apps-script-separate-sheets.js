@@ -14,6 +14,7 @@ const USERS_SHEET          = 'Users';
 const REVISED_DATES_SHEET  = 'Revised_Dates';
 const LOCK_STATUS_SHEET    = 'LockAppStatus';
 const STOCK_SHEET          = 'Stock';
+const CODE_TO_SIM_SHEET    = 'codeToSim';
 
 // Column map for Data tab (0-based, column A = 0)
 const C = {
@@ -27,7 +28,7 @@ const C = {
   receivedPrincipal:33,receivedInterest:34,receivedTotal:35,
   numReceivedEmi:36,emiCompleted:37,lateEmis:38,latePaymentFine:39,
   earlyClosing:40,extraEmiReceived:41,recoveryCharge:42,lockingApp:43,
-  closingMsg:44,lockRemoved:45,defaulted:46,defaultComment:47,finalRoi:48,
+  lockingAppCode:44,lockRemoved:45,defaulted:46,defaultComment:47,finalRoi:48,
   emi1:49,emi2:50,emi3:51,emi4:52,emi5:53,emi6:54,emi7:55,emi8:56,
   emiDate1:57,emiDate2:58,emiDate3:59,emiDate4:60,emiDate5:61,emiDate6:62,
   emiDate7:63,emiDate8:64,emiMisc1:65,emiMisc2:66,emiMisc3:67,emiMisc4:68,
@@ -437,6 +438,13 @@ function handleGet(e, opts) {
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
 
+  // ── Read the Locking App Code -> SIM numbers map ───────────────────
+  if (action === 'readCodeToSim') {
+    try {
+      return jsonResponse({ok:true, map: readCodeToSim(ss)});
+    } catch(err){ return jsonResponse({ok:false, error:err.message}); }
+  }
+
   // ── Read Stock data (admin only) ─────────────────────────────────
   if (action === 'readStock') {
     try {
@@ -626,21 +634,22 @@ function doPost(e) {
         'Mobile model','Device Type','Mobile amount','Down payment','Processing Fee',
         'Interest','EMI Duration','EMI Start Date',
         'Guarantor/ Alternate no/ Comments','App Lock Charge','AK Share','Rate of Interest',
-        'Locking App'
+        'Locking App','Lock App Code'
       ];
       const sheet = ensureSheet(ss, UNAPP_LOAN_SHEET, headers);
-      // Existing Unapproved_Loan sheets were created before this column existed,
+      // Existing Unapproved_Loan sheets were created before these columns existed,
       // and ensureSheet() only writes headers when it creates a sheet — so make
-      // sure column V carries a header before anything reads it back.
-      if (sheet.getMaxColumns() < 22) sheet.insertColumnsAfter(sheet.getMaxColumns(), 22 - sheet.getMaxColumns());
+      // sure columns V and W carry a header before anything reads them back.
+      if (sheet.getMaxColumns() < 23) sheet.insertColumnsAfter(sheet.getMaxColumns(), 23 - sheet.getMaxColumns());
       if (!String(sheet.getRange(1, 22).getValue() || '').trim()) sheet.getRange(1, 22).setValue('Locking App');
+      if (!String(sheet.getRange(1, 23).getValue() || '').trim()) sheet.getRange(1, 23).setValue('Lock App Code');
       sheet.appendRow([
         p.id, p.status, p.submittedBy, p.submittedAt, '',
         fmtDateFromYMD(d.billDate), d.customerName||'', d.phone||'', d.idNum||'',
         d.model||'', d.deviceType||'', d.price||0, d.downPayment||0, d.processingFee||0,
         d.interest||0, d.tenure||0, fmtDateFromYMD(d.emiStart),
         d.guarantor||'', d.appLockCharge||0, (d.akShare||0)/100,
-        (d.rateOfInterest||0)/100, d.lockingApp||''
+        (d.rateOfInterest||0)/100, d.lockingApp||'', d.lockAppCode||''
       ]);
       // Lean response — client updates its local pending list itself.
       return jsonResponse({ok:true});
@@ -718,13 +727,13 @@ function doPost(e) {
             // Sheet: BillDate(5), CustomerName(6), Phone(7), Aadhaar(8),
             // Model(9), DeviceType(10), Price(11), DownPayment(12), ProcessingFee(13),
             // Interest(14), Tenure(15), EmiStart(16), Guarantor(17), AppLock(18), AKShare(19),
-            // RateOfInterest(20), LockingApp(21)
-            sheet.getRange(i+1,6,1,17).setValues([[
+            // RateOfInterest(20), LockingApp(21), LockAppCode(22)
+            sheet.getRange(i+1,6,1,18).setValues([[
               fmtDateFromYMD(d.billDate),d.customerName||'',d.phone||'',d.idNum||'',
               d.model||'',d.deviceType||'',d.price||0,d.downPayment||0,d.processingFee||0,
               d.interest||0,d.tenure||0,fmtDateFromYMD(d.emiStart),
               d.guarantor||'',d.appLockCharge||0,(d.akShare||0)/100,(d.rateOfInterest||0)/100,
-              d.lockingApp||''
+              d.lockingApp||'',d.lockAppCode||''
             ]]);
           } else {
             // Sheet: EMI_ID(5), CustomerName(6), Model(7), EMI_Start_Date(8), EMI_Number(9),
@@ -1169,6 +1178,27 @@ function readLockStatus(ss) {
   return map;
 }
 
+// ── Locking App Code -> the SIM numbers under it ──────────────────────────
+// One row per code: col A is the code, col B holds every number for that code
+// separated by commas (e.g. "9123456780, 9234567801"). A repeated code appends
+// to the same list rather than replacing it.
+function readCodeToSim(ss) {
+  const sheet = ss.getSheetByName(CODE_TO_SIM_SHEET);
+  if (!sheet) return {};
+  const rows = readDataRows(sheet, 2, configBounds(ss)[CODE_TO_SIM_SHEET], 2, 'codeToSim.');
+  const map = {};
+  rows.forEach(r => {
+    const code = String(r[0]||'').trim();
+    if (!code) return;
+    if (!map[code]) map[code] = [];
+    String(r[1]||'').split(',').forEach(n => {
+      const num = String(n).trim();
+      if (num && map[code].indexOf(num) === -1) map[code].push(num);
+    });
+  });
+  return map;
+}
+
 function readAllRevisedDates(ss) {
   const sheet = ss.getSheetByName(REVISED_DATES_SHEET);
   tm('rev.sheet');
@@ -1317,7 +1347,7 @@ function readUnapproved(ss, sheetName, type) {
   // range below doesn't overshoot the sheet (that throws, then falls back to a
   // wider getDataRange). Skipped entirely once Config reports the new width.
   if (type !== 'loan' && !(b && b.cols >= 19)) ensureEmiCols_(sheet);
-  const rows = readDataRows(sheet, 2, b, type === 'loan' ? 22 : 19, p);
+  const rows = readDataRows(sheet, 2, b, type === 'loan' ? 23 : 19, p);
   const out = rows
     .filter(r => r[0] && String(r[1]).toLowerCase() === 'pending')
     .map(r => {
@@ -1327,7 +1357,7 @@ function readUnapproved(ss, sheetName, type) {
         // Bill Date(5) CustomerName(6) Phone(7) Aadhaar(8) Model(9)
         // DeviceType(10) Price(11) Down(12) PFee(13) Interest(14)
         // Tenure(15) EmiStart(16) Guarantor(17) AppLock(18) AKShare(19) RateOfInterest(20)
-        // LockingApp(21)
+        // LockingApp(21) LockAppCode(22)
         data = {
           billDate:fmtDate(r[5]), customerName:r[6], phone:r[7], idNum:r[8],
           model:r[9], deviceType:r[10], price:r[11], downPayment:r[12],
@@ -1336,6 +1366,7 @@ function readUnapproved(ss, sheetName, type) {
           aksShare:100-(r[19]*100),
           rateOfInterest: (parseFloat(r[20])||0) * 100,
           lockingApp: String(r[21]||'').trim(),
+          lockAppCode: String(r[22]||'').trim(),
           // Derived fields for display in approval card
           loanId: (String(r[6]).split(' ')[0] || '') + String(r[8]).slice(-4) + '/1',
           monthlyEmi: 0, financeAmount: 0, totalAmount: 0,
@@ -1370,18 +1401,18 @@ function readUnapproved(ss, sheetName, type) {
 // Bill Date(5) CustomerName(6) Phone(7) Aadhaar(8) Model(9)
 // DeviceType(10) Price(11) Down(12) PFee(13) Interest(14)
 // Tenure(15) EmiStart(16) Guarantor(17) AppLock(18) AKShare(19) RateOfInterest(20)
-// LockingApp(21)
+// LockingApp(21) LockAppCode(22)  -> Input cols A..S, so S is the Lock App Code.
 function appendToInput(ss, row) {
   const headers = ['Bill Date','Customer Name','Customer mobile no','Customer AADHAR / PAN',
     'Mobile model','Device Type','Mobile amount','Down payment','Processing Fee','Interest',
     'EMI Duration','EMI Start Date','Guarantor/ Alternate no/ Comments','App Lock Charge',
-    'AK Share','AK paid to Kunal','AKS paid to Kunal','Locking app'];
+    'AK Share','AK paid to Kunal','AKS paid to Kunal','Locking app','Lock App Code'];
   const sheet = ensureSheet(ss, INPUT_SHEET, headers);
   sheet.appendRow([
     row[5], row[6], row[7], row[8],
     row[9], row[10], row[11], row[12],
     row[13], row[14], row[15], row[16],
-    row[17], row[18], row[19], '', '', row[21] || '',
+    row[17], row[18], row[19], '', '', row[21] || '', row[22] || '',
   ]);
   const r = sheet.getLastRow();
   sheet.getRangeList(['D' + r, 'M' + r]).setNumberFormat('@');
@@ -1447,7 +1478,7 @@ function buildFullLoan(r) {
     rateOfInterest:parseFloat(r[C.rateOfInterest])||0,finalRoi:parseFloat(r[C.finalRoi])||0,
     maxInterestDiscount:parseFloat(r[C.maxInterestDiscount])||0,totalEmi:parseInt(r[C.totalEmi])||0,
     downPaymentPct:parseFloat(r[C.downPaymentPct])||0,
-    lockingApp:String(r[C.lockingApp]||'').trim(),closingMsg:r[C.closingMsg]===true,
+    lockingApp:String(r[C.lockingApp]||'').trim(),lockingAppCode:String(r[C.lockingAppCode]||'').trim(),
     lockRemoved:r[C.lockRemoved]===true,
     driveLink:String(r[C.driveLink]||'').trim(),
     defaultComment:String(r[C.defaultComment]||'').trim(),
@@ -1668,6 +1699,9 @@ const SNAPSHOT_SOURCES = [
   { key: 'stock',        action: 'readStock',            out: 'stock', params: { forceRefresh: '1' } },
   { key: 'config',       action: 'readConfig',           out: 'lastMessageSent' },
   { key: 'templates',    action: 'readMessageTemplates', out: 'templates' },
+  // Locking App Code -> SIM numbers. Tiny (one row per code), and the Loan
+  // Summary in All Loans needs it on the very first paint after a snapshot.
+  { key: 'codeToSim',    action: 'readCodeToSim',         out: 'map' },
 ];
 // readAllLoansForMsgs is served from `loans`: buildFullLoan() already carries
 // welcomeMsgText/emiMsgText/lastDateMsgText/thankYouMsgText/loanClosingMsgText/

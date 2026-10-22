@@ -34,13 +34,19 @@ function initNewLoanPage() {
   $('emistart-err').style.display          = 'none';
   $('f-lockapp').selectedIndex    = 0;
   $('f-lockapp-other').value      = '';
+  $('f-lockappcode').value        = '';
   updateLockAppVisibility();
 }
 
 // ── Locking App (Mobile only) ─────────────────────────────────────────────
+// App lock charge and the Lock App Code belong to a locked phone and mean
+// nothing for a TV or a fridge, so they follow the same Mobile-only rule the
+// Locking App select already had.
 function updateLockAppVisibility() {
   const isMobile = $('f-dtype').value === 'Mobile';
-  $('lockapp-wrap').style.display      = isMobile ? '' : 'none';
+  $('applock-wrap').style.display       = isMobile ? '' : 'none';
+  $('lockapp-wrap').style.display       = isMobile ? '' : 'none';
+  $('lockappcode-wrap').style.display   = isMobile ? '' : 'none';
   $('lockapp-other-wrap').style.display =
     (isMobile && $('f-lockapp').value === 'Other') ? '' : 'none';
 }
@@ -271,17 +277,14 @@ async function submitLoan() {
   if (!pfee && pfee !== 0) {
     showAlert('Please fill in Processing fee.','e'); return;
   }
-  if (!applock && applock !== 0) {
+  if (!applock && applock !== 0 && dtype === 'Mobile') {
     showAlert('Please fill in App lock charge.','e'); return;
   }
   const lockApp = v('f-lockapp');
-  if (dtype === 'Mobile') {
-    if (!lockApp) {
-      showAlert('Please select the Locking App.','e'); return;
-    }
-    if (lockApp === 'Other' && !v('f-lockapp-other')) {
-      showAlert('Please enter the Other Locker name.','e'); return;
-    }
+  // Locking App is optional — "None" is a real choice — but if "Other" is
+  // picked the typed name is still the only thing that identifies the locker.
+  if (dtype === 'Mobile' && lockApp === 'Other' && !v('f-lockapp-other')) {
+    showAlert('Please enter the Other Locker name.','e'); return;
   }
   if (!emiStart) {
     showAlert('Please select an EMI start date.','e'); return;
@@ -316,6 +319,7 @@ async function submitLoan() {
     model, deviceType:dtype, price, downPayment:down,
     processingFee:pfee, appLockCharge:applock, interest:Math.round(interest),
     lockingApp: dtype === 'Mobile' ? (lockApp === 'Other' ? v('f-lockapp-other').trim() : lockApp) : '',
+    lockAppCode: dtype === 'Mobile' ? v('f-lockappcode').trim() : '',
     rateOfInterest:parseFloat(roi.toFixed(2)), tenure, emiStart,
     guarantor:guar, akShare:akPct, aksShare:aksPct,
     financeAmount, totalAmount, monthlyEmi,

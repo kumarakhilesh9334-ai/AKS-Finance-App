@@ -373,7 +373,7 @@ function editSubmission(id, type) {
 
 const DEVICE_TYPES = ['Mobile','TV','Sound Box','Fridge','AC','Washing Machine','Air Cooler',
   'Induction','Mixer','Gas Stove','Inverter Battery','Inverter','Inverter & Battery','Loan','Fan','Other'];
-const LOCKER_OPTIONS = ['101 Locker','YOGIC Locker','ZTE Locker','Other'];
+const LOCKER_OPTIONS = ['101 Locker','YOGIC Locker','ZTE Locker','Other','None'];
 const AK_SHARE_OPTIONS = [['0','0% (AKS only)'],['50','50%'],['100','100% (AK only)'],['custom','Custom']];
 
 // Mirror the EMI recording form (ov-emi-* in index.html).
@@ -415,9 +415,12 @@ function populateEditModal(item) {
          + editField('Device amount ₹',  'ed-price',    d.price,    'number', 'onEditEmiCalc()')
          + editField('Down payment ₹',   'ed-down',     d.downPayment, 'number', 'onEditEmiCalc()')
          + editField('Processing fee ₹', 'ed-pfee',     d.processingFee, 'number', 'onEditEmiCalc()')
-         + editField('App lock ₹',       'ed-applock',  d.appLockCharge, 'number')
+         + `<div id="ed-applock-wrap" style="margin-bottom:0.6rem;${isMobile?'':'display:none'}">
+              <label style="font-size:12px;color:#666;display:block;margin-bottom:3px">App lock ₹</label>
+              <input type="number" id="ed-applock" value="${escAttr(d.appLockCharge)}" oninput="onEditEmiCalc()" style="width:100%;padding:8px 10px;border:0.5px solid #ccc;border-radius:8px;font-size:13px">
+            </div>`
          + `<div id="ed-lockapp-wrap" style="margin-bottom:0.6rem;${isMobile?'':'display:none'}">
-              <label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Locking App <span style="color:#A32D2D">*</span></label>
+              <label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Locking App</label>
               <select id="ed-lockapp" onchange="onEditLockAppChange()" style="width:100%;padding:8px 10px;border:0.5px solid #ccc;border-radius:8px;font-size:13px;background:#fff">${
                 LOCKER_OPTIONS.map(o => `<option${o===lockAppSel?' selected':''}>${o}</option>`).join('')
               }</select>
@@ -425,6 +428,10 @@ function populateEditModal(item) {
          + `<div id="ed-lockapp-other-wrap" style="margin-bottom:0.6rem;${(isMobile && lockAppSel==='Other')?'':'display:none'}">
               <label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Other Locker name <span style="color:#A32D2D">*</span></label>
               <input type="text" id="ed-lockapp-other" value="${escAttr(lockAppSel==='Other'?d.lockingApp:'')}" placeholder="Enter locker name" style="width:100%;padding:8px 10px;border:0.5px solid #ccc;border-radius:8px;font-size:13px">
+            </div>`
+         + `<div id="ed-lockappcode-wrap" style="margin-bottom:0.6rem;${isMobile?'':'display:none'}">
+              <label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Lock App Code</label>
+              <input type="text" id="ed-lockappcode" value="${escAttr(d.lockAppCode||'')}" placeholder="e.g. ABC1234" style="width:100%;padding:8px 10px;border:0.5px solid #ccc;border-radius:8px;font-size:13px">
             </div>`
          + editField('EMI duration',     'ed-tenure',   d.tenure,   'number', 'onEditEmiCalc()')
          + editField('Monthly EMI ₹',    'ed-emi',      d.monthlyEmi, 'number', 'onEditEmiCalc()')
@@ -504,9 +511,16 @@ function editSelect(label, id, options, sel, onchange='') {
 
 // ── Edit-modal field rules (mirror the New Loan form) ─────────────────────
 function onEditDeviceTypeChange() {
-  $('ed-applock').value = ($('ed-dtype').value === 'Mobile') ? 299 : 0;
+  const isMobile = $('ed-dtype').value === 'Mobile';
+  $('ed-applock').value = isMobile ? 299 : 0;
+  // Same Mobile-only rule as the New Loan form: app lock charge, the locker
+  // select and the Lock App Code only make sense on a locked phone.
+  const appWrap = $('ed-applock-wrap');
+  if (appWrap) appWrap.style.display = isMobile ? '' : 'none';
   const wrap = $('ed-lockapp-wrap');
-  if (wrap) wrap.style.display = ($('ed-dtype').value === 'Mobile') ? '' : 'none';
+  if (wrap) wrap.style.display = isMobile ? '' : 'none';
+  const codeWrap = $('ed-lockappcode-wrap');
+  if (codeWrap) codeWrap.style.display = isMobile ? '' : 'none';
   onEditLockAppChange();
   onEditEmiCalc();
 }
@@ -637,10 +651,9 @@ async function saveEdit() {
       showAlert('EMI start date must be on 5, 10, 15, 20 or 25.','e'); return;
     }
     if (dtype === 'Mobile') {
-      if (!lockApp) { showAlert('Please select the Locking App.','e'); return; }
-      if (lockApp === 'Other' && !lockOther) {
-        showAlert('Please enter the Other Locker name.','e'); return;
-      }
+    if (dtype === 'Mobile' && lockApp === 'Other' && !lockOther) {
+      showAlert('Please enter the Other Locker name.','e'); return;
+    }
     }
     const bd = new Date(billDate + 'T00:00:00');
     const es = new Date(emiStart + 'T00:00:00');
@@ -670,6 +683,7 @@ async function saveEdit() {
     d.aksShare      = 100 - akPct;
     d.guarantor     = guar;
     d.lockingApp    = dtype === 'Mobile' ? (lockApp === 'Other' ? lockOther : lockApp) : '';
+    d.lockAppCode   = dtype === 'Mobile' ? ($('ed-lockappcode') ? $('ed-lockappcode').value.trim() : '') : '';
     d.financeAmount = d.price - d.downPayment + d.appLockCharge;
     d.totalAmount   = d.financeAmount + d.processingFee + d.interest;
     d.akAmount      = Math.round(d.financeAmount * d.akShare  / 100);
@@ -786,6 +800,7 @@ function subCard(p, showActions, hideRoi) {
         <span class="kv-l">EMI start</span>     <span class="kv-v">${fmtDateDD(d.emiStart)}</span>
         <span class="kv-l">App lock</span>      <span class="kv-v">${fmt(d.appLockCharge)}</span>
         ${d.lockingApp?`<span class="kv-l">Locking App</span><span class="kv-v">${d.lockingApp}</span>`:''}
+        ${d.lockAppCode?`<span class="kv-l">Lock App Code</span><span class="kv-v">${d.lockAppCode}</span>`:''}
         <span class="kv-l">AK share</span>      <span class="kv-v">${d.akShare}%</span>
         ${d.guarantor?`<span class="kv-l">Guarantor</span><span class="kv-v">${d.guarantor}</span>`:''}
       </div>

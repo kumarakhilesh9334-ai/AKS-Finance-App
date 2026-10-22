@@ -89,7 +89,7 @@ const PRIORITY_DEFAULT = 5;
 // honest before any network call has happened.
 // `snapConfig` is the Config sheet's lastMessageSent — a few bytes, and it lets
 // the EMI msgs From date paint on the very first frame instead of after readConfig.
-const CACHE_KEYS = ['sheetLoans','pending','revisedDates','approvedPartials','snapshotAt','snapConfig'];
+const CACHE_KEYS = ['sheetLoans','pending','revisedDates','approvedPartials','snapshotAt','snapConfig','codeToSim'];
 
 function cacheState() {
   try {

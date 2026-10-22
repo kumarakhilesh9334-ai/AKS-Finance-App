@@ -76,6 +76,9 @@ function applySnapshot(snap) {
   if (d.stock !== undefined)     S.snapStock = d.stock;
   if (d.config !== undefined)    S.snapConfig = d.config;
   if (d.templates !== undefined) S.snapTemplates = d.templates;
+  // Locking App Code -> SIM numbers. An object, so an empty map is still a
+  // value worth storing: it means the tab was read and is genuinely empty.
+  if (d.codeToSim && typeof d.codeToSim === 'object') S.codeToSim = d.codeToSim;
 
   S.snapshotAt = snap.generatedAt;
   S.snapshotExpired = false;

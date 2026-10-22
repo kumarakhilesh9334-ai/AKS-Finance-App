@@ -246,26 +246,6 @@ function rerenderActiveTab() {
   if (S.page === 'my-subs')      renderMySubs();
 }
 
-// ── Page init ─────────────────────────────────────────────────────────────
-function populateEmiSelect() {
-  $('emi-search').value = '';
-  $('emi-detail').style.display = 'none';
-  S.selectedEmiLoanId = null;
-  // Fire partials fetch in background
-  fetchApprovedPartials();
-  // Show loading state immediately; fetchLoansFromSheets will re-render when done
-  if (!S.sheetLoans || !S.sheetLoans.length) {
-    $('col-upcoming-list').innerHTML = '<div class="emi-col-empty" style="color:#534AB7">Loading loans…</div>';
-    $('col-overdue-list').innerHTML  = '<div class="emi-col-empty" style="color:#534AB7">Loading loans…</div>';
-    $('col-partials-list').innerHTML = '<div class="emi-col-empty" style="color:#534AB7">Loading…</div>';
-    $('col-upcoming-count').textContent = '…';
-    $('col-overdue-count').textContent  = '…';
-    $('col-partials-count').textContent = '…';
-  } else {
-    renderEmiColumns('');
-  }
-}
-
 // ── Three-column renderer ─────────────────────────────────────────────────
 function renderEmiColumns(query) {
   // Show/hide revised view
@@ -1090,8 +1070,6 @@ async function openCdDetail(loanId) {
     ['Early Loan Closing Settlement',M(l.earlyClosing)],
     ['Extra EMI Received',           M(l.extraEmiReceived)],
     ['Recovery Charge',              M(l.recoveryCharge)],
-    ['Welcome Message Sent',         Bool(l.welcomeMsg)],
-    ['Loan Closing Message Sent',    Bool(l.closingMsg)],
     ['Lock App Removed',             Bool(l.lockRemoved)],
     ['Defaulted',                    Bool(l.isDefaulted)],
     ['Default Comment',              D(l.defaultComment)],
@@ -1118,7 +1096,7 @@ async function openCdDetail(loanId) {
     'AK Amount', 'AK Paid to Kunal', 'AKS Amount', 'AKS Paid to Kunal',
     'Remaining Principal', 'Remaining Interest', 'Received Principal', 'Received Interest',
     'Late Payment Fine', 'Early Loan Closing Settlement', 'Extra EMI Received',
-    'Recovery Charge', 'Welcome Message Sent', 'Loan Closing Message Sent',
+    'Recovery Charge',
     'Default Comment', 'Final ROI', 'AK Share of EMI', 'AKS Share of EMI',
     'Drive Link', 'Down Payment %',
   ]);
@@ -1206,6 +1184,49 @@ function fmtDisplayDate(d) {
   const dt = parseSheetDate(d);
   if (!dt) return String(d);
   return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+// ── Lock App Code -> SIM numbers ──────────────────────────────────────────
+// The codeToSim tab holds one row per code with every number under it in
+// column B, comma separated: "9123456780, 9234567801". A loan's own cell can
+// carry more than one code, so codes are split the same way here.
+function lockAppCodesOf(loan) {
+  return String((loan && loan.lockingAppCode) || '')
+    .split(',').map(c => c.trim()).filter(Boolean);
+}
+
+function simNumbersFor(code) {
+  const map = S.codeToSim || {};
+  return Array.isArray(map[code]) ? map[code] : [];
+}
+
+// One line per code: "xxxxxxx: (9123456780, 9234567801)". A code with no
+// numbers listed yet still shows, so a blank map reads as "not filled in"
+// rather than as "this loan has no code".
+function lockCodeLines(codes) {
+  return codes.map(code => {
+    const nums = simNumbersFor(code);
+    return code + ': ' + (nums.length ? '(' + nums.join(', ') + ')' : '—');
+  }).join('<br>');
+}
+
+// The two Loan Summary rows: this loan's own codes first, then every code
+// sitting on any loan belonging to the same customer. Customers are grouped on
+// customerId, falling back to the name where the sheet leaves it blank.
+function lockSummaryHtml(loan) {
+  const own = lockAppCodesOf(loan);
+  const key = String(loan.customerId || loan.customerName || '').trim();
+  const custCodes = [];
+  if (key) {
+    (S.sheetLoans || []).forEach(l => {
+      if (String(l.customerId || l.customerName || '').trim() !== key) return;
+      lockAppCodesOf(l).forEach(c => { if (custCodes.indexOf(c) === -1) custCodes.push(c); });
+    });
+  }
+  let html = '';
+  if (own.length) html += `<span class="kv-l">Lock App Code</span><span class="kv-v">${lockCodeLines(own)}</span>`;
+  if (custCodes.length) html += `<span class="kv-l">Customer's Codes</span><span class="kv-v">${lockCodeLines(custCodes)}</span>`;
+  return html;
 }
 
 // ── Revised Date form ─────────────────────────────────────────────────────
@@ -1631,6 +1652,7 @@ async function selectOverviewLoan(loanId) {
       <span class="kv-l">AK / AKS</span>      <span class="kv-v">${akPct}% / ${aksPct}%</span>
       ${loan.guarantor ? `<span class="kv-l">Guarantor</span><span class="kv-v">${loan.guarantor}</span>` : ''}
       <span class="kv-l">Locking App</span>   <span class="kv-v">${loan.lockingApp || '—'}</span>
+      ${lockSummaryHtml(loan)}
     `;
 
     // EMI history — tabular
@@ -1855,7 +1877,6 @@ async function selectOverviewLoan(loanId) {
       ['Early Loan Closing Settlement',Mf(loan.earlyClosing)],
       ['Extra EMI Received',           Mf(loan.extraEmiReceived)],
       ['Recovery Charge',              Mf(loan.recoveryCharge)],
-      ['Loan Closing Message Sent',    Boolf(loan.closingMsg)],
       ['Lock App Removed',             Boolf(loan.lockRemoved)],
       ['Defaulted',                    Boolf(loan.isDefaulted)],
       ['Default Comment',              Df(loan.defaultComment)],
@@ -1871,7 +1892,7 @@ async function selectOverviewLoan(loanId) {
       'AK Amount', 'AK Paid to Kunal', 'AKS Amount', 'AKS Paid to Kunal',
       'Remaining Principal', 'Remaining Interest', 'Received Principal', 'Received Interest',
       'Late Payment Fine', 'Early Loan Closing Settlement', 'Extra EMI Received',
-      'Recovery Charge', 'Loan Closing Message Sent',
+      'Recovery Charge',
       'Default Comment', 'Final ROI', 'AK Share of EMI', 'AKS Share of EMI',
       'Drive Link', 'Down Payment %',
     ]);
