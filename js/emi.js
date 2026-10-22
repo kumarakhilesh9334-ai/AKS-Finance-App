@@ -1203,10 +1203,21 @@ function simNumbersFor(code) {
 // One line per code: "xxxxxxx: (9123456780, 9234567801)". A code with no
 // numbers listed yet still shows, so a blank map reads as "not filled in"
 // rather than as "this loan has no code".
+// Every number is a link: on a phone a tap opens the messaging app with the
+// number already in the To: box. The sheet text stays on screen untouched;
+// only digits and "+" travel in the link, so nothing typed in the sheet can
+// alter the link around it.
+function smsLink(num) {
+  const shown = String(num).trim();
+  const dial = shown.replace(/[^0-9+]/g, '');
+  if (!dial) return shown;
+  return `<a class="sms-link" href="sms:${dial}">${shown}</a>`;
+}
+
 function lockCodeLines(codes) {
   return codes.map(code => {
     const nums = simNumbersFor(code);
-    return code + ': ' + (nums.length ? '(' + nums.join(', ') + ')' : '—');
+    return code + ': ' + (nums.length ? '(' + nums.map(smsLink).join(', ') + ')' : '—');
   }).join('<br>');
 }
 

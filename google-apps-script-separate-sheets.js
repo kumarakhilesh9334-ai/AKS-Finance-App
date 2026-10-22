@@ -152,13 +152,12 @@ function handleGet(e, opts) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   tm('open');
 
-  // ── Auth check: all actions except readUsers require PIN verification ──
+  // ── Auth check: all actions except readUsers require a signed-in session ──
   // Skipped only for in-script calls (pushSnapshot); `internal` is not
-  // reachable from any request parameter.
+  // reachable from any request parameter. readUsers is the one exemption: the
+  // sign-in screen needs the directory before any session exists.
   if (!internal && action !== 'readUsers') {
-    const _userId = (e && e.parameter && e.parameter._userId) || '';
-    const _pin    = (e && e.parameter && e.parameter._pin) || '';
-    if (!_userId || !_pin || !verifyAuth(ss, _userId, _pin)) {
+    if (!authUserFromParams_(ss, e && e.parameter)) {
       return jsonResponse({ok:false, error:'Unauthorized'});
     }
   }
@@ -518,6 +517,75 @@ function handleGet(e, opts) {
   return jsonResponse({ok:true, message:'AKS Finance running.'});
 }
 
+// ── SESSION AUTH ────────────────────────────────────────────────────────────
+// A signed-in browser carries a random session token in every request instead
+// of the user's PIN. The PIN itself travels exactly once, inside the body of
+// the login POST — never in a URL, never in a log line, never in
+// localStorage (the client strips it as soon as a token exists).
+//
+// A session is stored as { __sess:1, u:<user>, exp:<unix seconds> } under the
+// key `session_<token>`. Sessions minted before this format exist are stored as
+// the bare user object: those keep working — a device that is already signed in
+// must not be signed out by this change — and are upgraded in place to the
+// expiring shape by the next restoreSession, without minting a second key.
+const SESSION_TOKEN_TTL = 30 * 24 * 60 * 60;   // seconds; slides forward on every restoreSession
+
+// Token -> user. An expired session is deleted on the spot: Script Properties
+// only allows 500 keys and one login creates one, so dead keys must not pile up.
+function sessionUser_(token) {
+  const json = ScriptProperties.getProperty('session_' + token);
+  if (!json) return null;
+  let parsed;
+  try { parsed = JSON.parse(json); } catch (e) { return null; }
+  let u = parsed;
+  if (parsed && parsed.__sess === 1) {
+    if (parsed.exp && parsed.exp < Math.floor(Date.now() / 1000)) {
+      ScriptProperties.deleteProperty('session_' + token);
+      return null;
+    }
+    u = parsed.u;
+  }
+  // A session that cannot name a user is not a session: every caller needs
+  // `u.id` (snapshot token, admin check), so refuse rather than half-work.
+  return (u && u.id) ? u : null;
+}
+
+// Pushes the expiry forward (and upgrades a legacy session to the expiring
+// shape) under the SAME key, so one device owns one property for ever.
+// Returns the user, or null if the session is gone or expired.
+function refreshSession_(token) {
+  const u = sessionUser_(token);
+  if (u) {
+    ScriptProperties.setProperty('session_' + token,
+      JSON.stringify({ __sess:1, u:u, exp: Math.floor(Date.now()/1000) + SESSION_TOKEN_TTL }));
+  }
+  return u;
+}
+
+// The single place where a request becomes a user.
+// `_token` decides on its own: a token that is present but unknown or expired
+// is a refusal, never a reason to fall back to something weaker. The
+// `_userId`+`_pin` route survives only for a tab that was already open when
+// this version shipped — nothing we serve sends a PIN any more.
+function authUserFromParams_(ss, p) {
+  if (!p) return null;
+  const token = String(p._token || '').trim();
+  if (token) return sessionUser_(token);
+  const userId = String(p._userId || '').trim();
+  const pin    = String(p._pin || '').trim();
+  if (userId && pin && verifyAuth(ss, userId, pin)) return { id: userId };
+  return null;
+}
+
+// Nothing that leaves this script carries a PIN: login and restoreSession hand
+// the client this shape of user object.
+function stripPin_(u) {
+  if (!u || typeof u !== 'object') return u;
+  const out = {};
+  Object.keys(u).forEach(k => { if (k !== 'pin') out[k] = u[k]; });
+  return out;
+}
+
 // ── GET entry point ───────────────────────────────────────────────────────
 // Starts the timer and formats the object handleGet() returns. Deliberately
 // takes no `opts`: there is no way to pass `internal: true` in from a request,
@@ -554,7 +622,11 @@ function doPost(e) {
       if (user) {
         // Success — reset failed attempts
         ScriptProperties.deleteProperty('failed_' + username);
-        return jsonResponse({ok:true, user, token: createSession(user),
+        // The PIN stops here: the response and the stored session are both
+        // the credential-stripped copy, so neither the browser nor Script
+        // Properties ever holds a user's PIN after sign-in.
+        const safe = stripPin_(user);
+        return jsonResponse({ok:true, user: safe, token: createSession(safe),
                              snapshotToken: mintSnapshotToken(user.id)});
       }
 
@@ -576,7 +648,7 @@ function doPost(e) {
     // ── Unblock user (admin only) ───────────────────────────────────────
     if (payload.action === 'unblockUser') {
       const { username } = payload;
-      if (!verifyAuth(ss, payload._userId, payload._pin)) return jsonResponse({ok:false, error:'Unauthorized'});
+      if (!authUserFromParams_(ss, payload)) return jsonResponse({ok:false, error:'Unauthorized'});
       ScriptProperties.deleteProperty('blocked_' + username);
       ScriptProperties.deleteProperty('failed_' + username);
       return jsonResponse({ok:true});
@@ -585,22 +657,20 @@ function doPost(e) {
     // ── Restore session from token (no PIN re-entry) ────────────────────
     if (payload.action === 'restoreSession') {
       const { token } = payload;
-      if (token) {
-        const userJson = ScriptProperties.getProperty('session_' + token);
-        // Re-mint the snapshot token here: restoreSession runs on every page
-        // load, so the device's snapshot access silently renews itself.
-        if (userJson) {
-          const u = JSON.parse(userJson);
-          return jsonResponse({ok:true, user: u, snapshotToken: mintSnapshotToken(u.id)});
-        }
+      // refreshSession_ slides the expiry forward and upgrades a pre-token
+      // session in place — same key, so one device never grows a second one.
+      // Re-minting the snapshot token here matters: restoreSession runs on
+      // every page load, so the device's snapshot access renews itself.
+      const u = token ? refreshSession_(token) : null;
+      if (u) {
+        return jsonResponse({ok:true, user: stripPin_(u), snapshotToken: mintSnapshotToken(u.id)});
       }
       return jsonResponse({ok:false, error:'Invalid or expired session'});
     }
 
     // ── Verify caller identity on every mutation ───────────────────────
-    const _userId = String(payload._userId || '').trim();
-    const _pin    = String(payload._pin || '').trim();
-    if (!_userId || !_pin || !verifyAuth(ss, _userId, _pin)) {
+    const authUser = authUserFromParams_(ss, payload);
+    if (!authUser) {
       return jsonResponse({ok:false, error:'Unauthorized'});
     }
 
@@ -799,6 +869,9 @@ function doPost(e) {
       if (String(vals[i][0])===String(id)){ sheet.deleteRow(i+1); break; }
     }
     try { bustUsersCache(); } catch(e) {}
+    // Deleting a user must delete their access too — otherwise a token issued
+    // before the removal keeps reading for the rest of its 30-day life.
+    try { revokeUserSessions_(id); } catch(e) {}
     let users = null;
     try { users = readAllUsers(ss); } catch(e) { users = null; }
     return jsonResponse(users ? {ok:true, users:users} : {ok:true});
@@ -1094,7 +1167,10 @@ function doPost(e) {
 
     // ── Set lock app removed state (loan-level toggle, upsert into LockAppStatus) ──
     if (payload.action === 'setLockRemoved') {
-      const caller = getCachedUsers(ss).find(u => u.id === _userId);
+      // Looked up by the AUTHENTICATED id, never by a client-claimed one: the
+      // request proves who it is with its session, so the admin role must come
+      // from the sheet row that belongs to that same identity.
+      const caller = getCachedUsers(ss).find(u => u.id === authUser.id);
       if (!caller || caller.role !== 'admin') return jsonResponse({ok:false, error:'Admin only'});
       const loanId = String(payload.loanId || '').trim();
       if (!loanId) return jsonResponse({ok:false, error:'Missing loanId'});
@@ -1662,8 +1738,44 @@ function verifyAuth(ss, userId, pin) {
 // Create a session token for a logged-in user
 function createSession(user) {
   const token = Utilities.getUuid();
-  ScriptProperties.setProperty('session_' + token, JSON.stringify(user));
+  ScriptProperties.setProperty('session_' + token,
+    JSON.stringify({ __sess:1, u:user, exp: Math.floor(Date.now()/1000) + SESSION_TOKEN_TTL }));
+  pruneSessions_();
   return token;
+}
+
+// Script Properties allows 500 keys in total and every login mints one, so
+// expired sessions are swept whenever a new one is created — never on a
+// request path. A session from before the expiring format is kept: it is
+// upgraded (or dropped) the next time that device calls restoreSession.
+function pruneSessions_() {
+  let all;
+  try { all = ScriptProperties.getAll(); } catch (e) { return; }
+  const now = Math.floor(Date.now() / 1000);
+  Object.keys(all).forEach(k => {
+    if (k.indexOf('session_') !== 0) return;
+    try {
+      const p = JSON.parse(all[k]);
+      if (p && p.__sess === 1 && p.exp && p.exp < now) ScriptProperties.deleteProperty(k);
+    } catch (e) { /* unparsable — leave it for a human, never delete blind */ }
+  });
+}
+
+// Drops every session belonging to one user — called when an account is
+// deleted, so a removed user's device loses access on its next request instead
+// of keeping a token alive until it expires. Handles both storage shapes.
+function revokeUserSessions_(userId) {
+  let all;
+  try { all = ScriptProperties.getAll(); } catch (e) { return; }
+  const want = String(userId);
+  Object.keys(all).forEach(k => {
+    if (k.indexOf('session_') !== 0) return;
+    try {
+      const p = JSON.parse(all[k]);
+      const u = (p && p.__sess === 1) ? p.u : p;
+      if (u && String(u.id) === want) ScriptProperties.deleteProperty(k);
+    } catch (e) { /* unparsable — not a session we can attribute to anyone */ }
+  });
 }
 
 // ── SNAPSHOT (Path B) ───────────────────────────────────────────────────────

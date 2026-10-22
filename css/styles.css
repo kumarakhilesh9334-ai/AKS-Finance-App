@@ -88,6 +88,7 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12px}
 .kv-l{color:#888}
 .kv-v{font-weight:500;color:#1a1a1a}
+.sms-link{color:#1558c0;text-decoration:underline;text-underline-offset:2px}
 .kv-big{font-size:15px;gap:6px 16px}
 .kv-big .kv-l{min-width:84px}
 .kv-big .kv-v{font-size:16px;font-weight:600;color:#1a1a1a}

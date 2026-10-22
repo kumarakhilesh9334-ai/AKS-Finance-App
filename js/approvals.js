@@ -106,7 +106,12 @@ const GAS_SESSION_ACTIONS = { login: 1, restoreSession: 1, pushSnapshotNow: 1 };
 async function gasPost(payload, opts) {
   const form = new FormData();
   payload._userId = S.cu ? S.cu.id : '';
-  payload._pin    = S.cu ? S.cu.pin : '';
+  payload._token  = S._token || '';
+  // TRANSITIONAL: a device that signed in before sessions replaced the PIN
+  // keeps working off the PIN it still holds in memory until it has minted a
+  // token (auth.js does that on the next successful boot). The moment a token
+  // exists it is used and the PIN is gone — this branch never runs again.
+  if (!payload._token && S.cu && S.cu.pin) payload._pin = S.cu.pin;
   form.append('payload', JSON.stringify(payload));
   // Writes must never be followed by a read. noteLoanWrite() bumps the loan-write
   // generation so any read already in flight is discarded as a stale pre-write
@@ -135,16 +140,21 @@ async function gasPost(payload, opts) {
   }
 }
 
-// Authenticated GET helper — auto-injects _userId and _pin as query params.
+// Authenticated GET helper — auto-injects the session token as a query param.
+// The PIN is never placed in a URL: a URL ends up in server logs, proxy logs,
+// browser history and shoulder-surfed screenshots, so the only credential that
+// travels here is the session token. The PIN-carrying fallback below exists
+// solely for a device that has not yet exchanged its stored PIN for a token.
 // Identical concurrent GETs share one in-flight request instead of doubling up.
 // Pass { signal } to make the request abortable (see preemptFullLoadRetry) — an
-// aborted request never consumes a retry attempt, since the abort is deliberate.
+// aborted request never consumes a retry attempt, because the abort is deliberate.
 // Pass { priority } to choose its slot in the transport queue (see PRIORITY).
 const _inflightGets = {};
 async function gasGet(action, params = {}, opts = {}) {
   params.action = action;
   params._userId = S.cu ? S.cu.id : '';
-  params._pin    = S.cu ? S.cu.pin : '';
+  params._token  = S._token || '';
+  if (!params._token && S.cu && S.cu.pin) params._pin = S.cu.pin;   // see note above
   const qs = Object.entries(params)
     .map(([k,v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v === undefined ? '' : v))
     .join('&');

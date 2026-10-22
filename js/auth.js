@@ -1,17 +1,59 @@
 // ── AUTH ──────────────────────────────────────────────────────────────────
 
+// The PIN is a sign-in credential and nothing else. It goes to the server once,
+// inside the body of the login POST, and comes back as a session token; from
+// then on this device never stores it and never puts it in a URL (gasGet and
+// gasPost send `S._token`). A stored PIN only survives until a token exists —
+// see the migration below, which is what keeps already-signed-in users signed in.
+function stripPin(u) {
+  if (!u || typeof u !== 'object') return u;
+  const { pin, ...rest } = u;
+  return rest;
+}
+
+// `S.cu` keeps its PIN exactly while there is no token to replace it: that is
+// the signal gasGet/gasPost use for the transitional fallback above.
+function storedToken() {
+  try { return localStorage.getItem('aks_token') || ''; } catch (e) { return ''; }
+}
+
+// Trades a PIN that is sitting in storage for a session token, then deletes the
+// PIN — the only situation in which it is ever safe to remove. Returns true when
+// the server confirmed the credentials. Never throws; on any failure the PIN
+// stays where it is and the next boot tries again, so a device can never end up
+// signed out with no way back in.
+async function exchangeStoredPin(username, pin) {
+  try {
+    const res = await gasPost({ action: 'login', username, pin }, { priority: PRIORITY.session });
+    if (!(res && res.ok && res.token)) return false;
+    try { localStorage.setItem('aks_token', res.token); } catch (e) {}
+    if (res.snapshotToken) storeSnapshotToken(res.snapshotToken);
+    try {
+      const cur = JSON.parse(localStorage.getItem('aks_cu') || '{}');
+      delete cur.pin;
+      localStorage.setItem('aks_cu', JSON.stringify(cur));
+    } catch (e) {}
+    S._token = res.token;
+    if (S.cu) S.cu = stripPin(S.cu);
+    return true;
+  } catch (e) { return false; }
+}
+
 async function doLogin() {
   const u = v('l-user'), p = v('l-pin');
 
   let user = null;
   let serverErr = '';
+  // True only when the SERVER accepted the credentials and returned a token.
+  // That proof is what authorises deleting the PIN from storage.
+  let gotToken = false;
 
   // Always fetch from server for fresh permissions
   if (S.sheetsUrl) {
     const res = await gasPost({ action: 'login', username: u, pin: p });
     if (res.ok && res.user) {
       user = res.user;
-      if (res.token) localStorage.setItem('aks_token', res.token);
+      if (res.token) { localStorage.setItem('aks_token', res.token); gotToken = true; }
       // Signed 30-day credential for reading the snapshot — not a session
       // token, and never readable from JavaScript on the Worker side.
       storeSnapshotToken(res.snapshotToken);
@@ -41,12 +83,19 @@ async function doLogin() {
   saveUsers();
 
   localStorage.setItem('aks_user', user.username);
-  localStorage.setItem('aks_cu', JSON.stringify(user));
+  // Delete the PIN as soon as the server has confirmed us with a token. A local
+  // match — the server was unreachable — keeps it, because that PIN is the only
+  // credential that can mint a token on the next boot; dropping it there would
+  // strand the device with nothing to authenticate with later.
+  localStorage.setItem('aks_cu', JSON.stringify(gotToken ? stripPin(user) : user));
   completeLogin(user);
 }
 
 function completeLogin(user) {
-  S.cu = user;
+  // One credential, one place: the token (when there is one) is what every
+  // request now carries, so the in-memory copy of the user is stripped too.
+  S.cu = storedToken() ? stripPin(user) : user;
+  S._token = storedToken();
   migrateUserPerms();
   $('auth-screen').style.display = 'none';
   $('app').style.display = 'block';
@@ -82,6 +131,7 @@ function doLogout() {
   localStorage.removeItem(SNAP_TOKEN_KEY);
   clearCache();
   S.cu = null;
+  S._token = '';
   S.sheetLoans = [];
   S.pending = [];
   S.snapshotAt = 0;
@@ -112,7 +162,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 1. Instant restore from cached user (no network) — renders skeleton + cached cards immediately
   let cachedUser = null;
   try { const s = localStorage.getItem('aks_cu'); if (s) cachedUser = JSON.parse(s); } catch(e) {}
-  if (cachedUser && cachedUser.id && cachedUser.pin) {
+  // NOTE: no `.pin` in this condition on purpose. The PIN is deleted from
+  // storage as soon as a session token exists (below), and a device that is
+  // already signed in must keep being signed in after that happens.
+  if (cachedUser && cachedUser.id) {
+    // A record saved before the PIN was purged still carries one. If a token
+    // already exists the PIN is simply redundant and goes; if it does not, the
+    // PIN is exchanged for a token in the background and deleted only once the
+    // server has confirmed it. Nothing waits on that exchange: until it lands
+    // the app authenticates the old way (the transitional branch in gasGet),
+    // so a slow or failed round trip costs nothing and never signs anyone out.
+    if (cachedUser.pin) {
+      if (storedToken()) {
+        delete cachedUser.pin;
+        try { localStorage.setItem('aks_cu', JSON.stringify(cachedUser)); } catch (e) {}
+      } else {
+        exchangeStoredPin(cachedUser.username, cachedUser.pin);   // fire and forget
+      }
+    }
     completeLogin(cachedUser);   // paints entirely from localStorage — 0 network
     // Verify the session in the background. restoreSession also re-mints the
     // snapshot token, so the snapshot refresh waits for it: a token that has
@@ -121,9 +188,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (token) {
       // completeLogin already fired the snapshot (which renews its own token
       // on a 401), so this call only validates the session itself.
-      gasPost({ action: 'restoreSession', token }, { priority: PRIORITY.session }).then(res => {
-        if (res && !res.ok && res.error === 'Invalid or expired session') { doLogout(); return; }
-        if (res && res.snapshotToken) storeSnapshotToken(res.snapshotToken);
+      gasPost({ action: 'restoreSession', token }, { priority: PRIORITY.session }).then(async res => {
+        if (!(res && !res.ok && res.error === 'Invalid or expired session')) {
+          if (res && res.snapshotToken) storeSnapshotToken(res.snapshotToken);
+          return;
+        }
+        // The session record is gone, but this device still holds its PIN: it
+        // was signed in before sessions replaced the PIN. Mint a fresh session
+        // instead of throwing the user out. A migrated device has no PIN left
+        // and falls through to the sign-in screen exactly as before.
+        if (cachedUser.pin && await exchangeStoredPin(cachedUser.username, cachedUser.pin)) return;
+        doLogout();
       }).catch(() => {});
     }
     return;
@@ -134,7 +209,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (token2) {
     const res = await gasPost({ action: 'restoreSession', token: token2 }, { priority: PRIORITY.session });
     if (res.ok && res.user) {
-      localStorage.setItem('aks_cu', JSON.stringify(res.user));
+      // stripPin is belt and braces: the script already hands back a
+      // credential-less user, and localStorage must never hold a PIN.
+      localStorage.setItem('aks_cu', JSON.stringify(stripPin(res.user)));
       storeSnapshotToken(res.snapshotToken);
       completeLogin(res.user);
       return;

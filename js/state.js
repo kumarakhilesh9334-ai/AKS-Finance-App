@@ -126,6 +126,10 @@ const S = {
   pending: [],  // submissions awaiting approval
   approvedPartials: [], // approved partial payments
   cu: null,     // currently logged-in user
+  // Session token: the credential every request carries in place of the PIN
+  // (see gasGet/gasPost). Kept in sync with localStorage `aks_token` by
+  // auth.js — the transport reads it from here so it never touches storage.
+  _token: '',
   page: null,   // current active page
   sheetsUrl: SHEETS_URL,
   sheetLoans: [],
