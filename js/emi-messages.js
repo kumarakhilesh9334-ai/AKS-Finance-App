@@ -290,27 +290,36 @@ async function generateMessages() {
       // `extra.date` is the DUE date the text should quote — `dateStr` is only
       // the day the message goes out (7/2/1 day(s) earlier for a reminder).
       function addIfInRange(label, dateStr, extra) {
-        const template = loanTemplates[(extra && extra.tplKey) || label];
+        let templateKey = (extra && extra.tplKey) || label;
+        if (label === 'Revised Date') {
+          templateKey = 'Revised Date';
+        }
+        const template = loanTemplates[templateKey];
         if (!dateStr || !template) return;
         const dt = parseSheetDate(dateStr);
         if (!dt) return;
         const t = dt.getTime();
         if (t < startDate.getTime() || t > endDate.getTime()) return;
         const amt = extra && extra.amount != null ? extra.amount : (loan.monthlyEmi || '');
-        const dueForText = (extra && extra.date) || dateStr;
-        let msg = template
-          .replace(/\{customer\}/g, name)
-          .replace(/\{loan\}/g, li)
-          .replace(/\{amount\}/g, amt)
-          .replace(/\{date\}/g, fmtDisplayDate(dueForText))
-          .replace(/\{total\}/g, loan.totalPending != null ? loan.totalPending : amt);
-        if (extra && extra.emiNum != null) {
-          msg = msg.replace(/\{emi\}/g, extra.emiNum);
+        let msg;
+        if (label === 'Revised Date') {
+          msg = String(template);
         } else {
-          msg = msg.replace(/\{emi\}/g, '');
+          const dueForText = (extra && extra.date) || dateStr;
+          msg = template
+            .replace(/\{customer\}/g, name)
+            .replace(/\{loan\}/g, li)
+            .replace(/\{amount\}/g, amt)
+            .replace(/\{date\}/g, fmtDisplayDate(dueForText))
+            .replace(/\{total\}/g, loan.totalPending != null ? loan.totalPending : amt);
+          if (extra && extra.emiNum != null) {
+            msg = msg.replace(/\{emi\}/g, extra.emiNum);
+          } else {
+            msg = msg.replace(/\{emi\}/g, '');
+          }
+          const upi = `upi://pay?pa=${UPI_ID}&pn=AKS+Finance&am=${amt}&cu=INR&tn=EMI+${li}`;
+          msg = msg.replace(/\{upilink\}/g, upi);
         }
-        const upi = `upi://pay?pa=${UPI_ID}&pn=AKS+Finance&am=${amt}&cu=INR&tn=EMI+${li}`;
-        msg = msg.replace(/\{upilink\}/g, upi);
         messages.push({ label, phone, customerName: name, loanId: li, emiNum: extra && extra.emiNum, date: dateStr, msg });
       }
 
@@ -382,17 +391,20 @@ async function generateMessages() {
         }
         const dueTime = dueDt.getTime();
 
-        // A revised EMI's messages belong in the Revised Date section — Last Date
-        // and EMI Reminder would put a date that has already been moved under the
-        // original schedule. The wording still comes from those two templates.
+        // A revised EMI's messages belong in the Revised Date section
         const section    = wasRevised ? 'Revised Date' : 'Last Date';
         const remindSec  = wasRevised ? 'Revised Date' : 'EMI Reminder';
 
         // Last Date and EMI Reminder: only for the first unreceived slot
         if (slot.num === firstDue && !slot.received && dueTime >= endDate.getTime()) {
           const lastDateInRange = dueTime >= startDate.getTime() && dueTime <= endDate.getTime();
-          if (lastDateInRange)
-            addIfInRange(section, dueStr, { emiNum: slot.num, tplKey: 'Last Date' });
+          if (lastDateInRange) {
+            if (wasRevised) {
+              addIfInRange(section, dueStr, { emiNum: slot.num });
+            } else {
+              addIfInRange(section, dueStr, { emiNum: slot.num, tplKey: 'Last Date' });
+            }
+          }
 
           // EMI Reminder: suppressed if Last Date is in range for this slot
           if (!lastDateInRange) {
@@ -407,9 +419,13 @@ async function generateMessages() {
             if (selectedOffset !== null) {
               const rd = new Date(dueDt);
               rd.setDate(rd.getDate() + selectedOffset);
-              // Sent on rd, but {date} in the text must quote the DUE date.
-              addIfInRange(remindSec, ymd(rd),
-                { emiNum: slot.num, amount: loan.monthlyEmi, date: dueStr, tplKey: 'EMI Reminder' });
+              if (wasRevised) {
+                addIfInRange(remindSec, ymd(rd), { emiNum: slot.num, amount: loan.monthlyEmi, date: dueStr });
+              } else {
+                // Sent on rd, but {date} in the text must quote the DUE date.
+                addIfInRange(remindSec, ymd(rd),
+                  { emiNum: slot.num, amount: loan.monthlyEmi, date: dueStr, tplKey: 'EMI Reminder' });
+              }
             }
           }
         }
