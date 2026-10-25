@@ -84,10 +84,25 @@ function selectCustomer(aadhaarPan) {
     (l.aadhaarPan || '').toLowerCase().replace(/\s/g,'') ===
     aadhaarPan.toLowerCase().replace(/\s/g,'')
   );
-  if (!all.length) return;
-  $('f-cname').value = all[0].customerName || '';
-  renderCustomerLoansPanel(all);
-  genLoanId();
+  if (all.length) {
+    $('f-cname').value = all[0].customerName || '';
+    $('f-phone').value = all[0].phone || '';
+    renderCustomerLoansPanel(all);
+    genLoanId();
+  }
+  // Populate from customerDetail if available
+  const key = String(aadhaarPan || '').toUpperCase().replace(/\s/g, '');
+  const cd = (S.customerDetails && S.customerDetails[key]) ? S.customerDetails[key] : null;
+  if (cd) {
+    if ($('f-yob')) $('f-yob').value = cd.yob || '';
+    if ($('f-landlord')) $('f-landlord').value = cd.landlord || '';
+    if ($('f-husband')) $('f-husband').value = cd.husband || '';
+    if ($('f-father')) $('f-father').value = cd.father || '';
+    if ($('f-pincode')) $('f-pincode').value = cd.pincode || '';
+    if ($('f-district')) $('f-district').value = cd.district || '';
+    if ($('f-area')) $('f-area').value = cd.area || '';
+    if ($('f-colony')) $('f-colony').value = cd.colony || '';
+  }
 }
 
 function goToLoanDetail(loanId) {
@@ -195,14 +210,27 @@ function onEmiStartChange() {
 function genLoanId() {
   const name = v('f-cname').split(' ')[0];
   const id   = v('f-idnum').replace(/\s/g,'');
-  if (!name || id.length < 4) { $('cp-loanid').textContent = '—'; return; }
+  if (!name || id.length < 4) { if ($('cp-loanid')) $('cp-loanid').textContent = '—'; return; }
   const last4 = id.slice(-4);
   const base  = name + last4;
   const existing =
-    S.loans.filter(l => l.loanId.startsWith(base)).length +
-    S.pending.filter(p => p.type==='loan' && p.data.loanId && p.data.loanId.startsWith(base)).length;
+    (S.loans||[]).filter(l => l.loanId && l.loanId.startsWith(base)).length +
+    (S.pending||[]).filter(p => p.type==='loan' && p.data.loanId && p.data.loanId.startsWith(base)).length;
   const lid = base + '/' + (existing + 1);
-  $('cp-loanid').textContent = lid;
+  if ($('cp-loanid')) $('cp-loanid').textContent = lid;
+  // Auto-populate customer details from customerDetail sheet
+  const key = String(v('f-idnum') || '').toUpperCase().replace(/\s/g, '');
+  const cd = (S.customerDetails && S.customerDetails[key]) ? S.customerDetails[key] : null;
+  if (cd) {
+    if ($('f-yob') && !$('f-yob').value) $('f-yob').value = cd.yob || '';
+    if ($('f-landlord') && !$('f-landlord').value) $('f-landlord').value = cd.landlord || '';
+    if ($('f-husband') && !$('f-husband').value) $('f-husband').value = cd.husband || '';
+    if ($('f-father') && !$('f-father').value) $('f-father').value = cd.father || '';
+    if ($('f-pincode') && !$('f-pincode').value) $('f-pincode').value = cd.pincode || '';
+    if ($('f-district') && !$('f-district').value) $('f-district').value = cd.district || '';
+    if ($('f-area') && !$('f-area').value) $('f-area').value = cd.area || '';
+    if ($('f-colony') && !$('f-colony').value) $('f-colony').value = cd.colony || '';
+  }
   return lid;
 }
 
@@ -325,7 +353,35 @@ async function submitLoan() {
     financeAmount, totalAmount, monthlyEmi,
     akAmount:Math.round(financeAmount*akPct/100),
     aksAmount:Math.round(financeAmount*aksPct/100), emis:[],
+    yob: v('f-yob'), landlord: v('f-landlord'), husband: v('f-husband'), father: v('f-father'),
+    pincode: v('f-pincode'), district: v('f-district'), area: v('f-area'), colony: v('f-colony')
   };
+  // Check for lock app code reuse
+  if (dtype === 'Mobile' && d.lockAppCode) {
+    const codeToCheck = d.lockAppCode.trim();
+    if (codeToCheck) {
+      const owners = [];
+      // Check all existing approved loans only
+      (S.sheetLoans || []).forEach(l => {
+        const codes = String(l.lockingAppCode || '').split(',').map(c => c.trim()).filter(Boolean);
+        codes.forEach(c => {
+          // Check if code matches exactly (not already marked as sold)
+          if (c.toLowerCase() === codeToCheck.toLowerCase() && !c.toLowerCase().includes('sold')) {
+            const owner = l.customerName || l.loanId;
+            if (owners.indexOf(owner) === -1) owners.push(owner);
+          }
+        });
+      });
+      if (owners.length) {
+        const ownerStr = owners.join(', ');
+        if (!confirm(`Locking app code "${codeToCheck}" is currently of ${ownerStr}. Are you sure this code now belongs to the new customer (${cname})?`)) {
+          return;
+        }
+        d.lockCodeReassign = { code: codeToCheck, fromOwners: owners };
+      }
+    }
+  }
+
   const loanItem = {id:nextPid(),type:'loan',data:d,submittedBy:S.cu.id,submittedAt:new Date().toISOString(),status:'pending',note:''};
   resetLoanForm();
   showAlert('Submitting…', 'w');
@@ -358,7 +414,7 @@ async function submitLoan() {
 // ── Reset ─────────────────────────────────────────────────────────────────
 function resetLoanForm() {
   ['f-cname','f-phone','f-idnum','f-guarantor-name','f-guar','f-model','f-price','f-down',
-   'f-tenure','f-akcustom','f-monthly-emi','f-int','f-emistart']
+   'f-tenure','f-akcustom','f-monthly-emi','f-int','f-emistart','f-yob','f-landlord','f-husband','f-father','f-pincode','f-district','f-area','f-colony']
     .forEach(id => { const el=$(id); if(el) el.value=''; });
   $('f-dtype').selectedIndex = 0;
   initNewLoanPage();

@@ -15,6 +15,7 @@ const REVISED_DATES_SHEET  = 'Revised_Dates';
 const LOCK_STATUS_SHEET    = 'LockAppStatus';
 const STOCK_SHEET          = 'Stock';
 const CODE_TO_SIM_SHEET    = 'codeToSim';
+const CUSTOMER_DETAIL_SHEET = 'customerDetail';
 
 // Column map for Data tab (0-based, column A = 0)
 const C = {
@@ -366,6 +367,38 @@ function handleGet(e, opts) {
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
 
+  // ── Read customer details ───────────────────────────────────────────
+  if (action === 'readCustomerDetails') {
+    try {
+      const cache = CacheService.getScriptCache();
+      const cached = cache.get('customer_details');
+      if (cached) {
+        try { return jsonResponse({ok:true, customerDetails: JSON.parse(cached)}); } catch(e) {}
+      }
+      const sheet = ss.getSheetByName(CUSTOMER_DETAIL_SHEET);
+      if (!sheet) return jsonResponse({ok:true, customerDetails:{}});
+      const rows = readDataRows(sheet, 2, configBounds(ss)[CUSTOMER_DETAIL_SHEET], 8, 'custDetail.');
+      const map = {};
+      rows.forEach(r => {
+        const key = String(r[0] || '').trim().toUpperCase().replace(/\s/g, '');
+        if (!key) return;
+        map[key] = {
+          yob: r[1] || '',
+          landlord: r[2] || '',
+          husband: r[3] || '',
+          father: r[4] || '',
+          pincode: r[5] || '',
+          district: r[6] || '',
+          area: r[7] || '',
+          colony: r[8] || ''
+        };
+      });
+      const str = JSON.stringify(map);
+      if (str.length <= 95000) cache.put('customer_details', str, 600);
+      return jsonResponse({ok:true, customerDetails: map});
+    } catch(err){ return jsonResponse({ok:false, error:err.message}); }
+  }
+
   // ── Read users ──────────────────────────────────────────────────────
   if (action === 'readUsers') {
     try {
@@ -704,22 +737,33 @@ function doPost(e) {
         'Mobile model','Device Type','Mobile amount','Down payment','Processing Fee',
         'Interest','EMI Duration','EMI Start Date',
         'Guarantor/ Alternate no/ Comments','App Lock Charge','AK Share','Rate of Interest',
-        'Locking App','Lock App Code'
+        'Locking App','Lock App Code','LockCodeReassign','YOB','Landlord','Husband','Father','Pincode','District','Area','Colony'
       ];
       const sheet = ensureSheet(ss, UNAPP_LOAN_SHEET, headers);
       // Existing Unapproved_Loan sheets were created before these columns existed,
       // and ensureSheet() only writes headers when it creates a sheet — so make
       // sure columns V and W carry a header before anything reads them back.
-      if (sheet.getMaxColumns() < 23) sheet.insertColumnsAfter(sheet.getMaxColumns(), 23 - sheet.getMaxColumns());
+      if (sheet.getMaxColumns() < 32) sheet.insertColumnsAfter(sheet.getMaxColumns(), 32 - sheet.getMaxColumns());
       if (!String(sheet.getRange(1, 22).getValue() || '').trim()) sheet.getRange(1, 22).setValue('Locking App');
       if (!String(sheet.getRange(1, 23).getValue() || '').trim()) sheet.getRange(1, 23).setValue('Lock App Code');
+      if (!String(sheet.getRange(1, 24).getValue() || '').trim()) sheet.getRange(1, 24).setValue('LockCodeReassign');
+      if (!String(sheet.getRange(1, 25).getValue() || '').trim()) sheet.getRange(1, 25).setValue('YOB');
+      if (!String(sheet.getRange(1, 26).getValue() || '').trim()) sheet.getRange(1, 26).setValue('Landlord');
+      if (!String(sheet.getRange(1, 27).getValue() || '').trim()) sheet.getRange(1, 27).setValue('Husband');
+      if (!String(sheet.getRange(1, 28).getValue() || '').trim()) sheet.getRange(1, 28).setValue('Father');
+      if (!String(sheet.getRange(1, 29).getValue() || '').trim()) sheet.getRange(1, 29).setValue('Pincode');
+      if (!String(sheet.getRange(1, 30).getValue() || '').trim()) sheet.getRange(1, 30).setValue('District');
+      if (!String(sheet.getRange(1, 31).getValue() || '').trim()) sheet.getRange(1, 31).setValue('Area');
+      if (!String(sheet.getRange(1, 32).getValue() || '').trim()) sheet.getRange(1, 32).setValue('Colony');
       sheet.appendRow([
         p.id, p.status, p.submittedBy, p.submittedAt, '',
         fmtDateFromYMD(d.billDate), d.customerName||'', d.phone||'', d.idNum||'',
         d.model||'', d.deviceType||'', d.price||0, d.downPayment||0, d.processingFee||0,
         d.interest||0, d.tenure||0, fmtDateFromYMD(d.emiStart),
         d.guarantor||'', d.appLockCharge||0, (d.akShare||0)/100,
-        (d.rateOfInterest||0)/100, d.lockingApp||'', d.lockAppCode||''
+        (d.rateOfInterest||0)/100, d.lockingApp||'', d.lockAppCode||'',
+        d.lockCodeReassign ? JSON.stringify(d.lockCodeReassign) : '',
+        d.yob||'', d.landlord||'', d.husband||'', d.father||'', d.pincode||'', d.district||'', d.area||'', d.colony||''
       ]);
       // Lean response — client updates its local pending list itself.
       return jsonResponse({ok:true});
@@ -884,6 +928,63 @@ function doPost(e) {
       const row = readRowById(ss, sheetName, id);
       if (!row) return jsonResponse({ok:false, error:'Row not found'});
       if (type==='loan') {
+        // Update customerDetail sheet with new values
+        try {
+          const aadhaarPan = String(row[8] || '').trim();
+          if (aadhaarPan) {
+            const cdSheet = ss.getSheetByName(CUSTOMER_DETAIL_SHEET);
+            if (cdSheet) {
+              const cdData = cdSheet.getDataRange().getValues();
+              let found = -1;
+              const key = aadhaarPan.toUpperCase().replace(/\s/g, '');
+              for (let i = 1; i < cdData.length; i++) {
+                const k = String(cdData[i][0] || '').toUpperCase().replace(/\s/g, '');
+                if (k && k === key) { found = i+1; break; }
+              }
+              const cdVals = [row[24]||'', row[25]||'', row[26]||'', row[27]||'', row[28]||'', row[29]||'', row[30]||'', row[31]||''];
+              if (found > 0) {
+                cdSheet.getRange(found, 2, 1, 8).setValues([cdVals]);
+              } else {
+                cdSheet.appendRow([aadhaarPan, ...cdVals]);
+              }
+            }
+          }
+        } catch(e) { /* ignore */ }
+        // Handle lock code reassignment if marked
+        try {
+          const reassignStr = String(row[23] || '').trim();
+          if (reassignStr) {
+            let reassign = null;
+            try { reassign = JSON.parse(reassignStr); } catch(e) {}
+            if (reassign && reassign.code) {
+              const codeToMove = String(reassign.code).trim();
+              const newOwnerName = String(row[6] || '').trim();
+              // Search only in Input sheet - changes will reflect in Data sheet
+              const isheet = ss.getSheetByName(INPUT_SHEET);
+              if (isheet && isheet.getLastRow() > 1) {
+                const data = isheet.getRange(2, 1, isheet.getLastRow()-1, isheet.getLastColumn()).getValues();
+                for (let i = 0; i < data.length; i++) {
+                  const lockCode = String(data[i][18] || '').trim();
+                  if (lockCode) {
+                    const codes = lockCode.split(',').map(c => c.trim()).filter(Boolean);
+                    if (codes.some(c => c.toLowerCase() === codeToMove.toLowerCase() && !c.toLowerCase().includes('sold'))) {
+                      const ownerName = String(data[i][1] || '').trim();
+                      if (ownerName && ownerName.toLowerCase() !== newOwnerName.toLowerCase()) {
+                        const newCodes = codes.map(c => {
+                          if (c.toLowerCase() === codeToMove.toLowerCase() && !c.toLowerCase().includes('sold')) {
+                            return c + ' sold';
+                          }
+                          return c;
+                        }).join(', ');
+                        isheet.getRange(i+2, 19).setValue(newCodes);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } catch(e) { /* ignore */ }
         appendToInput(ss, row);
         deleteFromSheet(ss, sheetName, id);
       } else {
@@ -1423,7 +1524,7 @@ function readUnapproved(ss, sheetName, type) {
   // range below doesn't overshoot the sheet (that throws, then falls back to a
   // wider getDataRange). Skipped entirely once Config reports the new width.
   if (type !== 'loan' && !(b && b.cols >= 19)) ensureEmiCols_(sheet);
-  const rows = readDataRows(sheet, 2, b, type === 'loan' ? 23 : 19, p);
+  const rows = readDataRows(sheet, 2, b, type === 'loan' ? 32 : 19, p);
   const out = rows
     .filter(r => r[0] && String(r[1]).toLowerCase() === 'pending')
     .map(r => {
@@ -1433,7 +1534,7 @@ function readUnapproved(ss, sheetName, type) {
         // Bill Date(5) CustomerName(6) Phone(7) Aadhaar(8) Model(9)
         // DeviceType(10) Price(11) Down(12) PFee(13) Interest(14)
         // Tenure(15) EmiStart(16) Guarantor(17) AppLock(18) AKShare(19) RateOfInterest(20)
-        // LockingApp(21) LockAppCode(22)
+        // LockingApp(21) LockAppCode(22) LockCodeReassign(23) YOB(24)..Colony(31)
         data = {
           billDate:fmtDate(r[5]), customerName:r[6], phone:r[7], idNum:r[8],
           model:r[9], deviceType:r[10], price:r[11], downPayment:r[12],
@@ -1443,6 +1544,8 @@ function readUnapproved(ss, sheetName, type) {
           rateOfInterest: (parseFloat(r[20])||0) * 100,
           lockingApp: String(r[21]||'').trim(),
           lockAppCode: String(r[22]||'').trim(),
+          lockCodeReassign: String(r[23]||'').trim(),
+          yob: r[24], landlord: r[25], husband: r[26], father: r[27], pincode: r[28], district: r[29], area: r[30], colony: r[31],
           // Derived fields for display in approval card
           loanId: (String(r[6]).split(' ')[0] || '') + String(r[8]).slice(-4) + '/1',
           monthlyEmi: 0, financeAmount: 0, totalAmount: 0,
@@ -1814,6 +1917,7 @@ const SNAPSHOT_SOURCES = [
   // Locking App Code -> SIM numbers. Tiny (one row per code), and the Loan
   // Summary in All Loans needs it on the very first paint after a snapshot.
   { key: 'codeToSim',    action: 'readCodeToSim',         out: 'map' },
+  { key: 'customerDetails', action: 'readCustomerDetails', out: 'customerDetails' },
 ];
 // readAllLoansForMsgs is served from `loans`: buildFullLoan() already carries
 // welcomeMsgText/emiMsgText/lastDateMsgText/thankYouMsgText/loanClosingMsgText/

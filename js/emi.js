@@ -1908,10 +1908,32 @@ async function selectOverviewLoan(loanId) {
       'Drive Link', 'Down Payment %',
     ]);
 
+    let custDetailHtml = '';
+    const cdKey = String(loan.aadhaarPan || '').toUpperCase().replace(/\s/g, '');
+    const cd = (S.customerDetails && S.customerDetails[cdKey]) ? S.customerDetails[cdKey] : null;
+    if (cd) {
+      const cdRows = [];
+      if (loan.customerName) cdRows.push(['Customer Name', loan.customerName]);
+      if (cd.yob) cdRows.push(['YOB', cd.yob]);
+      if (cd.landlord) cdRows.push(['Landlord', cd.landlord]);
+      if (cd.husband) cdRows.push(['Husband', cd.husband]);
+      if (cd.father) cdRows.push(['Father', cd.father]);
+      if (cd.pincode) cdRows.push(['Pincode', cd.pincode]);
+      if (cd.district) cdRows.push(['District', cd.district]);
+      if (cd.area) cdRows.push(['Area', cd.area]);
+      if (cd.colony) cdRows.push(['Colony', cd.colony]);
+      if (cdRows.length) {
+        custDetailHtml = `<div class="divider"></div>
+          <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px">Customer Detail</div>
+          <div class="kv" style="font-size:12px">` +
+          cdRows.map(r => `<span class="kv-l">${r[0]}</span><span class="kv-v">${r[1]}</span>`).join('') +
+          `</div>`;
+      }
+    }
     $('ov-detail-full').innerHTML = fullRows
       .filter(([label]) => !HIDDEN_LABELS.has(label))
       .map(([label, val]) => `<span class="kv-l">${label}</span><span class="kv-v">${val}</span>`
-    ).join('');
+    ).join('') + custDetailHtml;
   } finally { hideLoader(); }
 }
 

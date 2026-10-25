@@ -83,7 +83,14 @@
             </div>
             <div><label>Bill date <span style="color:#A32D2D">*</span></label><input type="date" id="f-billdate" required></div>
             <div><label>Customer name <span style="color:#A32D2D">*</span></label><input type="text" id="f-cname" placeholder="Full name" oninput="genLoanId()" required></div>
-            <div><label>Mobile number <span style="color:#A32D2D">*</span></label><input type="text" id="f-phone" placeholder="10-digit" maxlength="10" required></div>
+            <div><label>YOB</label><input type="text" id="f-yob" placeholder="Year of Birth"></div>
+            <div><label>Landlord</label><input type="text" id="f-landlord"></div>
+            <div><label>Husband</label><input type="text" id="f-husband"></div>
+            <div><label>Father</label><input type="text" id="f-father"></div>
+            <div><label>Pincode</label><input type="text" id="f-pincode"></div>
+            <div><label>District</label><input type="text" id="f-district"></div>
+            <div><label>Area</label><input type="text" id="f-area"></div>
+            <div><label>Colony</label><input type="text" id="f-colony"></div>
             <div id="guarantor-wrap" style="position:relative">
               <label>Guarantor name <span style="font-size:11px;color:#888">— type to search existing customers</span></label>
               <input type="text" id="f-guarantor-name" placeholder="Search by customer name" autocomplete="off" oninput="onGuarantorInput()">
@@ -92,6 +99,7 @@
             <div><label>Alternate no / Comments</label><input type="text" id="f-guar" placeholder="Alternate number or any comments"></div>
 
             <div class="form-section">Device details</div>
+            <div><label>Mobile number <span style="color:#A32D2D">*</span></label><input type="text" id="f-phone" placeholder="10-digit" maxlength="10" required></div>
             <div><label>Mobile model <span style="color:#A32D2D">*</span></label><input type="text" id="f-model" placeholder="e.g. Samsung Galaxy A55" required></div>
             <div><label>Device type <span style="color:#A32D2D">*</span></label>
               <select id="f-dtype" onchange="onDeviceTypeChange()" required>
