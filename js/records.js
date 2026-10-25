@@ -33,7 +33,7 @@ function renderLoans() {
     const rows = [
       ['Bill date',          billTxt],
       ['Customer',           l.customerName],
-      ['Phone',              l.phone === 'Invalid Date' ? '—' : (l.phone || '—')],
+      ['Phone',              l.phone === 'Invalid Date' ? '—' : (l.phone ? smsLink(l.phone) : '—')],
       ['Aadhaar/PAN',        l.aadhaarPan],
       ['Model',              l.model],
       ['Device type',        l.deviceType],
@@ -59,7 +59,7 @@ function renderLoans() {
       ['AK / AKS share',     `${akPct}% / ${aksPct}%`],
       ['AK amount',          fmtM(l.akAmount)],
       ['AKS amount',         fmtM(l.aksAmount)],
-      ['Guarantor',          l.guarantor],
+      ['Guarantor',          (() => { const g = String(l.guarantor||'').trim(); if (!g) return '—'; const m = g.match(/\b(\d{10})\b/); if (m && typeof smsLink==='function') return g.replace(m[1], smsLink(m[1])); return g; })()],
       ['Default comment',    l.defaultComment],
     ].filter(([,val]) => val && val !== '—' && val !== '₹0');
 

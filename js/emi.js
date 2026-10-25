@@ -559,7 +559,7 @@ async function selectEmiLoan(loanId) {
 
   $('emi-kv').innerHTML = `
     <span class="kv-l">Loan ID</span>       <span class="kv-v" style="color:#534AB7">${loan.loanId}</span>
-    <span class="kv-l">Customer</span>      <span class="kv-v">${loan.customerName}${loan.phone ? ' · '+loan.phone : ''}</span>
+    <span class="kv-l">Customer</span>      <span class="kv-v">${loan.customerName}${loan.phone ? ' · '+smsLink(loan.phone) : ''}</span>
     ${loan.model ? `<span class="kv-l">Model</span><span class="kv-v">${loan.model}${loan.deviceType ? ' ('+loan.deviceType+')' : ''}</span>` : ''}
     <span class="kv-l">Monthly EMI</span>   <span class="kv-v">${fmtAmt(loan.monthlyEmi)}</span>
     <span class="kv-l">Tenure</span>        <span class="kv-v">${loan.emiDuration} months</span>
@@ -569,7 +569,7 @@ async function selectEmiLoan(loanId) {
     ${loan.lateEmis       ? `<span class="kv-l">Late EMIs</span><span class="kv-v" style="color:#BA7517">${loan.lateEmis}</span>` : ''}
     ${loan.latePaymentFine? `<span class="kv-l">Late fine</span><span class="kv-v">${fmtAmt(loan.latePaymentFine)}</span>` : ''}
     <span class="kv-l">AK / AKS</span>      <span class="kv-v">${akPct}% / ${aksPct}%</span>
-    ${loan.guarantor ? `<span class="kv-l">Guarantor</span><span class="kv-v">${loan.guarantor}</span>` : ''}
+    ${loan.guarantor ? `<span class="kv-l">Guarantor</span><span class="kv-v">${(() => { const g = String(loan.guarantor).trim(); const m = g.match(/\b(\d{10})\b/); if (m) return g.replace(m[1], smsLink(m[1])); return g; })()}</span>` : ''}
   `;
 
   // EMI slots — tabular format
@@ -1030,7 +1030,7 @@ async function openCdDetail(loanId) {
     ['Bill Date',                    Dt(l.billDate)],
     ['Loan ID',                      D(l.loanId)],
     ['Customer Name',                D(l.customerName)],
-    ['Customer Mobile No',           D(l.phone)],
+    ['Customer Mobile No',           l.phone ? smsLink(l.phone) : '—',],
     ['Customer AADHAR / PAN',        D(l.aadhaarPan)],
     ['Mobile Model',                 D(l.model)],
     ['Device Type',                  D(l.deviceType)],
@@ -1044,7 +1044,7 @@ async function openCdDetail(loanId) {
     ['Total EMI',                    D(l.totalEmi)],
     ['Monthly EMI',                  M(l.monthlyEmi)],
     ['Customer ID',                  D(l.customerId)],
-    ['Guarantor / Alternate No',     D(l.guarantor)],
+    ['Guarantor / Alternate No',     (() => { const g = String(l.guarantor||'').trim(); if (!g) return '—'; const m = g.match(/\b(\d{10})\b/); if (m) return g.replace(m[1], smsLink(m[1])); return g; })(),],
     ['Max Interest Discount',        M(l.maxInterestDiscount)],
     ['Rate of Interest',             Pct(l.rateOfInterest)],
     ['Finance Amount',               M(l.financeAmount)],
@@ -1102,7 +1102,7 @@ async function openCdDetail(loanId) {
   ]);
 
   $('cd-detail-loanid').textContent = l.loanId;
-  $('cd-detail-sub').textContent    = l.customerName + (l.phone ? ' · ' + l.phone : '') + (l.model ? ' · ' + l.model : '');
+  $('cd-detail-sub').innerHTML    = l.customerName + (l.phone ? ' · ' + (typeof smsLink==='function'?smsLink(l.phone):l.phone) : '') + (l.model ? ' · ' + l.model : '');
   $('cd-emi-schedule').innerHTML = emiTableHtml;
   const cdfEl = $('cd-fine-extra');
   if (cdfEl) {
@@ -1651,7 +1651,7 @@ async function selectOverviewLoan(loanId) {
 
     $('ov-detail-kv').innerHTML = `
       <span class="kv-l">Loan ID</span>       <span class="kv-v" style="color:#534AB7">${loan.loanId}</span>
-      <span class="kv-l">Customer</span>      <span class="kv-v">${loan.customerName}${loan.phone ? ' · '+loan.phone : ''}</span>
+      <span class="kv-l">Customer</span>      <span class="kv-v">${loan.customerName}${loan.phone ? ' · '+smsLink(loan.phone) : ''}</span>
       ${loan.model ? `<span class="kv-l">Model</span><span class="kv-v">${loan.model}${loan.deviceType ? ' ('+loan.deviceType+')' : ''}</span>` : ''}
       <span class="kv-l">Monthly EMI</span>   <span class="kv-v">${fmtAmt(loan.monthlyEmi)}</span>
       <span class="kv-l">Tenure</span>        <span class="kv-v">${loan.emiDuration} months</span>
@@ -1661,7 +1661,7 @@ async function selectOverviewLoan(loanId) {
       ${loan.lateEmis       ? `<span class="kv-l">Late EMIs</span><span class="kv-v" style="color:#BA7517">${loan.lateEmis}</span>` : ''}
       ${loan.latePaymentFine? `<span class="kv-l">Late fine</span><span class="kv-v">${fmtAmt(loan.latePaymentFine)}</span>` : ''}
       <span class="kv-l">AK / AKS</span>      <span class="kv-v">${akPct}% / ${aksPct}%</span>
-      ${loan.guarantor ? `<span class="kv-l">Guarantor</span><span class="kv-v">${loan.guarantor}</span>` : ''}
+      ${loan.guarantor ? `<span class="kv-l">Guarantor</span><span class="kv-v">${(() => { const g = String(loan.guarantor).trim(); const m = g.match(/\b(\d{10})\b/); if (m) return g.replace(m[1], smsLink(m[1])); return g; })()}</span>` : ''}
       <span class="kv-l">Locking App</span>   <span class="kv-v">${loan.lockingApp || '—'}</span>
       ${lockSummaryHtml(loan)}
     `;
@@ -1848,7 +1848,7 @@ async function selectOverviewLoan(loanId) {
       ['Bill Date',                    Dtf(loan.billDate)],
       ['Loan ID',                      Df(loan.loanId)],
       ['Customer Name',                Df(loan.customerName)],
-      ['Customer Mobile No',           Df(loan.phone)],
+      ['Customer Mobile No',           loan.phone ? smsLink(loan.phone) : '—',],
       ['Customer AADHAR / PAN',        Df(loan.aadhaarPan)],
       ['Mobile Model',                 Df(loan.model)],
       ['Device Type',                  Df(loan.deviceType)],
@@ -1862,7 +1862,7 @@ async function selectOverviewLoan(loanId) {
       ['Total EMI',                    Df(loan.totalEmi)],
       ['Monthly EMI',                  Mf(loan.monthlyEmi)],
       ['Customer ID',                  Df(loan.customerId)],
-      ['Guarantor / Alternate No',     Df(loan.guarantor)],
+      ['Guarantor / Alternate No',     (() => { const g = String(loan.guarantor||'').trim(); if (!g) return '—'; const m = g.match(/\b(\d{10})\b/); if (m) return g.replace(m[1], smsLink(m[1])); return g; })(),],
       ['Max Interest Discount',        Mf(loan.maxInterestDiscount)],
       ['Rate of Interest',             Pctf(loan.rateOfInterest)],
       ['Finance Amount',               Mf(loan.financeAmount)],

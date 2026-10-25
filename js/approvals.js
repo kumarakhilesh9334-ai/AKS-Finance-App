@@ -798,7 +798,7 @@ function subCard(p, showActions, hideRoi) {
       </div>
       <div class="kv">
         <span class="kv-l">Bill Date</span>     <span class="kv-v">${fmtDateDD(d.billDate)}</span>
-        <span class="kv-l">Phone</span>         <span class="kv-v">${d.phone}</span>
+        <span class="kv-l">Phone</span>         <span class="kv-v">${d.phone ? (typeof smsLink==='function'?smsLink(d.phone):d.phone) : '—'}</span>
         <span class="kv-l">Aadhaar/PAN</span>   <span class="kv-v">${d.idNum}</span>
         <span class="kv-l">Model</span>         <span class="kv-v">${d.model}</span>
         <span class="kv-l">Device Type</span>   <span class="kv-v">${d.deviceType}</span>
@@ -812,7 +812,7 @@ function subCard(p, showActions, hideRoi) {
         ${d.lockingApp?`<span class="kv-l">Locking App</span><span class="kv-v">${d.lockingApp}</span>`:''}
         ${d.lockAppCode?`<span class="kv-l">Lock App Code</span><span class="kv-v">${d.lockAppCode}</span>`:''}
         <span class="kv-l">AK share</span>      <span class="kv-v">${d.akShare}%</span>
-        ${d.guarantor?`<span class="kv-l">Guarantor</span><span class="kv-v">${d.guarantor}</span>`:''}
+        ${d.guarantor?`<span class="kv-l">Guarantor</span><span class="kv-v">${(() => { const g = String(d.guarantor).trim(); const m = g.match(/\b(\d{10})\b/); if (m && typeof smsLink==='function') return g.replace(m[1], smsLink(m[1])); return g; })()}</span>`:''}
       </div>
     </div>`;
   } else {
