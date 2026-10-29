@@ -1663,6 +1663,7 @@ async function selectOverviewLoan(loanId) {
       <span class="kv-l">AK / AKS</span>      <span class="kv-v">${akPct}% / ${aksPct}%</span>
       ${loan.guarantor ? `<span class="kv-l">Guarantor</span><span class="kv-v">${(() => { const g = String(loan.guarantor).trim(); const m = g.match(/\b(\d{10})\b/); if (m) return g.replace(m[1], smsLink(m[1])); return g; })()}</span>` : ''}
       <span class="kv-l">Locking App</span>   <span class="kv-v">${loan.lockingApp || '—'}</span>
+      ${lockSummaryHtml(loan)}
     `;
 
     // EMI history — tabular
@@ -1907,92 +1908,32 @@ async function selectOverviewLoan(loanId) {
       'Drive Link', 'Down Payment %',
     ]);
 
+    let custDetailHtml = '';
     const cdKey = String(loan.aadhaarPan || '').toUpperCase().replace(/\s/g, '');
     const cd = (S.customerDetails && S.customerDetails[cdKey]) ? S.customerDetails[cdKey] : null;
-    
-    // Main Detail
-    const mainRows = [
-      ['Bill Date', Df(loan.billDate)],
-      ['Maximum Interest discount amount', Mf(loan.maxInterestDiscount)],
-      ['Total Pending amount', Mf(loan.totalPending)],
-      ['Down payment%', loan.downPaymentPct != null ? loan.downPaymentPct + '%' : '—'],
-      ['Customer mobile no', loan.phone ? smsLink(loan.phone) : '—'],
-      ['Guarantor/ Alternate no/ Comments', (() => { const g = String(loan.guarantor||'').trim(); if (!g) return '—'; const m = g.match(/\b(\d{10})\b/); if (m) return g.replace(m[1], smsLink(m[1])); return g; })()],
-      ['Locking App', Df(loan.lockingApp)],
-      // Same rendering as Loan Summary's lockSummaryHtml: one line per code
-      // with its SIM numbers in brackets, each a sms: link.
-      ['Locking App Code', (() => {
-        const own = lockAppCodesOf(loan);
-        return own.length ? lockCodeLines(own) : '—';
-      })()],
-      ['Customer\'s Codes', (() => {
-        // Every code on any loan of this customer: grouped on customerId/name
-        // (like Loan Summary), falling back to Aadhaar/PAN for rows without one.
-        const key = String(loan.customerId || loan.customerName || '').trim();
-        const ap  = String(loan.aadhaarPan || '').toUpperCase().replace(/\s/g, '');
-        const codes = [];
-        (S.sheetLoans || []).forEach(l => {
-          const sameCust = key && String(l.customerId || l.customerName || '').trim() === key;
-          const sameAp   = ap && String(l.aadhaarPan || '').toUpperCase().replace(/\s/g, '') === ap;
-          if (!sameCust && !sameAp) return;
-          lockAppCodesOf(l).forEach(c => { if (codes.indexOf(c) === -1) codes.push(c); });
-        });
-        return codes.length ? lockCodeLines(codes) : '—';
-      })()],
-      ['Lock app removed', Boolf(loan.lockRemoved)],
-      ['Recovery Charge', Mf(loan.recoveryCharge)],
-      ['Defaulted', Boolf(loan.isDefaulted)],
-      ['Default Comment', Df(loan.defaultComment)],
-      ['Drive Link', loan.driveLink ? '<a href="'+loan.driveLink+'" target="_blank" style="color:#534AB7">Open ↗</a>' : '—'],
-    ];
-    
-    // Customer Detail
-    const custRows = [
-      ['Customer AADHAR / PAN', Df(loan.aadhaarPan)],
-      ['Customer Name', Df(loan.customerName)],
-      ['YOB', cd && cd.yob ? cd.yob : '—'],
-      ['Father', cd && cd.father ? cd.father : '—'],
-      ['Pincode', cd && cd.pincode ? cd.pincode : '—'],
-      ['District', cd && cd.district ? cd.district : '—'],
-      ['Area', cd && cd.area ? cd.area : '—'],
-      ['Colony', cd && cd.colony ? cd.colony : '—'],
-    ];
-    
-    // Loan Detail
-    const loanRows = [
-      ['Bill Date', Df(loan.billDate)],
-      ['Loan ID', Df(loan.loanId)],
-      ['Mobile model', Df(loan.model)],
-      ['Device Type', Df(loan.deviceType)],
-      ['Mobile amount', Mf(loan.mobileAmount)],
-      ['Down payment', Mf(loan.downPayment)],
-      ['Processing Fee', Mf(loan.processingFee)],
-      ['Interest', Mf(loan.interest)],
-      ['EMI Duration', loan.emiDuration ? loan.emiDuration + ' months' : '—'],
-      ['EMI Start Date', Dtf(loan.emiStartDate)],
-      ['Total amount', Mf(loan.totalAmount)],
-      ['Total EMI', Df(loan.totalEmi)],
-      ['Monthly EMI', Mf(loan.monthlyEmi)],
-      ['Finance Amount', Mf(loan.financeAmount)],
-      ['App Lock Charge', Mf(loan.appLockCharge)],
-      ['AK Share', loan.akShare != null ? (loan.akShare > 1 ? loan.akShare + '%' : (loan.akShare * 100) + '%') : (loan.aksShare != null ? (loan.aksShare > 1 ? (100 - loan.aksShare) + '%' : ((1 - loan.aksShare) * 100) + '%') : '—')],
-      ['AKS Share', loan.aksShare != null ? (loan.aksShare > 1 ? loan.aksShare + '%' : (loan.aksShare * 100) + '%') : (loan.akShare != null ? (loan.akShare > 1 ? (100 - loan.akShare) + '%' : ((1 - loan.akShare) * 100) + '%') : '—')],
-    ];
-    
-    $('ov-detail-full').innerHTML = 
-      `<div style="display:block;width:100%">
-         <div style="font-size:12px;font-weight:500;color:#534AB7;margin:8px 0 8px 0;text-align:left;display:block">Main Detail</div>
-         <div class="kv" style="font-size:12px;width:100%;max-width:100%;box-sizing:border-box;text-align:left;display:grid">` + mainRows.map(r => `<span class="kv-l">${r[0]}</span><span class="kv-v">${r[1]}</span>`).join('') + 
-         `</div>
-         <div class="divider"></div>
-         <div style="font-size:12px;font-weight:500;color:#534AB7;margin:8px 0 8px 0;text-align:left;display:block">Customer Detail</div>
-         <div class="kv" style="font-size:12px;width:100%;max-width:100%;box-sizing:border-box;text-align:left;display:grid">` + custRows.map(r => `<span class="kv-l">${r[0]}</span><span class="kv-v">${r[1]}</span>`).join('') + 
-         `</div>
-         <div class="divider"></div>
-         <div style="font-size:12px;font-weight:500;color:#534AB7;margin:8px 0 8px 0;text-align:left;display:block">Loan Detail</div>
-         <div class="kv" style="font-size:12px;width:100%;max-width:100%;box-sizing:border-box;text-align:left;display:grid">` + loanRows.map(r => `<span class="kv-l">${r[0]}</span><span class="kv-v">${r[1]}</span>`).join('') + 
-         `</div>
-       </div>`;
+    if (cd) {
+      const cdRows = [];
+      if (loan.customerName) cdRows.push(['Customer Name', loan.customerName]);
+      if (cd.yob) cdRows.push(['YOB', cd.yob]);
+      if (cd.landlord) cdRows.push(['Landlord', cd.landlord]);
+      if (cd.husband) cdRows.push(['Husband', cd.husband]);
+      if (cd.father) cdRows.push(['Father', cd.father]);
+      if (cd.pincode) cdRows.push(['Pincode', cd.pincode]);
+      if (cd.district) cdRows.push(['District', cd.district]);
+      if (cd.area) cdRows.push(['Area', cd.area]);
+      if (cd.colony) cdRows.push(['Colony', cd.colony]);
+      if (cdRows.length) {
+        custDetailHtml = `<div class="divider"></div>
+          <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px">Customer Detail</div>
+          <div class="kv" style="font-size:12px">` +
+          cdRows.map(r => `<span class="kv-l">${r[0]}</span><span class="kv-v">${r[1]}</span>`).join('') +
+          `</div>`;
+      }
+    }
+    $('ov-detail-full').innerHTML = fullRows
+      .filter(([label]) => !HIDDEN_LABELS.has(label))
+      .map(([label, val]) => `<span class="kv-l">${label}</span><span class="kv-v">${val}</span>`
+    ).join('') + custDetailHtml;
   } finally { hideLoader(); }
 }
 

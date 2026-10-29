@@ -271,55 +271,6 @@ function renderApprovals(q) {
   const c1 = $('appr-loan-count'), c2 = $('appr-emi-count');
   if (c1) c1.textContent = loans.length;
   if (c2) c2.textContent = emis.length;
-  // Sync right panel height to left panel
-  setTimeout(() => {
-    document.querySelectorAll('#approvals-loans-list .card, #approvals-emis-list .card').forEach(card => {
-      const left = card.querySelector('.kv-big');
-      if (left) {
-        const h = left.getBoundingClientRect().height;
-        card.querySelectorAll('.appr-card-extra').forEach(ex => {
-          ex.style.setProperty('--appr-left-h', h + 'px');
-        });
-      }
-    });
-  }, 0);
-}
-
-// ── Approve all ───────────────────────────────────────────────────────────
-async function approveAll(type) {
-  const items = S.pending.filter(p => p.status === 'pending' && p.type === type);
-  if (!items.length) {
-    showAlert(type === 'loan' ? 'No pending loans to approve.' : 'No pending EMIs to approve.', 'w');
-    return;
-  }
-  const label = type === 'loan' ? ('all ' + items.length + ' pending loan(s)') : ('all ' + items.length + ' pending EMI(s)');
-  if (!confirm('Approve ' + label + '?\n\nThis will process them one by one. Continue?')) return;
-  showLoader();
-  showAlert('Approving all…', 'w');
-  let done = 0, failed = 0;
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    try {
-      const r = await runAction(actionKey('approve', item.id), {action:'approvePending', id: item.id, type: item.type, data: item.data});
-      if (r.outcome === 'done') {
-        const isPartial = item.type === 'emi'
-          && String(item.data.miscType || item.data.reason || '').toLowerCase() === 'partial payment';
-        if (isPartial) item.status = 'approved';
-        else S.pending = S.pending.filter(p => p.id !== item.id);
-        done++;
-      } else {
-        failed++;
-      }
-    } catch(e) {
-      failed++;
-    }
-  }
-  cacheState();
-  refreshNav();
-  renderApprovals($('appr-search') ? $('appr-search').value : '');
-  rerenderActiveTab();
-  hideLoader();
-  showAlert('Approved ' + done + ' item(s)' + (failed ? ', ' + failed + ' failed/unconfirmed' : '.') + ' Refresh to see latest updates if needed.', done > 0 ? 'ok' : 'w');
 }
 
 // ── Approve ───────────────────────────────────────────────────────────────
@@ -830,87 +781,63 @@ function closeEditModal() {
 }
 
 // ── Submission card ───────────────────────────────────────────────────────
-function toggleApprCard(id) {
-  const el = document.getElementById('appr-card-' + id);
-  if (!el) return;
-  const extra = el.querySelector('.appr-card-extra');
-  const btn = el.querySelector('.appr-toggle');
-  if (!extra || !btn) return;
-  if (extra.classList.contains('appr-card-limited')) {
-    extra.classList.remove('appr-card-limited');
-    extra.classList.add('appr-card-full');
-    btn.textContent = 'Show less';
-  } else {
-    extra.classList.remove('appr-card-full');
-    extra.classList.add('appr-card-limited');
-    btn.textContent = 'Show more';
-  }
-}
-
 function subCard(p, showActions, hideRoi) {
   const user = S.users.find(u => u.id === p.submittedBy);
   const date = new Date(p.submittedAt).toLocaleDateString('en-IN', {day:'2-digit',month:'short',year:'numeric'});
   const bc   = p.status==='pending'?'b-pending':p.status==='approved'?'b-approved':'b-rejected';
-  const cardId = p.id.replace(/[^a-zA-Z0-9]/g, '');
 
   let detail = '';
   if (p.type === 'loan') {
     const d = p.data;
-    detail = `<div style="display:flex;flex-direction:column;gap:10px">
-      <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start">
-        <div class="kv kv-big">
-          <span class="kv-l">Name</span>     <span class="kv-v">${d.customerName||'—'}</span>
-          <span class="kv-l">Loan ID</span>  <span class="kv-v">${d.loanId||'—'}</span>
-          <span class="kv-l">Interest</span> <span class="kv-v">${fmt(d.interest)}</span>
-          ${!hideRoi ? `<span class="kv-l">ROI</span><span class="kv-v" style="color:#BA7517">${d.rateOfInterest}%</span>` : ''}
-          <span class="kv-l">Monthly EMI</span>   <span class="kv-v">${fmt(((d.price||0) - (d.downPayment||0) + (d.processingFee||0) + (d.interest||0)) / (d.tenure||1))}</span>
-        </div>
-        <div class="kv appr-card-extra appr-card-limited">
-          <span class="kv-l">Bill Date</span>     <span class="kv-v">${fmtDateDD(d.billDate)}</span>
-          <span class="kv-l">Phone</span>         <span class="kv-v">${d.phone ? (typeof smsLink==='function'?smsLink(d.phone):d.phone) : '—'}</span>
-          <span class="kv-l">Aadhaar/PAN</span>   <span class="kv-v">${d.idNum||'—'}</span>
-          <span class="kv-l">Model</span>         <span class="kv-v">${d.model||'—'}</span>
-          <span class="kv-l">Device Type</span>   <span class="kv-v">${d.deviceType||'—'}</span>
-          <span class="kv-l">Device amount</span> <span class="kv-v">${fmt(d.price)}</span>
-          <span class="kv-l">Down payment</span>  <span class="kv-v">${fmt(d.downPayment)}</span>
-          <span class="kv-l">Processing fee</span><span class="kv-v">${fmt(d.processingFee)}</span>
-          <span class="kv-l">EMI duration</span>  <span class="kv-v">${d.tenure||'—'} months</span>
-          <span class="kv-l">EMI start</span>     <span class="kv-v">${fmtDateDD(d.emiStart)}</span>
-          <span class="kv-l">App lock</span>      <span class="kv-v">${fmt(d.appLockCharge)}</span>
-          ${d.lockingApp?`<span class="kv-l">Locking App</span><span class="kv-v">${d.lockingApp}</span>`:''}
-          ${d.lockAppCode?`<span class="kv-l">Lock App Code</span><span class="kv-v">${d.lockAppCode}</span>`:''}
-          <span class="kv-l">AK share</span>      <span class="kv-v">${d.akShare}%</span>
-          ${d.guarantor?`<span class="kv-l">Guarantor</span><span class="kv-v">${(() => { const g = String(d.guarantor).trim(); const m = g.match(/\b(\d{10})\b/); if (m && typeof smsLink==='function') return g.replace(m[1], smsLink(m[1])); return g; })()}</span>`:''}
-        </div>
+    detail = `<div style="display:flex;flex-wrap:wrap;gap:16px">
+      <div class="kv kv-big">
+        <span class="kv-l">Name</span>     <span class="kv-v">${d.customerName}</span>
+        <span class="kv-l">Loan ID</span>  <span class="kv-v">${d.loanId}</span>
+        <span class="kv-l">Interest</span> <span class="kv-v">${fmt(d.interest)}</span>
+        ${!hideRoi ? `<span class="kv-l">ROI</span><span class="kv-v" style="color:#BA7517">${d.rateOfInterest}%</span>` : ''}
       </div>
-      <a href="javascript:void(0)" class="appr-toggle" onclick="toggleApprCard('${cardId}')" style="font-size:12px;color:#534AB7;text-decoration:none">Show more</a>
+      <div class="kv">
+        <span class="kv-l">Bill Date</span>     <span class="kv-v">${fmtDateDD(d.billDate)}</span>
+        <span class="kv-l">Phone</span>         <span class="kv-v">${d.phone ? (typeof smsLink==='function'?smsLink(d.phone):d.phone) : '—'}</span>
+        <span class="kv-l">Aadhaar/PAN</span>   <span class="kv-v">${d.idNum}</span>
+        <span class="kv-l">Model</span>         <span class="kv-v">${d.model}</span>
+        <span class="kv-l">Device Type</span>   <span class="kv-v">${d.deviceType}</span>
+        <span class="kv-l">Device amount</span> <span class="kv-v">${fmt(d.price)}</span>
+        <span class="kv-l">Down payment</span>  <span class="kv-v">${fmt(d.downPayment)}</span>
+        <span class="kv-l">Processing fee</span><span class="kv-v">${fmt(d.processingFee)}</span>
+        <span class="kv-l">EMI duration</span>  <span class="kv-v">${d.tenure} months</span>
+        <span class="kv-l">Monthly EMI</span>   <span class="kv-v">${fmt((d.price - d.downPayment + d.processingFee + d.interest) / (d.tenure||1))}</span>
+        <span class="kv-l">EMI start</span>     <span class="kv-v">${fmtDateDD(d.emiStart)}</span>
+        <span class="kv-l">App lock</span>      <span class="kv-v">${fmt(d.appLockCharge)}</span>
+        ${d.lockingApp?`<span class="kv-l">Locking App</span><span class="kv-v">${d.lockingApp}</span>`:''}
+        ${d.lockAppCode?`<span class="kv-l">Lock App Code</span><span class="kv-v">${d.lockAppCode}</span>`:''}
+        <span class="kv-l">AK share</span>      <span class="kv-v">${d.akShare}%</span>
+        ${d.guarantor?`<span class="kv-l">Guarantor</span><span class="kv-v">${(() => { const g = String(d.guarantor).trim(); const m = g.match(/\b(\d{10})\b/); if (m && typeof smsLink==='function') return g.replace(m[1], smsLink(m[1])); return g; })()}</span>`:''}
+      </div>
     </div>`;
   } else {
-    const d = p.data, diff = (d.amount||0) - (d.expectedAmount||0);
+    const d = p.data, diff = d.amount - d.expectedAmount;
     const loan = S.sheetLoans?.find(l => l.loanId === d.loanId);
     const extraRcv = loan ? (loan.extraEmiReceived||0) : 0;
-    const adjExpected = Math.max(0, (d.expectedAmount||0) - extraRcv);
-    detail = `<div style="display:flex;flex-direction:column;gap:10px">
-      <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start">
-        <div class="kv kv-big">
-          <span class="kv-l">Name</span>   <span class="kv-v">${d.customerName||'—'}</span>
-          <span class="kv-l">Amount</span> <span class="kv-v">${fmt(d.amount)}${Math.abs(diff)>1?` (${diff>0?'+':'–'}${fmt(Math.abs(diff))})`:''}</span>
-          <span class="kv-l">Date</span>   <span class="kv-v">${fmtDateDD(d.date)}</span>
-          <span class="kv-l">Loan ID</span>     <span class="kv-v" style="color:#534AB7">${d.loanId||'—'}</span>
-        </div>
-        <div class="kv appr-card-extra appr-card-limited">
-          <span class="kv-l">Model</span>       <span class="kv-v">${d.model||'—'}</span>
-          <span class="kv-l">EMI number</span>  <span class="kv-v">EMI ${d.emiNum||'—'}</span>
-          <span class="kv-l">EMI start</span>   <span class="kv-v">${fmtDateDD(d.emiStartDate)}</span>
-          <span class="kv-l">Std EMI</span>    <span class="kv-v">${fmt(d.expectedAmount)}</span>
-          ${adjExpected!==d.expectedAmount?`<span class="kv-l">Expected</span><span class="kv-v">${fmt(adjExpected)}</span>`:''}
-          <span class="kv-l">Reason for difference</span><span class="kv-v">${d.miscType||d.reason||'—'}</span>
-          <span class="kv-l">Received</span><span class="kv-v">${String(d.received).toLowerCase()!=='false'?'TRUE':'FALSE'}</span>
-          ${d.mode?`<span class="kv-l">Payment mode</span><span class="kv-v">${d.mode}</span>`:''}
-          ${d.notes?`<span class="kv-l">Notes</span><span class="kv-v">${d.notes}</span>`:''}
-        </div>
+    const adjExpected = Math.max(0, d.expectedAmount - extraRcv);
+    detail = `<div style="display:flex;flex-wrap:wrap;gap:16px">
+      <div class="kv kv-big">
+        <span class="kv-l">Name</span>   <span class="kv-v">${d.customerName}</span>
+        <span class="kv-l">Amount</span> <span class="kv-v">${fmt(d.amount)}${Math.abs(diff)>1?` (${diff>0?'+':'–'}${fmt(Math.abs(diff))})`:''}</span>
+        <span class="kv-l">Date</span>   <span class="kv-v">${fmtDateDD(d.date)}</span>
       </div>
-      <a href="javascript:void(0)" class="appr-toggle" onclick="toggleApprCard('${cardId}')" style="font-size:12px;color:#534AB7;text-decoration:none">Show more</a>
+      <div class="kv">
+        <span class="kv-l">Loan ID</span>     <span class="kv-v" style="color:#534AB7">${d.loanId}</span>
+        <span class="kv-l">Model</span>       <span class="kv-v">${d.model}</span>
+        <span class="kv-l">EMI number</span>  <span class="kv-v">EMI ${d.emiNum}</span>
+        <span class="kv-l">EMI start</span>   <span class="kv-v">${fmtDateDD(d.emiStartDate)}</span>
+        <span class="kv-l">Std EMI</span>    <span class="kv-v">${fmt(d.expectedAmount)}</span>
+        ${adjExpected!==d.expectedAmount?`<span class="kv-l">Expected</span><span class="kv-v">${fmt(adjExpected)}</span>`:''}
+        <span class="kv-l">Reason for difference</span><span class="kv-v">${d.miscType||d.reason||'—'}</span>
+        <span class="kv-l">Received</span><span class="kv-v">${String(d.received).toLowerCase()!=='false'?'TRUE':'FALSE'}</span>
+        ${d.mode?`<span class="kv-l">Payment mode</span><span class="kv-v">${d.mode}</span>`:''}
+        ${d.notes?`<span class="kv-l">Notes</span><span class="kv-v">${d.notes}</span>`:''}
+      </div>
     </div>`;
   }
 
@@ -924,7 +851,7 @@ function subCard(p, showActions, hideRoi) {
     ? `<div class="appr-actions">${actionList.map(a => btns[a]||'').join('')}</div>`
     : p.note ? `<div style="font-size:12px;color:#A32D2D;margin-top:0.5rem">Rejection note: ${p.note}</div>` : '';
 
-  return `<div class="card" id="appr-card-${cardId}">
+  return `<div class="card">
     <div class="card-hd">
       <div>
         <span class="tag ${p.type==='loan'?'t-loan':'t-emi'}">${p.type==='loan'?'New loan':'EMI payment'}</span>
