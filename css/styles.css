@@ -618,12 +618,31 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 .emi-appr-hd{background:#E1F5EE;color:#085041}
 .appr-col-body{padding:8px;display:flex;flex-direction:column;gap:0}
 
+/* Header: count + bulk action stay on one line. */
+.appr-hd-right{display:flex;align-items:center;gap:8px;min-width:0}
+.appr-approve-all{white-space:nowrap;padding:4px 9px;font-size:11px}
+.appr-approve-all:disabled{opacity:.45;cursor:not-allowed}
+
+/* Approval card body: the big summary block sets the card height. The detail
+   block is clipped to that height in JS and revealed via "Show more". */
+.appr-detail{display:flex;flex-wrap:wrap;align-items:flex-start;gap:16px}
+.appr-summary{flex:0 0 auto}
+.appr-extra-col{display:flex;flex-direction:column;flex:1 1 220px;min-width:0}
+.appr-extra{position:relative;min-width:0;overflow:hidden}
+.appr-toggle{align-self:flex-start;margin-top:5px;padding:0;border:none;background:none;
+  color:#534AB7;font-family:inherit;font-size:11px;font-weight:600;line-height:1.2;
+  cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.appr-toggle:hover{color:#3C3489}
+
 /* Mobile two-tab switcher (hidden by default on desktop) */
 .mob-two-tabs{display:none}
 @media(max-width:600px){
   .approvals-two-col{display:block}
   .approvals-two-col .appr-col-wrap{display:none}
   .approvals-two-col .appr-col-wrap.mob-active{display:flex;flex-direction:column}
+  .appr-col-hd{padding:8px 10px}
+  .appr-approve-all{padding:3px 7px;font-size:10px}
+  .appr-hd-right{gap:6px}
   .mob-two-tabs{display:flex;background:#fff;border:0.5px solid #ddd;border-radius:10px;overflow:hidden;margin-bottom:0.75rem}
   .mob-two-tab{flex:1;padding:9px 4px;border:none;background:none;font-size:11px;font-weight:500;cursor:pointer;font-family:inherit;color:#888;text-align:center;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:4px}
   .mob-two-tab.active{background:#534AB7;color:#fff}
