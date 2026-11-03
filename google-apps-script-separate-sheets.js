@@ -921,15 +921,12 @@ function doPost(e) {
     return jsonResponse(users ? {ok:true, users:users} : {ok:true});
     }
 
-    // ── Approve (shared implementation) ───────────────────────────────
-    // Used by both the single-item and bulk endpoints. Returns a plain result
-    // object instead of a Response so a bulk run can keep going after one item
-    // fails: {ok:true, partial?, loanId?} | {ok:false, error}.
-    // Cache busting is deliberately the caller's job — bulk does it once.
-    function approvePendingItem_(ss, id, type) {
+    // ── Approve ───────────────────────────────────────────────────────
+    if (payload.action === 'approvePending') {
+      const { id, type } = payload;
       const sheetName = type==='loan' ? UNAPP_LOAN_SHEET : UNAPP_EMI_SHEET;
       const row = readRowById(ss, sheetName, id);
-      if (!row) return {ok:false, error:'Row not found'};
+      if (!row) return jsonResponse({ok:false, error:'Row not found'});
       if (type==='loan') {
         // Update customerDetail sheet with new values
         try {
@@ -998,7 +995,7 @@ function doPost(e) {
           if (logSheet && logSheet.getLastRow() > 1) {
             const logData = logSheet.getRange(2, 1, logSheet.getLastRow()-1, 1).getValues();
             if (logData.some(r => String(r[0]).trim() === emiId)) {
-              return {ok:false, error:'duplicate_emi'};
+              return jsonResponse({ok:false, error:'duplicate_emi'});
             }
           }
         }
@@ -1022,7 +1019,7 @@ function doPost(e) {
                 }
               }
             }
-            if (!loanRow) { deleteFromSheet(ss, sheetName, id); return {ok:true}; }
+            if (!loanRow) { deleteFromSheet(ss, sheetName, id); return jsonResponse({ok:true}); }
             const duration = parseInt(loanRow[C.emiDuration]) || 0;
             const stdEmi = parseFloat(loanRow[C.monthlyEmi]) || 0;
             const numRcv = parseInt(loanRow[C.numReceivedEmi]) || 0;
@@ -1145,11 +1142,6 @@ function doPost(e) {
           for (let i=1;i<data.length;i++) {
             if (String(data[i][0])===String(id)) { sheet.getRange(i+1,2).setValue('approved'); break; }
           }
-          return {
-            ok: true,
-            partial: true,
-            loanId: String(row[5] || '').replace(/_\d+$/, '')
-          };
         } else {
           appendToLoggedEmi(ss, row);
           deleteFromSheet(ss, sheetName, id);
@@ -1169,51 +1161,11 @@ function doPost(e) {
           }
         }
       }
-      return {
-        ok: true,
-        loanId: type==='emi' ? String(row[5] || '').replace(/_\d+$/, '') : ''
-      };
-    }
-
-    // ── Approve (single) ──────────────────────────────────────────────
-    if (payload.action === 'approvePending') {
-      const { id, type } = payload;
-      const res = approvePendingItem_(ss, id, type);
-      if (!res.ok) return jsonResponse({ok:false, error:res.error});
-      bustApproveCaches_(res.loanId);
-      // Lean response — client removes the approved item locally.
-      return jsonResponse({ok:true, partial:!!res.partial});
-    }
-
-    // ── Approve (bulk) ────────────────────────────────────────────────
-    // Approves every item the client sends in one request. Items are
-    // independent: a skip (e.g. duplicate EMI) or error is reported per item
-    // and never aborts the rest of the batch.
-    if (payload.action === 'approvePendingBulk') {
-      const items = Array.isArray(payload.items) ? payload.items : [];
-      const results = [];
-      const touchedLoans = {};
-      for (let i = 0; i < items.length; i++) {
-        const it = items[i] || {};
-        const id = String(it.id || '');
-        const type = it.type === 'loan' ? 'loan' : 'emi';
-        if (!id) { results.push({id:'', type:type, ok:false, error:'Missing id'}); continue; }
-        try {
-          const r = approvePendingItem_(ss, id, type);
-          if (r.loanId) touchedLoans[r.loanId] = true;
-          results.push({
-            id: id, type: type, ok: !!r.ok,
-            partial: !!r.partial,
-            error: r.ok ? '' : (r.error || 'Unknown error')
-          });
-        } catch (err) {
-          results.push({id:id, type:type, ok:false, error:err.message || 'Unknown error'});
-        }
-      }
       try { CacheService.getScriptCache().remove('loans_slim'); } catch(e) {}
       try { CacheService.getScriptCache().remove('loans_full'); } catch(e) {}
-      Object.keys(touchedLoans).forEach(lid => bustLoanDataCaches(lid));
-      return jsonResponse({ok:true, results:results});
+      bustLoanDataCaches(type === 'emi' ? String(row[5] || '').replace(/_\d+$/, '') : '');
+      // Lean response — client removes the approved item locally.
+      return jsonResponse({ok:true});
     }
     // ── Update remaining partial payment ──────────────────────────────
     if (payload.action === 'updateRemainingEmi') {
@@ -1363,13 +1315,6 @@ function doPost(e) {
 
     return jsonResponse({ok:false, error:'Unknown action: '+payload.action});
   } catch(err){ return jsonResponse({ok:false, error:err.message}); }
-}
-
-// ── Shared cache invalidation for approved items ──────────────────────────
-function bustApproveCaches_(loanId) {
-  try { CacheService.getScriptCache().remove('loans_slim'); } catch(e) {}
-  try { CacheService.getScriptCache().remove('loans_full'); } catch(e) {}
-  bustLoanDataCaches(loanId || '');
 }
 
 // ── Run this from GAS editor to fix existing duplicate PIDs ───────────────
