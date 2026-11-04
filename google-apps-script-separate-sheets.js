@@ -1181,17 +1181,20 @@ function doPost(e) {
           // receipt as submitted (old behaviour), or keep it approved when other
           // receipts are already waiting, so nothing is lost.
           const measurable = expected > 0;
+          const miscTypeLower = String(miscType || '').toLowerCase().trim();
+          const isExplicitPartial = miscTypeLower === 'partial payment';
+          const forceCompleteReasons = ['extra emi received', 'late payment fine included', 'early loan closing settlement', 'default adjustment'];
+          const isForceComplete = forceCompleteReasons.indexOf(miscTypeLower) !== -1 || miscTypeLower.indexOf('multiple emi payment') === 0;
 
-          if (!complete && (measurable || partials.length)) {
-            // Not collected yet — keep this row as an approved contribution so
-            // the next payment can be aggregated with it. Relabel non-partial
-            // reasons so the partial list reads correctly.
+          if (!complete && isExplicitPartial && measurable && !isForceComplete) {
             const sheet = ss.getSheetByName(UNAPP_EMI_SHEET);
             const data = sheet.getDataRange().getValues();
             for (let i=1;i<data.length;i++) {
               if (String(data[i][0]) === String(id)) {
                 sheet.getRange(i+1, 2).setValue('approved');
-                if (miscType !== 'partial payment') sheet.getRange(i+1, 17).setValue('Partial payment');
+                if (String(sheet.getRange(i+1, 17).getValue() || '').toLowerCase().trim() !== 'partial payment') {
+                  sheet.getRange(i+1, 17).setValue('Partial payment');
+                }
                 break;
               }
             }
@@ -1200,6 +1203,16 @@ function doPost(e) {
               partial: true,
               partialTotal: total,
               remaining: measurable ? Math.max(0, expected - total) : null,
+              loanId: String(row[5] || '').replace(/_\d+$/, '')
+            };
+          }
+
+          if (!complete && !isExplicitPartial && isForceComplete && measurable) {
+            appendToLoggedEmi(ss, row);
+            deleteFromSheet(ss, sheetName, id);
+            deleteApprovedPartialsForEmi_(ss, emiKey, '');
+            return {
+              ok: true,
               loanId: String(row[5] || '').replace(/_\d+$/, '')
             };
           }
