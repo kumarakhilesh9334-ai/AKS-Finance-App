@@ -102,6 +102,9 @@ function mobSwitchApprCol(col) {
   const mlc = $('mob-appr-loan-count'), mec = $('mob-appr-emi-count');
   if (lc && mlc) mlc.textContent = lc.textContent;
   if (ec && mec) mec.textContent = ec.textContent;
+  // The newly shown column was display:none while the cards rendered, so its
+  // heights could not be measured then. Re-run the approval card collapse now.
+  if (typeof scheduleApprCollapse === 'function') scheduleApprCollapse();
 }
 
 function mobSwitchOvCol(col) {

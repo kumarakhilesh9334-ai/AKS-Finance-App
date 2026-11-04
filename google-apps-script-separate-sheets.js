@@ -355,13 +355,32 @@ function handleGet(e, opts) {
       const b = configBounds(ss)[UNAPP_EMI_SHEET];
       tm('part.cfg');
       const rows = readDataRows(sheet, 2, b, 17, 'part.');
+      // Every approved row still in Unapproved_EMI is a partial contribution:
+      // full EMIs are logged and deleted, so only incomplete ones remain.
+      const stdByLoan = {};
+      const stdFor = (loanId) => {
+        if (!Object.prototype.hasOwnProperty.call(stdByLoan, loanId)) {
+          stdByLoan[loanId] = loanMonthlyEmi_(ss, loanId);
+        }
+        return stdByLoan[loanId];
+      };
       const partials = rows
-        .filter(r => String(r[1]).toLowerCase()==='approved' && String(r[16]||'').toLowerCase()==='partial payment')
-        .map(r => ({
-          id: String(r[0]), loanId: String(r[5]||'').replace(/_\d+$/,''),
-          customerName: r[6], emiNum: r[9], emiDate: fmtDate(r[10]),
-          receivedDate: fmtDate(r[13]), amount: parseFloat(r[15])||0,
-        }));
+        .filter(r => String(r[1]).toLowerCase()==='approved')
+        .map(r => {
+          const amount = parseFloat(r[15])||0;
+          const misc = parseFloat(r[14])||0;
+          const loanId = String(r[5]||'').replace(/_\d+$/,'');
+          return {
+            id: String(r[0]), loanId: loanId,
+            emiId: String(r[5]||'').trim(),
+            customerName: r[6], emiNum: Number(r[9])||0, emiDate: fmtDate(r[10]),
+            receivedDate: fmtDate(r[13]), amount: amount, misc: misc,
+            // Cashflow - MISC is the EMI this receipt works towards; the loan's
+            // monthly EMI wins when available (older rows may lack a usable MISC).
+            expected: stdFor(loanId) || Math.max(0, amount - misc),
+            miscType: String(r[16]||'').trim(),
+          };
+        });
       tm('part.filter');
       return jsonResponse({ok:true, partials});
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
@@ -921,12 +940,15 @@ function doPost(e) {
     return jsonResponse(users ? {ok:true, users:users} : {ok:true});
     }
 
-    // ── Approve ───────────────────────────────────────────────────────
-    if (payload.action === 'approvePending') {
-      const { id, type } = payload;
+    // ── Approve (shared implementation) ───────────────────────────────
+    // Used by both the single-item and bulk endpoints. Returns a plain result
+    // object instead of a Response so a bulk run can keep going after one item
+    // fails: {ok:true, partial?, loanId?} | {ok:false, error}.
+    // Cache busting is deliberately the caller's job — bulk does it once.
+    function approvePendingItem_(ss, id, type, ctx) {
       const sheetName = type==='loan' ? UNAPP_LOAN_SHEET : UNAPP_EMI_SHEET;
       const row = readRowById(ss, sheetName, id);
-      if (!row) return jsonResponse({ok:false, error:'Row not found'});
+      if (!row) return {ok:false, error:'Row not found'};
       if (type==='loan') {
         // Update customerDetail sheet with new values
         try {
@@ -988,6 +1010,12 @@ function doPost(e) {
         appendToInput(ss, row);
         deleteFromSheet(ss, sheetName, id);
       } else {
+        const miscType = String(row[16] || '').toLowerCase();
+        const rowStatus = String(row[1] || '').toLowerCase();
+        // Only a pending row can be approved. Re-sending an already processed
+        // partial (stale bulk list) must not push it into logged EMI. Checked
+        // before the duplicate check so a stale row reports the real reason.
+        if (rowStatus !== 'pending') return {ok:false, error:'already_processed'};
         // Check if this EMI already exists in the logged EMI sheet
         const emiId = String(row[5] || '').trim();
         if (emiId) {
@@ -995,13 +1023,10 @@ function doPost(e) {
           if (logSheet && logSheet.getLastRow() > 1) {
             const logData = logSheet.getRange(2, 1, logSheet.getLastRow()-1, 1).getValues();
             if (logData.some(r => String(r[0]).trim() === emiId)) {
-              return jsonResponse({ok:false, error:'duplicate_emi'});
+              return {ok:false, error:'duplicate_emi'};
             }
           }
         }
-        // Partial payment: approve in-place (stay in unapproved sheet)
-        const miscType = String(row[16] || '').toLowerCase();
-        const rowStatus = String(row[1] || '').toLowerCase();
 
         // ── Early loan closing settlement: auto-complete all remaining EMIs ──
         if (miscType === 'early loan closing settlement') {
@@ -1019,7 +1044,7 @@ function doPost(e) {
                 }
               }
             }
-            if (!loanRow) { deleteFromSheet(ss, sheetName, id); return jsonResponse({ok:true}); }
+            if (!loanRow) { deleteFromSheet(ss, sheetName, id); return {ok:true}; }
             const duration = parseInt(loanRow[C.emiDuration]) || 0;
             const stdEmi = parseFloat(loanRow[C.monthlyEmi]) || 0;
             const numRcv = parseInt(loanRow[C.numReceivedEmi]) || 0;
@@ -1136,60 +1161,109 @@ function doPost(e) {
             }
           }
           deleteFromSheet(ss, sheetName, id);
-        } else if (miscType === 'partial payment' && rowStatus === 'pending') {
-          const sheet = ss.getSheetByName(UNAPP_EMI_SHEET);
-          const data = sheet.getDataRange().getValues();
-          for (let i=1;i<data.length;i++) {
-            if (String(data[i][0])===String(id)) { sheet.getRange(i+1,2).setValue('approved'); break; }
-          }
         } else {
-          appendToLoggedEmi(ss, row);
-          deleteFromSheet(ss, sheetName, id);
-          // Also remove any leftover 'approved' partial payment rows for the same EMI_ID
+          // ── Normal / partial payment: aggregate every receipt for this EMI ──
+          // A partial row stays approved in Unapproved_EMI. Any later receipt
+          // for the same EMI_ID (partial or not) is added to the sum; once the
+          // sum covers the standard EMI we write exactly one logged-EMI row and
+          // delete every partial row plus the row being approved.
           const emiKey = String(row[5] || '').trim();
-          if (emiKey) {
-            const partialSheet = ss.getSheetByName(UNAPP_EMI_SHEET);
-            const pData = partialSheet.getDataRange().getValues();
-            for (let i=1; i<pData.length; i++) {
-              if (String(pData[i][1]).toLowerCase()==='approved'
-                && String(pData[i][16]||'').toLowerCase()==='partial payment'
-                && String(pData[i][5]||'').trim() === emiKey) {
-                partialSheet.deleteRow(i+1);
+          const partials = readApprovedPartialsForEmi_(ss, emiKey);
+          const partialTotal = partials.reduce((s, p) => s + p.amount, 0);
+          const thisAmount = parseFloat(row[15]) || 0;
+          const expected = loanMonthlyEmi_(ss, emiKey.replace(/_\d+$/, ''), ctx && ctx.stdEmi)
+            || partialExpected_(row)
+            || partials.reduce((m, p) => Math.max(m, partialExpected_(p.row)), 0);
+          const total = partialTotal + thisAmount;
+          const complete = expected > 0 && total >= expected - 1;
+          // Without a loan row / usable MISC we cannot tell whether the EMI is
+          // covered. In that case never invent a MISC value: either log a lone
+          // receipt as submitted (old behaviour), or keep it approved when other
+          // receipts are already waiting, so nothing is lost.
+          const measurable = expected > 0;
+
+          if (!complete && (measurable || partials.length)) {
+            // Not collected yet — keep this row as an approved contribution so
+            // the next payment can be aggregated with it. Relabel non-partial
+            // reasons so the partial list reads correctly.
+            const sheet = ss.getSheetByName(UNAPP_EMI_SHEET);
+            const data = sheet.getDataRange().getValues();
+            for (let i=1;i<data.length;i++) {
+              if (String(data[i][0]) === String(id)) {
+                sheet.getRange(i+1, 2).setValue('approved');
+                if (miscType !== 'partial payment') sheet.getRange(i+1, 17).setValue('Partial payment');
                 break;
               }
             }
+            return {
+              ok: true,
+              partial: true,
+              partialTotal: total,
+              remaining: measurable ? Math.max(0, expected - total) : null,
+              loanId: String(row[5] || '').replace(/_\d+$/, '')
+            };
           }
+
+          if (!partials.length && (!measurable || miscType !== 'partial payment')) {
+            // Ordinary full EMI, or a row we cannot measure with no other
+            // receipts — log it as-is rather than invent MISC.
+            appendToLoggedEmi(ss, row);
+            deleteFromSheet(ss, sheetName, id);
+          } else {
+            // Fully collected: one logged row for the whole EMI.
+            appendAggregatedEmi_(ss, row, total, expected);
+            deleteFromSheet(ss, sheetName, id);
+            deleteApprovedPartialsForEmi_(ss, emiKey, '');
+          }
+        }
+      }
+      return {
+        ok: true,
+        loanId: type==='emi' ? String(row[5] || '').replace(/_\d+$/, '') : ''
+      };
+    }
+
+    // ── Approve (single) ──────────────────────────────────────────────
+    if (payload.action === 'approvePending') {
+      const { id, type } = payload;
+      const res = approvePendingItem_(ss, id, type, { stdEmi: {} });
+      if (!res.ok) return jsonResponse({ok:false, error:res.error});
+      bustApproveCaches_(res.loanId);
+      // Lean response — client removes the approved item locally.
+      return jsonResponse({ok:true, partial:!!res.partial});
+    }
+
+    // ── Approve (bulk) ────────────────────────────────────────────────
+    // Approves every item the client sends in one request. Items are
+    // independent: a skip (e.g. duplicate EMI) or error is reported per item
+    // and never aborts the rest of the batch.
+    if (payload.action === 'approvePendingBulk') {
+      const items = Array.isArray(payload.items) ? payload.items : [];
+      const results = [];
+      const touchedLoans = {};
+      const ctx = { stdEmi: {} };
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i] || {};
+        const id = String(it.id || '');
+        const type = it.type === 'loan' ? 'loan' : 'emi';
+        if (!id) { results.push({id:'', type:type, ok:false, error:'Missing id'}); continue; }
+        try {
+          const r = approvePendingItem_(ss, id, type, ctx);
+          if (r.loanId) touchedLoans[r.loanId] = true;
+          results.push({
+            id: id, type: type, ok: !!r.ok,
+            partial: !!r.partial,
+            error: r.ok ? '' : (r.error || 'Unknown error')
+          });
+        } catch (err) {
+          results.push({id:id, type:type, ok:false, error:err.message || 'Unknown error'});
         }
       }
       try { CacheService.getScriptCache().remove('loans_slim'); } catch(e) {}
       try { CacheService.getScriptCache().remove('loans_full'); } catch(e) {}
-      bustLoanDataCaches(type === 'emi' ? String(row[5] || '').replace(/_\d+$/, '') : '');
-      // Lean response — client removes the approved item locally.
-      return jsonResponse({ok:true});
+      Object.keys(touchedLoans).forEach(lid => bustLoanDataCaches(lid));
+      return jsonResponse({ok:true, results:results});
     }
-    // ── Update remaining partial payment ──────────────────────────────
-    if (payload.action === 'updateRemainingEmi') {
-      const { id, additionalAmount, newDate } = payload;
-      const sheet = ss.getSheetByName(UNAPP_EMI_SHEET);
-      if (!sheet) return jsonResponse({ok:false, error:'Sheet not found'});
-      const data = sheet.getDataRange().getValues();
-      for (let i=1;i<data.length;i++) {
-        if (String(data[i][0])===String(id)) {
-          const currentCashflow = parseFloat(data[i][15]) || 0;
-          const newCashflow = currentCashflow + (parseFloat(additionalAmount) || 0);
-          const dateFmt = fmtDateFromYMD(newDate || '');
-          sheet.getRange(i+1, 2).setValue('pending');   // Status
-          sheet.getRange(i+1, 14).setValue(dateFmt);     // Received_date
-          sheet.getRange(i+1, 15).setValue(0);            // Reset MISC to 0
-          sheet.getRange(i+1, 16).setValue(newCashflow);  // Cashflow
-          sheet.getRange(i+1, 17).setValue('');            // Clear miscType
-          break;
-        }
-      }
-      // Lean response — client mirrors the row update locally.
-      return jsonResponse({ok:true});
-    }
-
     // ── Reject ────────────────────────────────────────────────────────
     if (payload.action === 'rejectPending') {
       const { id, type, note } = payload;
@@ -1315,6 +1389,13 @@ function doPost(e) {
 
     return jsonResponse({ok:false, error:'Unknown action: '+payload.action});
   } catch(err){ return jsonResponse({ok:false, error:err.message}); }
+}
+
+// ── Shared cache invalidation for approved items ──────────────────────────
+function bustApproveCaches_(loanId) {
+  try { CacheService.getScriptCache().remove('loans_slim'); } catch(e) {}
+  try { CacheService.getScriptCache().remove('loans_full'); } catch(e) {}
+  bustLoanDataCaches(loanId || '');
 }
 
 // ── Run this from GAS editor to fix existing duplicate PIDs ───────────────
@@ -1601,6 +1682,90 @@ function appendToInput(ss, row) {
 // row comes from Unapproved_EMI: ID(0) Status(1) SubmittedBy(2) SubmittedAt(3) Note(4)
 // EMI_ID(5) CustomerName(6) Model(7) EMI_Start_Date(8) EMI_Number(9)
 // EMI_Date(10) LoanID(11) Received(12) Received_date(13) MISC(14) Cashflow(15) MISC_Type(16)
+// Approved partial payments stay in Unapproved_EMI until the whole EMI is
+// collected. These helpers sum every approved row for an EMI_ID so several
+// receipts (2000 + 1000 + 3000) become one 6000 logged EMI row instead of one
+// row per receipt.
+// MISC is stored as (amount - expected), so the EMI this row is working
+// towards is Cashflow - MISC. For a 2000 receipt on a 6000 EMI that is
+// 2000 - (-4000) = 6000, not 2000 + (-4000) = -2000.
+function partialExpected_(row) {
+  return Math.max(0, (parseFloat(row[15]) || 0) - (parseFloat(row[14]) || 0));
+}
+
+// The loan's standard monthly EMI, from the Data tab. Used as the authority for
+// deciding when a set of receipts covers an EMI; the amount columns on older
+// partial rows are not always reliable. `cache` is an optional per-execution
+// map so a bulk approval reads each loan only once.
+function loanMonthlyEmi_(ss, loanId, cache) {
+  const key = String(loanId || '').trim();
+  if (!key) return 0;
+  if (cache && Object.prototype.hasOwnProperty.call(cache, key)) return cache[key];
+  let val = 0;
+  try {
+    const ds = ss.getSheetByName(DATA_SHEET);
+    if (ds && ds.getLastRow() > 1) {
+      const ids = ds.getRange(2, C.loanId + 1, ds.getLastRow() - 1, 1).getValues();
+      for (let i = 0; i < ids.length; i++) {
+        if (String(ids[i][0]).trim() === key) {
+          const cell = ds.getRange(i + 2, C.monthlyEmi + 1, 1, 1).getValues();
+          val = parseFloat(cell[0][0]) || 0;
+          break;
+        }
+      }
+    }
+  } catch (e) { val = 0; }
+  if (cache) cache[key] = val;
+  return val;
+}
+
+function readApprovedPartialsForEmi_(ss, emiId) {
+  const key = String(emiId || '').trim();
+  const out = [];
+  const sheet = ss.getSheetByName(UNAPP_EMI_SHEET);
+  if (!key || !sheet || sheet.getLastRow() < 2) return out;
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][5] || '').trim() === key
+        && String(data[i][1] || '').toLowerCase() === 'approved') {
+      out.push({
+        rowNumber: i + 1,
+        amount: parseFloat(data[i][15]) || 0,
+        misc: parseFloat(data[i][14]) || 0,
+        row: data[i],
+      });
+    }
+  }
+  return out;
+}
+
+function deleteApprovedPartialsForEmi_(ss, emiId, exceptId) {
+  const key = String(emiId || '').trim();
+  const sheet = ss.getSheetByName(UNAPP_EMI_SHEET);
+  if (!key || !sheet || sheet.getLastRow() < 2) return;
+  const data = sheet.getDataRange().getValues();
+  // Bottom-up so deleting a lower row never shifts the row numbers above it.
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][5] || '').trim() === key
+        && String(data[i][1] || '').toLowerCase() === 'approved'
+        && (!exceptId || String(data[i][0]) !== String(exceptId))) {
+      sheet.deleteRow(i + 1);
+    }
+  }
+}
+
+// Writes one logged-EMI row for the whole EMI. `row` supplies identity fields
+// (EMI_ID, customer, model, dates); the amount columns are rebuilt from the sum
+// of all receipts. A fully collected EMI gets MISC 0 and a blank reason.
+function appendAggregatedEmi_(ss, row, total, expected) {
+  const out = row.slice();
+  const diff = Math.round((total - expected) * 100) / 100;
+  out[14] = Math.abs(diff) > 1 ? diff : 0;                                    // MISC
+  out[15] = total;                                                            // Cashflow
+  out[16] = Math.abs(diff) > 1 ? (String(row[16] || '').trim() || 'Extra EMI received') : '';
+  appendToLoggedEmi(ss, out);
+}
+
 function appendToLoggedEmi(ss, row) {
   const headers = ['EMI_ID','Customer Name','Mobile Model','EMI_Start_Date','EMI_Number',
     'EMI_Date','Loan ID','Received','Received_date','MISC','Cashflow','MISC Type'];

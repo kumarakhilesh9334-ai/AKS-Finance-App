@@ -246,93 +246,7 @@ function rerenderActiveTab() {
   if (S.page === 'my-subs')      renderMySubs();
 }
 
-// ── Three-column renderer ─────────────────────────────────────────────────
-function renderEmiColumns(query) {
-  // Show/hide revised view
-  if (S.showRevisedView) {
-    const tc = document.querySelector('.emi-two-col');
-    if (tc) tc.style.display = 'none';
-    const mt = document.querySelector('.mob-col-tabs');
-    if (mt) mt.style.display = 'none';
-    const rv = $('emi-revised-view');
-    if (rv) rv.style.display = 'block';
-    renderRevisedView();
-    return;
-  } else {
-    const tc = document.querySelector('.emi-two-col');
-    if (tc) tc.style.display = '';
-    const mt = document.querySelector('.mob-col-tabs');
-    if (mt) mt.style.display = '';
-    const rv = $('emi-revised-view');
-    if (rv) rv.style.display = 'none';
-  }
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const q = (query || '').toLowerCase();
-
-  const source = (S.sheetLoans && S.sheetLoans.length)
-    ? S.sheetLoans
-    : S.loans.map(l => ({
-        loanId: l.loanId, customerName: l.data.customerName,
-        monthlyEmi: l.data.monthlyEmi, nextEmiDate: '',
-        status: l.closed ? 'Closed' : 'Active',
-        isDefaulted: false, emiCompleted: l.closed,
-        model: l.data.model, akShare: l.data.akShare / 100,
-        aksShare: l.data.aksShare / 100, emiDuration: l.data.tenure,
-        slots: l.emis.map((e, i) => ({ num: i+1, received: true, dueDate: e.date, misc: 0, cashflow: e.amount })),
-        numReceivedEmi: l.emis.length, lateEmis: 0, latePaymentFine: 0,
-      }));
-
-  // Only active loans for this tab (not closed, not defaulted)
-  const active = source.filter(l => !l.isDefaulted && !l.emiCompleted && l.status !== 'Closed');
-
-  const filtered = q
-    ? active.filter(l => l.loanId.toLowerCase().includes(q) || l.customerName.toLowerCase().includes(q) || (l.phone||'').includes(q) || (l.guarantor||'').toLowerCase().includes(q) || (l.model||'').toLowerCase().includes(q) || (l.aadhaarPan||'').toLowerCase().includes(q))
-    : active;
-
-  const upcoming = [], overdue = [];
-  filtered.forEach(l => {
-    if (!l.nextEmiDate) { upcoming.push(l); return; }
-    const due = new Date(l.nextEmiDate); due.setHours(0,0,0,0);
-    if (due < today) overdue.push(l); else upcoming.push(l);
-  });
-
-  // Overdue: descending date (most overdue first), then ascending loanId
-  overdue.sort((a, b) => {
-    const diff = new Date(b.nextEmiDate||'0') - new Date(a.nextEmiDate||'0');
-    return diff !== 0 ? diff : a.loanId.localeCompare(b.loanId);
-  });
-  // Upcoming: ascending date (soonest first), then ascending loanId
-  upcoming.sort((a, b) => {
-    const diff = new Date(a.nextEmiDate||'9999') - new Date(b.nextEmiDate||'9999');
-    return diff !== 0 ? diff : a.loanId.localeCompare(b.loanId);
-  });
-
-  // Partial payments column
-  const partials = S.approvedPartials.filter(p => {
-    if (!q) return true;
-    return p.loanId.toLowerCase().includes(q) || (p.customerName||'').toLowerCase().includes(q);
-  });
-
-  $('col-all-count').textContent    = upcoming.length + overdue.length + partials.length;
-  $('col-upcoming-count').textContent = upcoming.length;
-  $('col-overdue-count').textContent  = overdue.length;
-  $('col-partials-count').textContent = partials.length;
-  // Sync mobile tab badges
-  ['all','upcoming','overdue','partials'].forEach(c => {
-    const colEl = $('col-' + c + '-count');
-    const mobEl = $('mob-' + c + '-count');
-    if (colEl && mobEl) mobEl.textContent = colEl.textContent;
-  });
-  const noDataMsg = (!S.sheetLoans || !S.sheetLoans.length) ? loansEmptyMsg() : '';
-  $('col-all-list').innerHTML      = (upcoming.length + overdue.length + partials.length)
-    ? [...upcoming.map(l => emiCard(l, 'upcoming')), ...overdue.map(l => emiCard(l, 'overdue')), ...partials.map(p => partialCard(p))].join('')
-    : (noDataMsg || '<div class="emi-col-empty">No active loans</div>');
-  $('col-upcoming-list').innerHTML = upcoming.length ? upcoming.map(l => emiCard(l, 'upcoming')).join('') : (noDataMsg || '<div class="emi-col-empty">No upcoming EMIs</div>');
-  $('col-overdue-list').innerHTML  = overdue.length  ? overdue.map(l  => emiCard(l, 'overdue')).join('')  : (noDataMsg || '<div class="emi-col-empty">All clear ✓</div>');
-  $('col-partials-list').innerHTML = partials.length ? partials.map(p => partialCard(p)).join('') : '<div class="emi-col-empty">No partial payments</div>';
-}
-
-// ── Revised badge helper (used by both emiCard and cdCard) ──────────────
+// ── Revised badge helper (used by the loan cards) ───────────────────────
 function revisedBadgeHtml(loan) {
   const loanId = loan.loanId;
   // Mobile Jabt takes priority — check across ALL emiNums (Jabt uses emiNum=0 sentinel)
@@ -363,61 +277,37 @@ function revisedBadgeHtml(loan) {
   return `<div style="text-align:center;margin-bottom:2px"><span style="display:inline-block;font-size:12px;font-weight:600;color:#000;background:#fff;padding:1px 10px;border-radius:8px;border:1px solid #ddd">${text}</span></div>`;
 }
 
-function emiCard(l, type) {
-  const dueTxt  = l.nextEmiDate ? 'Due: ' + fmtDisplayDate(l.nextEmiDate) : '—';
-  const lateTxt = l.lateEmis ? l.lateEmis + '/' + l.numReceivedEmi + ' late' : '';
-  const billTxt = l.billDate ? fmtDisplayDate(l.billDate) : '';
+// A partial receipt is any EMI row whose reason says so, or whose amount is
+// below the standard EMI. Partial rows must not block a second receipt for the
+// same EMI number the way a full pending submission does.
+function isPartialEmiData(d) {
+  if (!d) return false;
+  if (String(d.miscType || d.reason || '').toLowerCase() === 'partial payment') return true;
+  const amt = Number(d.amount || 0);
+  const exp = Number(d.expectedAmount || 0);
+  return exp > 1 && amt < exp - 1;
+}
 
-  const today = new Date(); today.setHours(0,0,0,0);
-  let bg = '', border = '', textColor = '#1a1a1a', subColor = '#888', overdueLabel = '';
-
-  // Check if this loan has a pending EMI submission (server + local)
-  const hasPendingEmi = (S.pending && S.pending.some(p => p.type==='emi' && p.data.loanId===l.loanId && p.status==='pending'))
-    || Object.keys(S._submittedEmis || {}).some(k => k.startsWith(l.loanId + '_'));
-
-  if (type === 'overdue' && l.nextEmiDate) {
-    const due = new Date(l.nextEmiDate); due.setHours(0,0,0,0);
-    const days = Math.round((today - due) / 86400000);
-    textColor = '#fff'; subColor = 'rgba(255,255,255,0.75)';
-    if (days > 90) {
-      bg = '#5C0000'; border = '#5C0000'; overdueLabel = '90+ days overdue';
-    } else if (days > 30) {
-      bg = '#980000'; border = '#980000'; overdueLabel = '30+ days overdue';
-    } else {
-      bg = '#dd7e6b'; border = '#dd7e6b'; overdueLabel = days + 'd overdue';
-    }
-  } else if (type === 'upcoming' && l.nextEmiDate) {
-    const due = new Date(l.nextEmiDate); due.setHours(0,0,0,0);
-    if (due.getTime() === today.getTime()) {
-      bg = '#F5C518'; border = '#F5C518'; textColor = '#1A1A1A'; subColor = 'rgba(0,0,0,0.6)';
-    }
-  }
-
-  const cardStyle = bg ? `background:${bg};border-left-color:${border};border-color:${border}` : '';
-  // White pills on the dark fills; the yellow "Due today" card needs dark text.
-  const pillStyle = bg ? (textColor === '#fff' ? 'background:rgba(255,255,255,0.2);color:#fff' : `background:rgba(0,0,0,0.10);color:${textColor}`) : '';
-
-  return `<div class="emi-card ${type}" data-loanid="${l.loanId}" style="${cardStyle}">
-    ${revisedBadgeHtml(l)}
-    <div class="emi-card-top">
-      <span class="emi-card-id" style="color:${textColor}">${l.loanId}</span>
-      <div style="text-align:right">
-        <div class="emi-card-date-big" style="color:${textColor}">${dueTxt}</div>
-      </div>
-    </div>
-    <div class="emi-card-name" style="display:flex;justify-content:space-between;align-items:center;color:${textColor};gap:8px">
-      <span>${l.customerName}</span>
-      ${overdueLabel ? `<span style="font-size:10px;font-weight:600;opacity:0.85;flex-shrink:0">${overdueLabel}</span>` : ''}
-    </div>
-    <div class="emi-card-meta">
-      <span class="emi-amt-pill" style="${pillStyle}">${billTxt ? 'Bill: '+billTxt : '—'}</span>
-      <span class="emi-amt-pill" style="${pillStyle}">${fmtAmt(l.monthlyEmi)}/mo</span>
-      ${l.model ? `<span class="emi-model-pill" style="${pillStyle}">${l.model}</span>` : ''}
-      ${lateTxt ? `<span class="emi-late-pill" style="${pillStyle}">&#9888; ${lateTxt}</span>` : ''}
-      ${hasPendingEmi ? `<span class="emi-late-pill" style="${pillStyle}">⏳ Pending</span>` : ''}
-      ${partialIndicator(l, subColor)}
-    </div>
-  </div>`;
+// Approved + still-pending partial receipts for one EMI, with the money totals
+// and the standard EMI (expected) they are working towards.
+function partialsForEmi(loanId, emiNum) {
+  const approved = (S.approvedPartials || []).filter(p =>
+    String(p.loanId) === String(loanId) && Number(p.emiNum) === Number(emiNum));
+  const pending = (S.pending || []).filter(p =>
+    p.type === 'emi' && p.status === 'pending'
+    && String(p.data.loanId) === String(loanId)
+    && Number(p.data.emiNum) === Number(emiNum)
+    && isPartialEmiData(p.data));
+  const approvedTotal = approved.reduce((s, p) => s + Number(p.amount || 0), 0);
+  const pendingTotal = pending.reduce((s, p) => s + Number(p.data.amount || 0), 0);
+  const expected = approved.reduce((m, p) => Math.max(m, Number(p.expected || 0)), 0)
+    || pending.reduce((m, p) => Math.max(m, Number(p.data.expectedAmount || 0)), 0);
+  return {
+    approved, pending,
+    approvedTotal, pendingTotal,
+    total: approvedTotal + pendingTotal,
+    expected,
+  };
 }
 
 function partialIndicator(l, subColor) {
@@ -426,99 +316,6 @@ function partialIndicator(l, subColor) {
   if (!items.length) return '';
   const total = items.reduce((s, p) => s + Number(p.amount || 0), 0);
   return `<span style="font-size:12px;font-weight:700;color:${subColor||'#888'};margin-left:auto;flex-shrink:0">${fmtAmt(total)} already received</span>`;
-}
-
-function partialCard(p) {
-  const dateStr = p.receivedDate ? fmtDisplayDate(p.receivedDate) : '—';
-  return `<div class="emi-card" data-loanid="${p.loanId}" style="border-left:3px solid #A32D2D">
-    <div class="emi-card-top">
-      <span class="emi-card-id">${p.loanId}</span>
-      <span class="badge b-pending" style="font-size:10px">Partial</span>
-    </div>
-    <div class="emi-card-name">${p.customerName}</div>
-    <div class="emi-card-meta" style="margin-top:4px">
-      <span class="emi-amt-pill" style="background:#FFF0E6;color:#A32D2D">${fmtAmt(p.amount)}</span>
-      <span style="font-size:11px;color:#888">${dateStr}</span>
-    </div>
-    <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();logRemainingPartial('${p.id}', ${p.amount})" style="margin-top:6px;width:100%;font-size:11px;padding:4px 0">Log remaining</button>
-  </div>`;
-}
-
-// ── Revised Overdue toggle ───────────────────────────────────────────────
-// ── Revised View toggle ──────────────────────────────────────────────────
-const _revViewCollapsed = { upcoming: false, overdue: false };
-
-function toggleRevisedView() {
-  S.showRevisedView = !S.showRevisedView;
-  const btn = $('revised-view-toggle');
-  if (btn) {
-    if (S.showRevisedView) {
-      btn.style.background = '#399C9C';
-      btn.style.color = '#fff';
-    } else {
-      btn.style.background = 'none';
-      btn.style.color = '#399C9C';
-    }
-  }
-  renderEmiColumns($('emi-search') ? $('emi-search').value : '');
-}
-
-window.__revViewToggle = function(label) {
-  _revViewCollapsed[label] = !_revViewCollapsed[label];
-  renderRevisedView();
-};
-
-function renderRevisedView() {
-  const el = $('emi-revised-view');
-  if (!el) return;
-  const q = (($('emi-search') ? $('emi-search').value : '') || '').toLowerCase();
-  const source = (S.sheetLoans && S.sheetLoans.length) ? S.sheetLoans : [];
-  const active = source.filter(l => !l.isDefaulted && !l.emiCompleted && l.status !== 'Closed');
-  const filtered = q ? active.filter(l => l.loanId.toLowerCase().includes(q) || (l.customerName||'').toLowerCase().includes(q)) : active;
-
-  // Only loans with unpaid revised dates
-  const today = new Date(); today.setHours(0,0,0,0);
-  const hasRevDates = filtered.filter(l => {
-    const revs = S.revisedDates.filter(rd => rd.loanId === l.loanId);
-    // At least one unpaid revision OR a Mobile Jabt record
-    return revs.some(rd => {
-      if (rd.note === 'Mobile Jabt') return true;
-      const slot = (l.slots || []).find(s => s.num === rd.emiNum);
-      return !slot || !slot.received;
-    });
-  });
-
-  const upcoming = [], overdue = [], mobileJabt = [];
-  hasRevDates.forEach(l => {
-    const hasJabt = S.revisedDates.some(rd => rd.loanId === l.loanId && rd.note === 'Mobile Jabt');
-    if (hasJabt) { mobileJabt.push(l); return; }
-    const dates = S.revisedDates.filter(rd => rd.loanId === l.loanId && rd.revisedDate);
-    const latest = dates.length ? parseSheetDate(dates[dates.length-1].revisedDate) : null;
-    if (!latest) { upcoming.push(l); return; }
-    if (latest >= today) upcoming.push(l); else overdue.push(l);
-  });
-  // Sort: overdue descending (most overdue first), scheduled ascending (soonest first)
-  // Resolution is the bottom-most appended row (last in sheet order), not the max date.
-  const getLastRev = (lid) => { const d = S.revisedDates.filter(rd => rd.loanId === lid && rd.revisedDate); return d.length ? parseSheetDate(d[d.length-1].revisedDate) : null; };
-  overdue.sort((a, b) => { const da = getLastRev(a.loanId), db = getLastRev(b.loanId); if (!da && !db) return 0; if (!da) return 1; if (!db) return -1; return db - da; });
-  upcoming.sort((a, b) => { const da = getLastRev(a.loanId), db = getLastRev(b.loanId); if (!da && !db) return 0; if (!da) return 1; if (!db) return -1; return da - db; });
-
-  function sectionHtml(label, key, color, bg, icon, items, cardType) {
-    const collapsed = _revViewCollapsed[key];
-    return `<div class="card" style="margin-bottom:0.5rem;padding:0;overflow:hidden">
-      <div onclick="window.__revViewToggle('${key}')" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:${bg};user-select:none">
-        <span style="font-size:14px">${collapsed ? '\u25B6' : '\u25BC'}</span>
-        <span style="font-size:12px;font-weight:600;color:${color}">${icon} ${label}</span>
-        <span style="font-size:11px;color:#888;margin-left:auto">${items.length}</span>
-      </div>
-      ${collapsed ? '' : `<div style="padding:6px">${items.map(l => emiCard(l, cardType)).join('')}</div>`}
-    </div>`;
-  }
-
-  el.innerHTML = `<div style="font-size:12px;color:#888;margin-bottom:0.5rem">${hasRevDates.length} loan(s) with revised dates</div>`
-    + sectionHtml('Revised (Overdue)', 'overdue', '#c62828', '#ffebee', '\uD83D\uDD34', overdue, 'overdue')
-    + sectionHtml('Revised (Scheduled)', 'scheduled', '#2e7d32', '#e8f5e9', '\uD83D\uDFE2', upcoming, 'upcoming')
-    + (mobileJabt.length ? sectionHtml('Mobile Jabt', 'mobile-jabt', '#000', '#f5f5f5', '\uD83D\uDCF1', mobileJabt, 'overdue') : '');
 }
 
 // ── Loan selection ────────────────────────────────────────────────────────
@@ -814,7 +611,11 @@ async function submitEmi() {
   showLoader();
   try {
     if (S.sheetsUrl) {
-      const r = await runAction(actionKey('saveEmi', loanId, emiNum), {action:'saveEmi', item:emiItem});
+      // Include amount + date so a second partial receipt for the same EMI is
+      // allowed, while an identical double-click is still blocked.
+      const r = await runAction(
+        actionKey('saveEmi', loanId, emiNum, amt, date),
+        {action:'saveEmi', item:emiItem});
       if (r.outcome === 'blocked') {
         showAlert(r.message, 'e');
       } else if (r.outcome === 'unconfirmed') {
@@ -866,45 +667,6 @@ async function fetchApprovedPartials() {
       rerenderActiveTab();
     }
   } catch(e) { console.warn('fetchApprovedPartials error:', e.message); }
-}
-
-// ── Log remaining payment for an approved partial ─────────────────────────
-async function logRemainingPartial(id, currentAmount) {
-  const additional = prompt('Enter remaining amount (₹):');
-  if (!additional) return;
-  const newDate = prompt('Enter new receiving date (YYYY-MM-DD):', new Date().toISOString().split('T')[0]);
-  if (!newDate) return;
-  showAlert('Updating…', 'w');
-  showLoader();
-  try {
-    const res = await gasPost({action:'updateRemainingEmi', id, additionalAmount: parseFloat(additional), newDate});
-    if (res.ok) {
-      // Server confirmed — mirror the row update locally, no extra round-trips.
-      const idx = S.approvedPartials.findIndex(x => String(x.id) === String(id));
-      if (idx !== -1) {
-        const p = S.approvedPartials[idx];
-        S.approvedPartials.splice(idx, 1);
-        const newTotal = Number(p.amount||0) + parseFloat(additional);
-        S.pending.push({
-          id: p.id, type: 'emi', status: 'pending',
-          submittedBy: S.cu.id, submittedAt: new Date().toISOString(), note: '',
-          data: {
-            loanId: p.loanId, customerName: p.customerName, model: '', emiStartDate: '',
-            emiNum: p.emiNum, date: newDate, scheduledDate: p.emiDate,
-            misc: 0, miscType: '',
-            amount: newTotal, expectedAmount: newTotal,
-          },
-        });
-        cacheState();
-      }
-      refreshNav();
-      rerenderActiveTab();
-      renderApprovals($('appr-search') ? $('appr-search').value : '');
-      showAlert('Remaining payment submitted for approval.');
-    } else {
-      showWriteFailure(res, 'Submission');
-    }
-  } finally { hideLoader(); }
 }
 
 // ── Closed & Defaulted tab (admin only) ───────────────────────────────────
@@ -1625,13 +1387,25 @@ async function selectOverviewLoan(loanId) {
       if (loan.emiCompleted || loan.status === 'Closed') {
         collectEl.style.display = 'none';
       } else {
-        const std       = loan.monthlyEmi || 0;
-        const revExtra  = -(loan.extraEmiReceived || 0);
-        const expected  = Math.max(0, std + revExtra);
+        const std        = loan.monthlyEmi || 0;
+        const extraRcv   = loan.extraEmiReceived || 0;
+        const nextEmiNum = (loan.numReceivedEmi || 0) + 1;
+        // Only approved partials reduce the amount still to collect; pending
+        // receipts are money taken but not yet confirmed, so they are not
+        // subtracted here.
+        const partialRcv = partialsForEmi(loanId, nextEmiNum).approvedTotal || 0;
+        const expected   = Math.max(0, std - extraRcv - partialRcv);
         $('ov-detail-collect-main').textContent = 'Collect: ' + fmtAmt(expected);
         const sub = $('ov-detail-collect-sub');
-        if (loan.extraEmiReceived !== 0) {
-          sub.textContent = '(' + std.toLocaleString('en-IN') + (revExtra >= 0 ? ' + ' : ' − ') + Math.abs(revExtra).toLocaleString('en-IN') + ')';
+        if (extraRcv !== 0 || partialRcv !== 0) {
+          const parts = [std.toLocaleString('en-IN')];
+          if (extraRcv !== 0) {
+            parts.push((extraRcv > 0 ? '− ' : '+ ') + Math.abs(extraRcv).toLocaleString('en-IN') + ' extra');
+          }
+          if (partialRcv !== 0) {
+            parts.push('− ' + partialRcv.toLocaleString('en-IN') + ' partial');
+          }
+          sub.textContent = '(' + parts.join(' ') + ')';
           sub.style.display = '';
         } else {
           sub.style.display = 'none';
@@ -1791,16 +1565,37 @@ async function selectOverviewLoan(loanId) {
       $('ov-next-label').textContent = `Recording: EMI ${nextNum} of ${duration} · Standard EMI: ${fmtAmt(loan.monthlyEmi)}`;
 
       // Prefill
-      $('ov-emi-amt').value  = loan.monthlyEmi || '';
+      const stdEmi = loan.monthlyEmi || 0;
+      const ledger = partialsForEmi(loanId, nextNum);
+      const remaining = Math.max(0, stdEmi - ledger.total);
+      if (ledger.total > 0) {
+        $('ov-next-label').textContent +=
+          ' | Partial received: ' + fmtAmt(ledger.total) + ' | Remaining: ' + fmtAmt(remaining);
+      }
+      // Always prefill the standard monthly EMI. The agent overwrites it with
+      // the amount actually received; a partial receipt is entered as e.g. 4000.
+      $('ov-emi-amt').value  = stdEmi || '';
       $('ov-emi-date').value = new Date().toISOString().split('T')[0];
       $('ov-emi-notes').value  = '';
+      // Leave the reason blank; typing an amount that differs from the standard
+      // EMI opens the reason box via checkOverviewEmiDiff().
       $('ov-emi-reason').value = '';
       $('ov-emi-reason-wrap').style.display = 'none';
       $('ov-emi-diff-warn').style.display   = 'none';
       checkOverviewEmiReason();
 
       const subBtn = $('ov-emi-submit-btn');
-      if (pendingSet.has(nextNum)) {
+      // A partial receipt stays approvable as another partial. Only a full
+      // pending submission, or receipts that already cover the EMI, block it.
+      const nonPartialPending = (S.pending || []).some(p =>
+        p.type === 'emi' && p.status === 'pending'
+        && String(p.data.loanId) === String(loanId)
+        && Number(p.data.emiNum) === nextNum
+        && !isPartialEmiData(p.data));
+      const localFullSubmit = !!(S._submittedEmis && S._submittedEmis[loanId + '_' + nextNum]);
+      const alreadyCovered = stdEmi > 0 && ledger.total >= stdEmi - 1 && ledger.total > 0;
+      const blockNext = nonPartialPending || localFullSubmit || alreadyCovered;
+      if (blockNext) {
         subBtn.disabled = true;
         subBtn.style.opacity = '0.5';
         subBtn.style.cursor = 'not-allowed';
@@ -2097,7 +1892,7 @@ function checkOverviewEmiDiff() {
   if (Math.abs(diff) > 1) {
     $('ov-emi-reason-wrap').style.display = 'block';
     $('ov-emi-diff-warn').style.display   = 'block';
-    $('ov-emi-diff-msg').textContent = `Differs from standard EMI ${fmtAmt(stdEmi)} by ${diff>0?'+':''}${fmtAmt(Math.abs(diff))}. Please select a reason.`;
+    $('ov-emi-diff-msg').textContent = `Differs from standard EMI ${fmtAmt(stdEmi)} by ${diff > 0 ? '+' : '−'}${fmtAmt(Math.abs(diff))}. Please select a reason.`;
     checkOverviewEmiReason();
   } else {
     $('ov-emi-reason-wrap').style.display = 'none';
@@ -2167,6 +1962,18 @@ async function submitOverviewEmi() {
   } else if (Math.abs(amt - stdEmi) > 1 && !reason) {
     showAlert('Please select a reason for the amount difference.', 'e'); return;
   }
+
+  // Soft guard: a partial receipt may already be approved for this EMI. If this
+  // entry would take the total past the standard EMI, confirm before the
+  // server aggregates it into an overpayment.
+  const alreadyApproved = partialsForEmi(loanId, nextNum).approvedTotal || 0;
+  if (multiCount === 0 && stdEmi > 0 && alreadyApproved > 0
+      && alreadyApproved + amt > stdEmi + 1) {
+    const total = alreadyApproved + amt;
+    if (!confirm(fmtAmt(alreadyApproved) + ' is already received for EMI ' + nextNum +
+        '. Adding ' + fmtAmt(amt) + ' would total ' + fmtAmt(total) +
+        ' against a standard EMI of ' + fmtAmt(stdEmi) + '. Continue?')) return;
+  }
   const numReceived = loan.numReceivedEmi || 0;
   const emiNum       = numReceived + 1;
   const emiStartDate = loan.emiStartDate || '';
@@ -2182,6 +1989,13 @@ async function submitOverviewEmi() {
       scheduledDate = sd.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}).replace(/ /g,'-');
     }
   }
+  // A receipt that leaves the EMI short of its standard amount is a partial:
+  // it must not mark the EMI as fully submitted, otherwise the next receipt
+  // for the same EMI would be blocked.
+  const ledgerForEmi = partialsForEmi(loanId, emiNum);
+  const isPartialSubmit = multiCount === 0 && stdEmi > 0
+    && (ledgerForEmi.total + amt) < stdEmi - 1;
+
   const receivedVal = $('ov-emi-received') ? $('ov-emi-received').value !== 'false' : true;
   const d = {
     loanId,
@@ -2203,15 +2017,23 @@ async function submitOverviewEmi() {
   showLoader();
   try {
     if (S.sheetsUrl) {
-      const r = await runAction(actionKey('saveEmi', loanId, emiNum), {action:'saveEmi', item:emiItem});
+      // Include amount + date so a second partial receipt for the same EMI is
+      // allowed, while an identical double-click is still blocked.
+      const r = await runAction(
+        actionKey('saveEmi', loanId, emiNum, amt, date),
+        {action:'saveEmi', item:emiItem});
       if (r.outcome === 'blocked') {
         showAlert(r.message, 'e');
       } else if (r.outcome === 'unconfirmed') {
         showAlert("Couldn't confirm the submission — it may still have saved. Refresh the page to check.", 'w');
       } else if (r.outcome === 'done') {
-        S._submittedEmis[loanId + '_' + emiNum] = true;
-        if (multiCount > 0) {
-          for (let i = 1; i < multiCount; i++) S._submittedEmis[loanId + '_' + (emiNum + i)] = true;
+        // Partial receipts deliberately do NOT mark the EMI as submitted — a
+        // second partial can be added until the total reaches the standard EMI.
+        if (!isPartialSubmit) {
+          S._submittedEmis[loanId + '_' + emiNum] = true;
+          if (multiCount > 0) {
+            for (let i = 1; i < multiCount; i++) S._submittedEmis[loanId + '_' + (emiNum + i)] = true;
+          }
         }
         // Server confirmed — add our own submission locally, no extra round-trip.
         S.pending.push(emiItem);

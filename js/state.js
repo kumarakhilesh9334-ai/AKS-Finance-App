@@ -136,7 +136,6 @@ const S = {
   customerDetails: {},
   selectedEmiLoanId: null,
   revisedDates: [],
-  showRevisedView: false,
   showOverviewRevised: false,
   showOverviewPartials: false,
   _fullLoaded: false,

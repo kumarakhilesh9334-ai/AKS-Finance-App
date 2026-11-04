@@ -271,6 +271,81 @@ function renderApprovals(q) {
   const c1 = $('appr-loan-count'), c2 = $('appr-emi-count');
   if (c1) c1.textContent = loans.length;
   if (c2) c2.textContent = emis.length;
+  // Mobile tabs mirror the desktop counts (hidden columns never re-render).
+  const m1 = $('mob-appr-loan-count'), m2 = $('mob-appr-emi-count');
+  if (m1) m1.textContent = loans.length;
+  if (m2) m2.textContent = emis.length;
+  const b1 = $('appr-approve-all-loan'), b2 = $('appr-approve-all-emi');
+  if (b1) b1.disabled = !loans.length;
+  if (b2) b2.disabled = !emis.length;
+  // Card heights are only measurable after the markup is in the document.
+  scheduleApprCollapse();
+}
+
+// ── Approve all (bulk) ────────────────────────────────────────────────────
+// One POST for the whole column. The server treats every item independently:
+// an EMI that is already logged comes back as a per-item error and stays
+// pending, while the rest still go through. The local list is then updated
+// from those results — no follow-up reads.
+async function approveAll(type) {
+  const items = S.pending.filter(p => p.status === 'pending' && p.type === type);
+  if (!items.length) return;
+  const noun = type === 'loan' ? 'loan' : 'EMI';
+  if (!confirm('Approve all ' + items.length + ' pending ' + noun +
+               ' submission' + (items.length === 1 ? '' : 's') + '?')) return;
+
+  showAlert('Approving…', 'w');
+  showLoader();
+  try {
+    const key = actionKey('approveAll', type, items.map(p => p.id).join(','));
+    const r = await runAction(
+      key,
+      { action: 'approvePendingBulk', items: items.map(p => ({ id: p.id, type: p.type })) });
+    if (r.outcome === 'blocked') {
+      showAlert(r.message, 'e');
+    } else if (r.outcome === 'unconfirmed') {
+      showAlert("Couldn't confirm the bulk approval — some may still have gone through. Refresh the page to check.", 'w');
+    } else if (r.outcome === 'done') {
+      const results = (r.res && Array.isArray(r.res.results)) ? r.res.results : [];
+      const byKey = {};
+      results.forEach(x => { byKey[String(x.id) + '|' + String(x.type)] = x; });
+      let approved = 0, partial = 0;
+      const failures = [];
+      items.forEach(item => {
+        const result = byKey[String(item.id) + '|' + String(item.type)];
+        if (!result) { failures.push('no response for this entry'); return; }
+        if (!result.ok) { failures.push(result.error || 'Unknown error'); return; }
+        if (result.partial) { item.status = 'approved'; partial++; }
+        else S.pending = S.pending.filter(p => !(p.id === item.id && p.type === item.type));
+        approved++;
+      });
+      // The bulk endpoint is ok:true even when individual items are skipped.
+      // A retry must remain possible for those items, so drop the "done" mark
+      // when anything was left behind.
+      if (failures.length && S._actionLog) delete S._actionLog[key];
+      cacheState();
+      refreshNav();
+      renderApprovals($('appr-search') ? $('appr-search').value : '');
+      rerenderActiveTab();
+      fetchApprovedPartials();
+      const failed = failures.length;
+      if (failed) {
+        const first = failures[0] === 'duplicate_emi'
+          ? 'already logged in the EMI sheet'
+          : failures[0] === 'already_processed'
+            ? 'already processed'
+            : failures[0];
+        showAlert('Approved ' + approved + ' of ' + items.length + '. ' + failed +
+                  ' could not be approved (' + first + '). Refresh to see the remaining entries.', 'w');
+      } else {
+        showAlert('Approved ' + approved + (partial ? ' (' + partial + ' partial)' : '') + ' ✓');
+      }
+    } else {
+      showAlert('Bulk approval failed: ' + ((r.res && r.res.error) || 'Unknown error'), 'e');
+    }
+  } catch (err) {
+    showAlert('Sync failed: ' + err.message, 'w');
+  } finally { hideLoader(); }
 }
 
 // ── Approve ───────────────────────────────────────────────────────────────
@@ -313,19 +388,24 @@ async function approve(id, type) {
       showAlert("Couldn't confirm the approval — it may still have gone through. Refresh the page to check.", 'w');
     } else if (r.outcome === 'done') {
       // Server confirmed — update the local list directly, no extra round-trips.
-      const isPartial = item.type === 'emi'
-        && String(item.data.miscType || item.data.reason || '').toLowerCase() === 'partial payment';
+      // Trust the server: a receipt that still leaves the EMI short stays an
+      // approved partial; once all receipts cover the EMI it is logged and gone.
+      const isPartial = item.type === 'emi' && !!(r.res && r.res.partial);
       if (isPartial) item.status = 'approved';   // stays in sheet as approved partial
       else S.pending = S.pending.filter(p => p.id !== id);
       cacheState();
+      // Partial rows may have been folded into a logged row (or added), so re-read.
+      fetchApprovedPartials();
       refreshNav();
       renderApprovals($('appr-search') ? $('appr-search').value : '');
       rerenderActiveTab();
       showAlert('Approved ✓');
     } else {
       const err = r.res && r.res.error;
-      if (err === 'duplicate_emi') {
-        showAlert('This EMI already exists in the logged EMI sheet!', 'e');
+      if (err === 'already_processed') {
+        showAlert('This submission was already processed. Refresh the page to see the latest state.', 'e');
+      } else if (err === 'duplicate_emi') {
+        showAlert('This EMI is already fully logged. If this receipt was already counted, reject it instead.', 'e');
       } else {
         showAlert('Approval failed: ' + (err || 'Unknown error'), 'e');
       }
@@ -780,6 +860,53 @@ function closeEditModal() {
   S.editingType = null;
 }
 
+// ── Approval card collapse ─────────────────────────────────────────────────
+// The right-hand detail block is only as tall as the summary block beside it;
+// the rest is revealed with "Show more". Measured in JS because the two blocks
+// size independently (long customer names, extra rows like Locking App).
+let _apprCollapseRaf = null;
+
+function scheduleApprCollapse() {
+  if (typeof requestAnimationFrame !== 'function') { applyApprCollapse(); return; }
+  if (_apprCollapseRaf) return;
+  _apprCollapseRaf = requestAnimationFrame(() => {
+    _apprCollapseRaf = null;
+    applyApprCollapse();
+  });
+}
+
+function applyApprCollapse() {
+  document.querySelectorAll('.appr-detail').forEach(d => {
+    const summary = d.querySelector('.appr-summary');
+    const extra   = d.querySelector('.appr-extra');
+    const toggle  = d.querySelector('.appr-toggle');
+    if (!summary || !extra || !toggle) return;
+    const expanded = extra.dataset.expanded === '1';
+    // Clear first, otherwise scrollHeight reports the clipped height.
+    extra.style.maxHeight = '';
+    const natural   = extra.scrollHeight;
+    const available = summary.offsetHeight;
+    // Nothing to hide (or the column is display:none on mobile) — leave it.
+    if (!natural || !available || natural <= available + 2) {
+      toggle.style.display = 'none';
+      return;
+    }
+    toggle.style.display = '';
+    extra.style.maxHeight = (expanded ? natural : available) + 'px';
+    toggle.textContent = expanded ? 'Show less' : 'Show more';
+  });
+}
+
+function toggleApprDetail(btn) {
+  const extra = btn && btn.parentElement
+    ? btn.parentElement.querySelector('.appr-extra') : null;
+  if (!extra) return;
+  extra.dataset.expanded = extra.dataset.expanded === '1' ? '0' : '1';
+  applyApprCollapse();
+}
+
+window.addEventListener('resize', scheduleApprCollapse);
+
 // ── Submission card ───────────────────────────────────────────────────────
 function subCard(p, showActions, hideRoi) {
   const user = S.users.find(u => u.id === p.submittedBy);
@@ -789,14 +916,16 @@ function subCard(p, showActions, hideRoi) {
   let detail = '';
   if (p.type === 'loan') {
     const d = p.data;
-    detail = `<div style="display:flex;flex-wrap:wrap;gap:16px">
-      <div class="kv kv-big">
+    detail = `<div class="appr-detail">
+      <div class="kv kv-big appr-summary">
         <span class="kv-l">Name</span>     <span class="kv-v">${d.customerName}</span>
         <span class="kv-l">Loan ID</span>  <span class="kv-v">${d.loanId}</span>
         <span class="kv-l">Interest</span> <span class="kv-v">${fmt(d.interest)}</span>
         ${!hideRoi ? `<span class="kv-l">ROI</span><span class="kv-v" style="color:#BA7517">${d.rateOfInterest}%</span>` : ''}
       </div>
-      <div class="kv">
+      <div class="appr-extra-col">
+        <div class="appr-extra">
+          <div class="kv">
         <span class="kv-l">Bill Date</span>     <span class="kv-v">${fmtDateDD(d.billDate)}</span>
         <span class="kv-l">Phone</span>         <span class="kv-v">${d.phone ? (typeof smsLink==='function'?smsLink(d.phone):d.phone) : '—'}</span>
         <span class="kv-l">Aadhaar/PAN</span>   <span class="kv-v">${d.idNum}</span>
@@ -813,6 +942,9 @@ function subCard(p, showActions, hideRoi) {
         ${d.lockAppCode?`<span class="kv-l">Lock App Code</span><span class="kv-v">${d.lockAppCode}</span>`:''}
         <span class="kv-l">AK share</span>      <span class="kv-v">${d.akShare}%</span>
         ${d.guarantor?`<span class="kv-l">Guarantor</span><span class="kv-v">${(() => { const g = String(d.guarantor).trim(); const m = g.match(/\b(\d{10})\b/); if (m && typeof smsLink==='function') return g.replace(m[1], smsLink(m[1])); return g; })()}</span>`:''}
+          </div>
+        </div>
+        <button type="button" class="appr-toggle" onclick="toggleApprDetail(this)">Show more</button>
       </div>
     </div>`;
   } else {
@@ -820,13 +952,25 @@ function subCard(p, showActions, hideRoi) {
     const loan = S.sheetLoans?.find(l => l.loanId === d.loanId);
     const extraRcv = loan ? (loan.extraEmiReceived||0) : 0;
     const adjExpected = Math.max(0, d.expectedAmount - extraRcv);
-    detail = `<div style="display:flex;flex-wrap:wrap;gap:16px">
-      <div class="kv kv-big">
+    // Receipts already approved for this EMI, plus where this one leaves it.
+    const priorPartials = (S.approvedPartials || []).filter(x =>
+      String(x.loanId) === String(d.loanId) && Number(x.emiNum) === Number(d.emiNum));
+    const priorTotal = priorPartials.reduce((s, x) => s + Number(x.amount || 0), 0);
+    const emiExpected = Number(d.expectedAmount)
+      || priorPartials.reduce((m, x) => Math.max(m, Number(x.expected || 0)), 0);
+    const afterThis = emiExpected > 0
+      ? Math.max(0, emiExpected - priorTotal - Number(d.amount || 0)) : 0;
+    detail = `<div class="appr-detail">
+      <div class="kv kv-big appr-summary">
         <span class="kv-l">Name</span>   <span class="kv-v">${d.customerName}</span>
         <span class="kv-l">Amount</span> <span class="kv-v">${fmt(d.amount)}${Math.abs(diff)>1?` (${diff>0?'+':'–'}${fmt(Math.abs(diff))})`:''}</span>
         <span class="kv-l">Date</span>   <span class="kv-v">${fmtDateDD(d.date)}</span>
+        ${priorTotal ? `<span class="kv-l">Already received</span><span class="kv-v">${fmt(priorTotal)}</span>` : ''}
+        ${priorTotal ? `<span class="kv-l">After approval</span><span class="kv-v" style="color:${afterThis<=1?'#0F6E56':'#A32D2D'}">${afterThis<=1?'Complete - logs one '+fmt(emiExpected)+' row':fmt(afterThis)+' still due'}</span>` : ''}
       </div>
-      <div class="kv">
+      <div class="appr-extra-col">
+        <div class="appr-extra">
+          <div class="kv">
         <span class="kv-l">Loan ID</span>     <span class="kv-v" style="color:#534AB7">${d.loanId}</span>
         <span class="kv-l">Model</span>       <span class="kv-v">${d.model}</span>
         <span class="kv-l">EMI number</span>  <span class="kv-v">EMI ${d.emiNum}</span>
@@ -837,6 +981,9 @@ function subCard(p, showActions, hideRoi) {
         <span class="kv-l">Received</span><span class="kv-v">${String(d.received).toLowerCase()!=='false'?'TRUE':'FALSE'}</span>
         ${d.mode?`<span class="kv-l">Payment mode</span><span class="kv-v">${d.mode}</span>`:''}
         ${d.notes?`<span class="kv-l">Notes</span><span class="kv-v">${d.notes}</span>`:''}
+          </div>
+        </div>
+        <button type="button" class="appr-toggle" onclick="toggleApprDetail(this)">Show more</button>
       </div>
     </div>`;
   }
