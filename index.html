@@ -90,13 +90,15 @@
             <div><label>Bill date <span style="color:#A32D2D">*</span></label><input type="date" id="f-billdate" required></div>
             <div><label>Customer name <span style="color:#A32D2D">*</span></label><input type="text" id="f-cname" placeholder="Full name" oninput="genLoanId()" required></div>
             <div><label>YOB</label><input type="text" id="f-yob" placeholder="Year of Birth"></div>
-            <div><label>Landlord</label><input type="text" id="f-landlord"></div>
-            <div><label>Husband</label><input type="text" id="f-husband"></div>
-            <div><label>Father</label><input type="text" id="f-father"></div>
-            <div><label>Pincode</label><input type="text" id="f-pincode"></div>
-            <div><label>District</label><input type="text" id="f-district"></div>
-            <div><label>Area</label><input type="text" id="f-area"></div>
+            <div class="fg fg-3" style="grid-column:1/-1">
+              <div><label>Landlord</label><input type="text" id="f-landlord"></div>
+              <div><label>Husband</label><input type="text" id="f-husband"></div>
+              <div><label>Father</label><input type="text" id="f-father"></div>
+            </div>
             <div><label>Colony</label><input type="text" id="f-colony"></div>
+            <div><label>Area</label><input type="text" id="f-area"></div>
+            <div><label>District</label><input type="text" id="f-district"></div>
+            <div><label>Pincode</label><input type="text" id="f-pincode"></div>
             <div id="guarantor-wrap" style="position:relative">
               <label>Guarantor name <span style="font-size:11px;color:#888">— type to search existing customers</span></label>
               <input type="text" id="f-guarantor-name" placeholder="Search by customer name" autocomplete="off" oninput="onGuarantorInput()">
@@ -304,12 +306,12 @@
               <button id="ov-emi-submit-btn" class="btn btn-primary" onclick="submitOverviewEmi()">Submit for approval</button>
             </div>
             </div>
-            <div class="divider"></div>
-            <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px">Loan Summary</div>
-            <div class="kv" id="ov-detail-kv" style="font-size:12px"></div>
-            <div class="divider"></div>
-            <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px">Loan Details</div>
-            <div class="kv" id="ov-detail-full" style="font-size:12px"></div>
+            <div class="divider" style="display:none"></div>
+            <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px;display:none">Loan Summary</div>
+            <div class="kv" id="ov-detail-kv" style="font-size:12px;display:none"></div>
+            <div class="divider" style="display:none"></div>
+            <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px;display:none">Loan Details</div>
+            <div class="kv" id="ov-detail-full" style="font-size:12px;display:none"></div>
           </div>
           <div class="ls-placeholder" id="ov-detail-ph">Select a loan to view details</div>
         </div>

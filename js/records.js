@@ -8,12 +8,19 @@ function renderLoans() {
     ? S.sheetLoans
     : S.loans.map(l => ({ ...l.data, status: l.closed?'Closed':'Active', isDefaulted:false, emiCompleted:l.closed, slots:[], numReceivedEmi:l.emis.length }));
 
-  const filtered = q ? source.filter(l =>
-    l.loanId.toLowerCase().includes(q) ||
-    (l.customerName||'').toLowerCase().includes(q) ||
-    (l.phone||'').includes(q) ||
-    (l.aadhaarPan||'').includes(q)
-  ) : source;
+  const filtered = q ? source.filter(l => {
+    const cdKey = String(l.aadhaarPan || '').toUpperCase().replace(/\s/g, '');
+    const cd = (S.customerDetails && S.customerDetails[cdKey]) ? S.customerDetails[cdKey] : null;
+    const custFields = cd ? [cd.yob, cd.landlord, cd.husband, cd.father, cd.colony, cd.area, cd.district, cd.pincode] : [];
+    return (
+      (l.loanId||'').toLowerCase().includes(q) ||
+      (l.customerName||'').toLowerCase().includes(q) ||
+      (l.phone||'').includes(q) ||
+      (l.aadhaarPan||'').includes(q) ||
+      (l.lockAppCode||'').toLowerCase().includes(q) ||
+      custFields.some(f => String(f||'').toLowerCase().includes(q))
+    );
+  }) : source;
 
   filtered.sort((a,b) => loanSort(today, a, b));
 

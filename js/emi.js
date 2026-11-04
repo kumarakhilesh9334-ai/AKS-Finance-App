@@ -953,7 +953,7 @@ function fmtDisplayDate(d) {
 // column B, comma separated: "9123456780, 9234567801". A loan's own cell can
 // carry more than one code, so codes are split the same way here.
 function lockAppCodesOf(loan) {
-  return String((loan && loan.lockingAppCode) || '')
+  return String((loan && (loan.lockAppCode || loan.lockingAppCode)) || '')
     .split(',').map(c => c.trim()).filter(Boolean);
 }
 
@@ -1237,7 +1237,19 @@ function renderAllOverview(query) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const q = (query || '').toLowerCase();
 
-  const filtered = q ? source.filter(l => l.loanId.toLowerCase().includes(q) || (l.customerName||'').toLowerCase().includes(q) || (l.phone||'').includes(q) || (l.guarantor||'').toLowerCase().includes(q) || (l.model||'').toLowerCase().includes(q) || (l.aadhaarPan||'').toLowerCase().includes(q)) : source;
+  const filtered = q ? source.filter(l => {
+    const cdKey = String(l.aadhaarPan || '').toUpperCase().replace(/\s/g, '');
+    const cd = (S.customerDetails && S.customerDetails[cdKey]) ? S.customerDetails[cdKey] : null;
+    const custFields = cd ? [cd.yob, cd.landlord, cd.husband, cd.father, cd.colony, cd.area, cd.district, cd.pincode] : [];
+    return l.loanId.toLowerCase().includes(q) ||
+      (l.customerName||'').toLowerCase().includes(q) ||
+      (l.phone||'').includes(q) ||
+      (l.guarantor||'').toLowerCase().includes(q) ||
+      (l.model||'').toLowerCase().includes(q) ||
+      (l.aadhaarPan||'').toLowerCase().includes(q) ||
+      ((l.lockAppCode || l.lockingAppCode) || '').toLowerCase().includes(q) ||
+      custFields.some(f => String(f||'').toLowerCase().includes(q));
+  }) : source;
 
   const upcoming  = [];
   const overdue   = [];
@@ -1705,18 +1717,18 @@ async function selectOverviewLoan(loanId) {
 
     let custDetailHtml = '';
     const cdKey = String(loan.aadhaarPan || '').toUpperCase().replace(/\s/g, '');
+    let cdRows = [];
     const cd = (S.customerDetails && S.customerDetails[cdKey]) ? S.customerDetails[cdKey] : null;
-    if (cd) {
-      const cdRows = [];
-      if (loan.customerName) cdRows.push(['Customer Name', loan.customerName]);
-      if (cd.yob) cdRows.push(['YOB', cd.yob]);
-      if (cd.landlord) cdRows.push(['Landlord', cd.landlord]);
-      if (cd.husband) cdRows.push(['Husband', cd.husband]);
-      if (cd.father) cdRows.push(['Father', cd.father]);
-      if (cd.pincode) cdRows.push(['Pincode', cd.pincode]);
-      if (cd.district) cdRows.push(['District', cd.district]);
-      if (cd.area) cdRows.push(['Area', cd.area]);
-      if (cd.colony) cdRows.push(['Colony', cd.colony]);
+    cdRows.push(['Customer AADHAR / PAN', Df(loan.aadhaarPan)]);
+    cdRows.push(['Customer Name', Df(loan.customerName)]);
+    cdRows.push(['YOB', Df(cd ? cd.yob : '')]);
+    cdRows.push(['Landlord', Df(cd ? cd.landlord : '')]);
+    cdRows.push(['Husband', Df(cd ? cd.husband : '')]);
+    cdRows.push(['Father', Df(cd ? cd.father : '')]);
+    cdRows.push(['Colony', Df(cd ? cd.colony : '')]);
+    cdRows.push(['Area', Df(cd ? cd.area : '')]);
+    cdRows.push(['District', Df(cd ? cd.district : '')]);
+    cdRows.push(['Pincode', Df(cd ? cd.pincode : '')]);
       if (cdRows.length) {
         custDetailHtml = `<div class="divider"></div>
           <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px">Customer Detail</div>
@@ -1724,7 +1736,77 @@ async function selectOverviewLoan(loanId) {
           cdRows.map(r => `<span class="kv-l">${r[0]}</span><span class="kv-v">${r[1]}</span>`).join('') +
           `</div>`;
       }
-    }
+    const mainRows = [
+      ['Bill Date', Dtf(loan.billDate)],
+      ['Maximum Interest Discount Amount', Mf(loan.maxInterestDiscount)],
+      ['Total Pending Amount', Mf(loan.totalPending)],
+      ['Down Payment %', loan.downPaymentPct != null && loan.downPaymentPct !== '' ? Math.round(Number(loan.downPaymentPct) * 100) + '%' : '—'],
+      ['Customer Mobile No', loan.phone ? smsLink(loan.phone) : '—'],
+      ['Guarantor / Alternate No / Comments', (() => { const g = String(loan.guarantor||'').trim(); if (!g) return '—'; const m = g.match(/\b(\d{10})\b/); if (m) return g.replace(m[1], smsLink(m[1])); return g; })()],
+      ['Locking App', Df(loan.lockingApp)],
+      ['Lock App Code', (lockAppCodesOf(loan).length ? lockCodeLines(lockAppCodesOf(loan)) : '—')],
+      ['Customer\'s Codes', (() => {
+        const key = String(loan.customerId || loan.customerName || '').trim();
+        const custCodes = [];
+        if (key) (S.sheetLoans || []).forEach(l => {
+          if (String(l.customerId || l.customerName || '').trim() !== key) return;
+          lockAppCodesOf(l).forEach(c => { if (custCodes.indexOf(c) === -1) custCodes.push(c); });
+        });
+        return custCodes.length ? lockCodeLines(custCodes) : '—';
+      })()],
+      ['Lock App Removed', Boolf(loan.lockRemoved)],
+      ['Recovery Charge', Mf(loan.recoveryCharge)],
+      ['Defaulted', Boolf(loan.isDefaulted)],
+      ['Default Comment', Df(loan.defaultComment)],
+      ['Drive Link', (() => {
+        let link = loan.driveLink;
+        if (!link) {
+          const key = String(loan.customerId || loan.customerName || '').trim();
+          if (key) {
+            const found = (S.sheetLoans || []).find(l => String(l.customerId || l.customerName || '').trim() === key && l.driveLink);
+            if (found) link = found.driveLink;
+          }
+        }
+        return link ? '<a href="'+link+'" target="_blank" style="color:#534AB7">Open ↗</a>' : '—';
+      })()],
+    ];
+    const loanRows = [
+      ['Bill Date', Dtf(loan.billDate)],
+      ['Loan ID', Df(loan.loanId)],
+      ['Mobile Model', Df(loan.model)],
+      ['Device Type', Df(loan.deviceType)],
+      ['Mobile Amount', Mf(loan.mobileAmount)],
+      ['Down Payment', Mf(loan.downPayment)],
+      ['Processing Fee', Mf(loan.processingFee)],
+      ['Interest', Mf(loan.interest)],
+      ['EMI Duration', loan.emiDuration ? loan.emiDuration + ' months' : '—'],
+      ['EMI Start Date', Dtf(loan.emiStartDate)],
+      ['Total Amount', Mf(loan.totalAmount)],
+      ['Total EMI', Mf(loan.totalEmi)],
+      ['Monthly EMI', Mf(loan.monthlyEmi)],
+      ['Finance Amount', Mf(loan.financeAmount)],
+      ['App Lock Charge', Mf(loan.appLockCharge)],
+      ['AK Share', akPct + '%'],
+      ['AKS Share', aksPct + '%'],
+    ];
+    const newSections = `
+      <div class="divider"></div>
+      <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px;text-align:left">Main Detail</div>
+      <div class="kv" style="font-size:12px;text-align:left">${mainRows.map(([l,v])=>`<span class="kv-l">${l}</span><span class="kv-v">${v}</span>`).join('')}</div>
+      <div class="divider"></div>
+      <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px;text-align:left">Customer Detail</div>
+      <div class="kv" style="font-size:12px;text-align:left">${cdRows.map(([l,v])=>`<span class="kv-l">${l}</span><span class="kv-v">${v}</span>`).join('')}</div>
+      <div class="divider"></div>
+      <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px;text-align:left">Loan Detail</div>
+      <div class="kv" style="font-size:12px;text-align:left">${loanRows.map(([l,v])=>`<span class="kv-l">${l}</span><span class="kv-v">${v}</span>`).join('')}</div>
+    `;
+    const oldExtra = $('ov-detail-extra');
+    if (oldExtra) oldExtra.remove();
+    const extra = document.createElement('div');
+    extra.id = 'ov-detail-extra';
+    extra.innerHTML = newSections;
+    $('ov-detail-full').parentElement.appendChild(extra);
+
     $('ov-detail-full').innerHTML = fullRows
       .filter(([label]) => !HIDDEN_LABELS.has(label))
       .map(([label, val]) => `<span class="kv-l">${label}</span><span class="kv-v">${val}</span>`
