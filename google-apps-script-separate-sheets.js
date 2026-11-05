@@ -214,6 +214,7 @@ function handleGet(e, opts) {
             phone:           (r[C.phone] instanceof Date) ? '' : String(r[C.phone]||'').trim(),
             aadhaarPan:      (r[C.aadhaarPan] instanceof Date) ? '' : String(r[C.aadhaarPan]||'').trim(),
             defaultComment:  String(r[C.defaultComment]||'').trim(),
+            guarantor:       String(r[C.guarantor]||'').trim(),
             isDefaulted, emiCompleted, status, _slim:true,
           };
         });

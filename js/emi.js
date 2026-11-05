@@ -756,6 +756,7 @@ function cdCard(l, type) {
       ${hasPendingEmi ? `<span class="emi-late-pill" style="${pillStyle}">⏳ Pending</span>` : ''}
       ${partialIndicator(l, sc)}
     </div>
+    ${commentRowHtml(l, sc)}
   </div>`;
 }
 
@@ -1048,6 +1049,24 @@ function isDefaultedOrOverdue(loan) {
   due.setHours(0, 0, 0, 0);
   const today = new Date(); today.setHours(0, 0, 0, 0);
   return due < today;
+}
+
+// Column R is free text ("Guarantor / Alternate No / Comments"). On an overdue
+// or defaulted card it becomes the card's last row, but only when it has text.
+// One line keeps the lists compact; the full value stays in the loan detail and
+// in the title tooltip. A hairline above it separates the row from the card's
+// main details. Plain text on purpose — tapping anywhere still opens the loan,
+// the same as the rest of the card.
+function commentRowHtml(loan, colour, maxWidth) {
+  if (!isDefaultedOrOverdue(loan)) return '';
+  const text = String((loan && loan.guarantor) || '').replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  const safe = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  const onDark = /#fff|white|rgba?\(\s*255\s*,\s*255\s*,\s*255/i.test(colour);
+  const line = onDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.12)';
+  const cap = maxWidth ? `;max-width:${maxWidth}` : '';
+  return `<div class="emi-card-comment" title="${safe}" style="margin-top:4px;padding-top:4px;border-top:1px solid ${line};font-size:11px;line-height:14px;color:${colour};overflow:hidden;text-overflow:ellipsis;white-space:nowrap${cap}">Comment: ${safe}</div>`;
 }
 
 // One entry per (loan, code, number). The added date is the only signal that a
@@ -1476,6 +1495,7 @@ function overviewCard(l, type) {
       ${lateTxt ? `<span class="emi-late-pill" style="${pillStyle}">&#9888; ${lateTxt}</span>` : ''}
       ${partialIndicator(l, sc)}
     </div>
+    ${commentRowHtml(l, sc)}
   </div>`;
 }
 
@@ -2079,6 +2099,7 @@ function renderOverviewLoans() {
           <span style="font-size:11px;color:rgba(255,255,255,0.75);text-align:right;flex:1 1 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:14px">${l.model || ''}</span>
         </div>
       </div>
+      ${commentRowHtml(l, 'rgba(255,255,255,0.75)', '420px')}
     </div>`;
   }
   el.innerHTML = `<div style="font-size:12px;color:#888;margin-bottom:0.5rem">${loans.length} loan(s) sorted by bill date ▼</div>
@@ -2130,6 +2151,7 @@ function renderNewSimAlerts() {
         <span style="font-size:13px;font-weight:600;color:${fill.tc};white-space:nowrap;line-height:16px">${a.number}</span>
         ${model ? `<span style="font-size:11px;color:${sub};white-space:nowrap">${model}</span>` : ''}
       </div>
+      ${commentRowHtml(a.loan, sub)}
     </div>`;
   }).join('');
 
@@ -2481,6 +2503,7 @@ function renderOverviewOverdue() {
             <span style="font-size:12px;font-weight:400;color:rgba(255,255,255,0.75);text-align:left;flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:14px">${modelTxt}</span>
           </div>
         </div>
+        ${commentRowHtml(l, 'rgba(255,255,255,0.75)')}
       </div>`;
     }
     return `<div class="card" style="margin-bottom:0.5rem;padding:0;overflow-x:auto;overflow-y:hidden">
