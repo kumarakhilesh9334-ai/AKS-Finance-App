@@ -2121,6 +2121,7 @@ function renderNewSimAlerts() {
     const onDark = fill.tc === '#fff';
     const sub   = onDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)';
     return `<div class="emi-card new-sim" data-loanid="${a.loan.loanId}" style="cursor:pointer;background:${fill.bg};color:${fill.tc};border-left:3px solid rgba(255,255,255,0.3);border:1px solid ${fill.border};margin-bottom:4px;padding:7px 10px">
+      ${revisedBadgeHtml(a.loan)}
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
         <span style="font-size:12px;font-weight:700;color:${fill.tc};white-space:nowrap;line-height:16px">${a.loan.loanId}</span>
         <span style="font-size:11px;color:${sub};white-space:nowrap;line-height:16px">Added: ${fmtDisplayDate(a.addedOn)}</span>
