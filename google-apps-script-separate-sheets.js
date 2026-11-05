@@ -496,7 +496,6 @@ function handleGet(e, opts) {
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
 
-  // ── Read Stock data (admin only) ─────────────────────────────────
   if (action === 'readStock') {
     try {
       const forceRefresh = (e && e.parameter && e.parameter.forceRefresh === '1');
@@ -1450,21 +1449,32 @@ function readLockStatus(ss) {
 }
 
 // ── Locking App Code -> the SIM numbers under it ──────────────────────────
-// One row per code: col A is the code, col B holds every number for that code
-// separated by commas (e.g. "9123456780, 9234567801"). A repeated code appends
-// to the same list rather than replacing it.
+// One row per number: col A is the code, col B one mobile number, col C the
+// date that number was added.
+//
+// Older sheets kept every number for a code in one cell, comma separated, so
+// col B is still split on commas and a missing col C is simply left blank.
+// Repeating the same number keeps the most recent row's date (the sheet is
+// appended to over time, so the later row is the newer one).
+//
+// minCols is 3, not 2: Config may still report only the two old columns, and
+// the date must never be dropped just because Config is a column behind.
 function readCodeToSim(ss) {
   const sheet = ss.getSheetByName(CODE_TO_SIM_SHEET);
   if (!sheet) return {};
-  const rows = readDataRows(sheet, 2, configBounds(ss)[CODE_TO_SIM_SHEET], 2, 'codeToSim.');
+  const rows = readDataRows(sheet, 2, configBounds(ss)[CODE_TO_SIM_SHEET], 3, 'codeToSim.');
   const map = {};
   rows.forEach(r => {
     const code = String(r[0]||'').trim();
     if (!code) return;
     if (!map[code]) map[code] = [];
+    const addedOn = fmtDate(r[2]);
     String(r[1]||'').split(',').forEach(n => {
       const num = String(n).trim();
-      if (num && map[code].indexOf(num) === -1) map[code].push(num);
+      if (!num) return;
+      const at = map[code].findIndex(e => e.number === num);
+      if (at === -1) map[code].push({ number: num, addedOn: addedOn });
+      else if (addedOn) map[code][at].addedOn = addedOn;
     });
   });
   return map;

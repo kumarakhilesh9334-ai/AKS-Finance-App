@@ -949,17 +949,38 @@ function fmtDisplayDate(d) {
 }
 
 // ── Lock App Code -> SIM numbers ──────────────────────────────────────────
-// The codeToSim tab holds one row per code with every number under it in
-// column B, comma separated: "9123456780, 9234567801". A loan's own cell can
-// carry more than one code, so codes are split the same way here.
+// The codeToSim tab now holds one row per number (code | number | added date).
+// A loan's own cell can carry more than one code, so codes are split here too.
 function lockAppCodesOf(loan) {
   return String((loan && (loan.lockAppCode || loan.lockingAppCode)) || '')
     .split(',').map(c => c.trim()).filter(Boolean);
 }
 
-function simNumbersFor(code) {
+// S.codeToSim can hold two shapes: the current { code: [{number, addedOn}] }
+// from Apps Script, or the older { code: ["number", ...] } still sitting in a
+// cached snapshot/localStorage. Normalise both so a stale cache keeps working
+// instead of making the lock-code block go blank.
+function simEntriesFor(code) {
   const map = S.codeToSim || {};
-  return Array.isArray(map[code]) ? map[code] : [];
+  const list = map[code];
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  list.forEach(item => {
+    if (typeof item === 'string') {
+      const number = item.trim();
+      if (number) out.push({ number: number, addedOn: '' });
+      return;
+    }
+    if (!item) return;
+    const number = String(item.number != null ? item.number : (item.n != null ? item.n : '')).trim();
+    const addedOn = String(item.addedOn != null ? item.addedOn : (item.date != null ? item.date : '')).trim();
+    if (number) out.push({ number: number, addedOn: addedOn });
+  });
+  return out;
+}
+
+function simNumbersFor(code) {
+  return simEntriesFor(code).map(e => e.number);
 }
 
 // One line per code: "xxxxxxx: (9123456780, 9234567801)". A code with no
@@ -983,6 +1004,7 @@ function lockCodeLines(codes) {
   }).join('<br>');
 }
 
+
 // The two Loan Summary rows: this loan's own codes first, then every code
 // sitting on any loan belonging to the same customer. Customers are grouped on
 // customerId, falling back to the name where the sheet leaves it blank.
@@ -1000,6 +1022,65 @@ function lockSummaryHtml(loan) {
   if (own.length) html += `<span class="kv-l">Lock App Code</span><span class="kv-v">${lockCodeLines(own)}</span>`;
   if (custCodes.length) html += `<span class="kv-l">Customer's Codes</span><span class="kv-v">${lockCodeLines(custCodes)}</span>`;
   return html;
+}
+
+// ── New SIM alerts ────────────────────────────────────────────────────────
+// A lock-app code can pick up a new mobile number at any time (a SIM swap).
+// For defaulted and overdue loans that is worth seeing immediately, so the
+// New SIM view reports every codeToSim row dated inside the last 100 days.
+const NEW_SIM_DAYS = 100;
+
+function newSimCutoff() {
+  const cut = new Date(); cut.setHours(0, 0, 0, 0);
+  cut.setDate(cut.getDate() - NEW_SIM_DAYS);
+  return cut;
+}
+
+// A loan qualifies when it is flagged Defaulted, or it is still active and its
+// next EMI date is in the past. Closed loans never qualify.
+function isDefaultedOrOverdue(loan) {
+  if (!loan) return false;
+  if (loan.isDefaulted) return true;
+  if (loan.emiCompleted || loan.status === 'Closed') return false;
+  if (!loan.nextEmiDate) return false;
+  const due = parseSheetDate(loan.nextEmiDate);
+  if (!due) return false;
+  due.setHours(0, 0, 0, 0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return due < today;
+}
+
+// One entry per (loan, code, number). The added date is the only signal that a
+// number is new; a row with no date is old data and is left out.
+function newSimAlerts() {
+  const cutoff = newSimCutoff();
+  const loans = (S.sheetLoans && S.sheetLoans.length) ? S.sheetLoans : [];
+  const out = [];
+  const seen = {};
+  loans.forEach(loan => {
+    if (!isDefaultedOrOverdue(loan)) return;
+    lockAppCodesOf(loan).forEach(code => {
+      simEntriesFor(code).forEach(entry => {
+        const added = parseSheetDate(entry.addedOn);
+        if (!added) return;
+        added.setHours(0, 0, 0, 0);
+        if (added < cutoff) return;
+        const key = loan.loanId + '\u0001' + code + '\u0001' + entry.number;
+        if (seen[key]) return;
+        seen[key] = 1;
+        out.push({ loan: loan, code: code, number: entry.number, addedOn: entry.addedOn, added: added });
+      });
+    });
+  });
+  out.sort((a, b) => b.added - a.added || a.loan.loanId.localeCompare(b.loan.loanId));
+  return out;
+}
+
+function updateNewSimCount() {
+  const btn = $('ov-newsim-toggle');
+  if (!btn) return;
+  const n = newSimAlerts().length;
+  btn.textContent = 'New SIM' + (n ? ' (' + n + ')' : '');
 }
 
 // ── Revised Date form ─────────────────────────────────────────────────────
@@ -1133,11 +1214,27 @@ S.showOverviewRevised = false;
 S.showOverviewPartials = false;
 S.showOverviewOverdue = false;
 S.showOverviewLoans = false;
+S.showOverviewNewSim = false;
+
+// Toggle pills carry their own inline colours, so one helper keeps the active
+// paint identical from every entry point (button, page re-entry, all-cards).
+function setOverviewToggle(btn, active, colour) {
+  if (!btn) return;
+  btn.style.background = active ? colour : 'none';
+  btn.style.color = active ? '#fff' : colour;
+}
 
 function renderAllOverview(query) {
   try {
-  if (!S.showOverviewRevised && !S.showOverviewPartials && !S.showOverviewOverdue && !S.showOverviewLoans) {
+  updateNewSimCount();
+  if (!S.showOverviewRevised && !S.showOverviewPartials && !S.showOverviewOverdue
+      && !S.showOverviewLoans && !S.showOverviewNewSim) {
     const a = $('ov-allcards-toggle'); if (a) { a.style.background='#534AB7'; a.style.color='#fff'; }
+    setOverviewToggle($('ov-revised-toggle'),  false, '#D4A017');
+    setOverviewToggle($('ov-partials-toggle'), false, '#A32D2D');
+    setOverviewToggle($('ov-overdue-toggle'),  false, '#c62828');
+    setOverviewToggle($('ov-loans-toggle'),    false, '#0F6E56');
+    setOverviewToggle($('ov-newsim-toggle'),   false, '#7B1FA2');
   }
   console.log('renderAllOverview called, sheetLoans length:', S.sheetLoans ? S.sheetLoans.length : 0);
   const source = (S.sheetLoans && S.sheetLoans.length) ? S.sheetLoans
@@ -1151,6 +1248,11 @@ function renderAllOverview(query) {
         aksShare: l.data.aksShare / 100, emiDuration: l.data.tenure,
         slots: [], numReceivedEmi: l.emis.length, lateEmis: 0, latePaymentFine: 0,
       }));
+
+  // Extra views are full-width panels under the cards. Hide them all up front;
+  // whichever flag is on shows its own panel and returns.
+  ['ov-revised-view','ov-partials-view','ov-overdue-view','ov-loans-view','ov-newsim-view']
+    .forEach(id => { const el = $(id); if (el) el.style.display = 'none'; });
 
   // Show/hide revised view
   if (S.showOverviewRevised) {
@@ -1229,9 +1331,18 @@ function renderAllOverview(query) {
     if (ov) ov.style.display = 'block';
     renderOverviewOverdue();
     return;
-  } else {
-    const ov = $('ov-overdue-view');
-    if (ov) ov.style.display = 'none';
+  }
+
+  // Show/hide the new-SIM view
+  if (S.showOverviewNewSim) {
+    const tc = document.querySelector('.emi-five-col');
+    if (tc) tc.style.display = 'none';
+    const mt = $('ov-tabs');
+    if (mt) mt.style.display = 'none';
+    const nv = $('ov-newsim-view');
+    if (nv) nv.style.display = 'block';
+    renderNewSimAlerts();
+    return;
   }
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -1297,36 +1408,49 @@ function renderAllOverview(query) {
 } catch(e) { console.error('renderAllOverview error:', e); }
 }
 
+// One colour ladder for every loan card, so a loan wears the same fill in the
+// All grid and in the New SIM list. Thresholds match the overdue ramp exactly:
+// defaulted → near-black, 90+/30+/1+ days overdue → darker reds, due today →
+// yellow. A future due date keeps the plain white card.
+function loanCardFill(loan) {
+  const plain = { bg: '', border: '', tc: '#1a1a1a', sc: '#888', label: '' };
+  if (!loan) return plain;
+  if (loan.isDefaulted) return { bg: '#1A1A1A', border: '#1A1A1A', tc: '#fff', sc: 'rgba(255,255,255,0.75)', label: '⚠️ Defaulted' };
+  if (loan.emiCompleted || loan.status === 'Closed') return { bg: '#1565C0', border: '#1565C0', tc: '#fff', sc: 'rgba(255,255,255,0.75)', label: '✓ Closed' };
+  const due = loan.nextEmiDate ? parseSheetDate(loan.nextEmiDate) : null;
+  if (!due) return plain;
+  due.setHours(0, 0, 0, 0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const days = Math.round((today - due) / 86400000);
+  if (days > 90) return { bg: '#5C0000', border: '#5C0000', tc: '#fff', sc: 'rgba(255,255,255,0.75)', label: '90+ days overdue' };
+  if (days > 30) return { bg: '#980000', border: '#980000', tc: '#fff', sc: 'rgba(255,255,255,0.75)', label: '30+ days overdue' };
+  if (days > 0)  return { bg: '#dd7e6b', border: '#dd7e6b', tc: '#fff', sc: 'rgba(255,255,255,0.75)', label: days + 'd overdue' };
+  if (days === 0) return { bg: '#F5C518', border: '#F5C518', tc: '#1A1A1A', sc: 'rgba(0,0,0,0.6)', label: 'Due today' };
+  return plain;
+}
+
 function overviewCard(l, type) {
   const today = new Date(); today.setHours(0,0,0,0);
   const billTxt = l.billDate ? fmtDisplayDate(l.billDate) : '';
   const lateTxt = l.lateEmis ? l.lateEmis + '/' + l.numReceivedEmi + ' late' : '';
   const hasPendingEmi = (S.pending && S.pending.some(p => p.type==='emi' && p.data.loanId===l.loanId && p.status==='pending'))
     || Object.keys(S._submittedEmis || {}).some(k => k.startsWith(l.loanId + '_'));
-  let bg = '', border = '', tc = '#1a1a1a', sc = '#888', overdueLabel = '';
+  const fill = loanCardFill(l);
+  const bg = fill.bg, border = fill.border, tc = fill.tc, sc = fill.sc;
+  let overdueLabel = '';
   let rightDate = '';
 
   if (type === 'upcoming' || type === 'overdue') {
-    if (l.nextEmiDate) {
-      const due = new Date(l.nextEmiDate); due.setHours(0,0,0,0);
-      const days = Math.round((today - due) / 86400000);
-      rightDate = 'Due: ' + fmtDisplayDate(l.nextEmiDate);
-      if (days > 90)        { bg='#5C0000';border='#5C0000';tc='#fff';sc='rgba(255,255,255,0.75)';overdueLabel='90+ days overdue'; }
-      else if (days > 30)   { bg='#980000';border='#980000';tc='#fff';sc='rgba(255,255,255,0.75)';overdueLabel='30+ days overdue'; }
-      else if (days > 0)    { bg='#dd7e6b';border='#dd7e6b';tc='#fff';sc='rgba(255,255,255,0.75)';overdueLabel=days+'d overdue'; }
-      else if (due.getTime()===today.getTime()) { bg='#F5C518';border='#F5C518';tc='#1A1A1A';sc='rgba(0,0,0,0.6)';overdueLabel='Due today'; }
-    } else {
-      rightDate = '—';
-    }
+    // Closed/defaulted labels belong to their own columns, not this one.
+    rightDate = l.nextEmiDate ? 'Due: ' + fmtDisplayDate(l.nextEmiDate) : '—';
+    overdueLabel = (fill.label === '⚠️ Defaulted' || fill.label === '✓ Closed') ? '' : fill.label;
   } else if (type === 'closed') {
     // Best case of the ladder: a finished loan is terminal-good → blue, the one
     // hue that stays distinct from red for every type of colour blindness.
     rightDate = '✓ Closed';
-    bg = '#1565C0'; border = '#1565C0'; tc = '#fff'; sc = 'rgba(255,255,255,0.75)';
   } else {
     // Worst case: write-off → near-black, the darkest end of the ramp.
     rightDate = '⚠️ Defaulted';
-    bg = '#1A1A1A'; border = '#1A1A1A'; tc = '#fff'; sc = 'rgba(255,255,255,0.75)';
   }
 
   const cardStyle = bg ? `background:${bg};border-left-color:${border};border-color:${border}` : '';
@@ -1827,16 +1951,14 @@ function toggleOverviewAllCards() {
   S.showOverviewPartials = false;
   S.showOverviewOverdue = false;
   S.showOverviewLoans = false;
+  S.showOverviewNewSim = false;
   $('ov-allcards-toggle').style.background = '#534AB7';
   $('ov-allcards-toggle').style.color = '#fff';
-  const rbtn = $('ov-revised-toggle');
-  if (rbtn) { rbtn.style.background = 'none'; rbtn.style.color = '#D4A017'; }
-  const pbtn = $('ov-partials-toggle');
-  if (pbtn) { pbtn.style.background = 'none'; pbtn.style.color = '#A32D2D'; }
-  const obtn = $('ov-overdue-toggle');
-  if (obtn) { obtn.style.background = 'none'; obtn.style.color = '#c62828'; }
-  const lbtn = $('ov-loans-toggle');
-  if (lbtn) { lbtn.style.background = 'none'; lbtn.style.color = '#0F6E56'; }
+  setOverviewToggle($('ov-revised-toggle'),  false, '#D4A017');
+  setOverviewToggle($('ov-partials-toggle'), false, '#A32D2D');
+  setOverviewToggle($('ov-overdue-toggle'),  false, '#c62828');
+  setOverviewToggle($('ov-loans-toggle'),    false, '#0F6E56');
+  setOverviewToggle($('ov-newsim-toggle'),   false, '#7B1FA2');
   renderAllOverview($('ov-search') ? $('ov-search').value : '');
 }
 
@@ -1845,19 +1967,15 @@ function toggleOverviewRevised() {
   S.showOverviewPartials = false;
   S.showOverviewOverdue = false;
   S.showOverviewLoans = false;
+  S.showOverviewNewSim = false;
+  const active = S.showOverviewRevised;
   const abtn = $('ov-allcards-toggle');
-  if (abtn) { abtn.style.background = S.showOverviewRevised ? 'none' : '#534AB7'; abtn.style.color = S.showOverviewRevised ? '#534AB7' : '#fff'; }
-  const btn = $('ov-revised-toggle');
-  if (btn) {
-    btn.style.background = S.showOverviewRevised ? '#D4A017' : 'none';
-    btn.style.color = S.showOverviewRevised ? '#fff' : '#D4A017';
-  }
-  const pbtn = $('ov-partials-toggle');
-  if (pbtn) { pbtn.style.background = 'none'; pbtn.style.color = '#A32D2D'; }
-  const obtn = $('ov-overdue-toggle');
-  if (obtn) { obtn.style.background = 'none'; obtn.style.color = '#c62828'; }
-  const lbtn = $('ov-loans-toggle');
-  if (lbtn) { lbtn.style.background = 'none'; lbtn.style.color = '#0F6E56'; }
+  if (abtn) { abtn.style.background = active ? 'none' : '#534AB7'; abtn.style.color = active ? '#534AB7' : '#fff'; }
+  setOverviewToggle($('ov-revised-toggle'),  active, '#D4A017');
+  setOverviewToggle($('ov-partials-toggle'), false, '#A32D2D');
+  setOverviewToggle($('ov-overdue-toggle'),  false, '#c62828');
+  setOverviewToggle($('ov-loans-toggle'),    false, '#0F6E56');
+  setOverviewToggle($('ov-newsim-toggle'),   false, '#7B1FA2');
   renderAllOverview($('ov-search') ? $('ov-search').value : '');
 }
 
@@ -1866,19 +1984,15 @@ function toggleOverviewPartials() {
   S.showOverviewRevised = false;
   S.showOverviewOverdue = false;
   S.showOverviewLoans = false;
+  S.showOverviewNewSim = false;
+  const active = S.showOverviewPartials;
   const abtn = $('ov-allcards-toggle');
-  if (abtn) { abtn.style.background = S.showOverviewPartials ? 'none' : '#534AB7'; abtn.style.color = S.showOverviewPartials ? '#534AB7' : '#fff'; }
-  const rbtn = $('ov-revised-toggle');
-  if (rbtn) { rbtn.style.background = 'none'; rbtn.style.color = '#D4A017'; }
-  const btn = $('ov-partials-toggle');
-  if (btn) {
-    btn.style.background = S.showOverviewPartials ? '#A32D2D' : 'none';
-    btn.style.color = S.showOverviewPartials ? '#fff' : '#A32D2D';
-  }
-  const obtn = $('ov-overdue-toggle');
-  if (obtn) { obtn.style.background = 'none'; obtn.style.color = '#c62828'; }
-  const lbtn = $('ov-loans-toggle');
-  if (lbtn) { lbtn.style.background = 'none'; lbtn.style.color = '#0F6E56'; }
+  if (abtn) { abtn.style.background = active ? 'none' : '#534AB7'; abtn.style.color = active ? '#534AB7' : '#fff'; }
+  setOverviewToggle($('ov-revised-toggle'),  false, '#D4A017');
+  setOverviewToggle($('ov-partials-toggle'), active, '#A32D2D');
+  setOverviewToggle($('ov-overdue-toggle'),  false, '#c62828');
+  setOverviewToggle($('ov-loans-toggle'),    false, '#0F6E56');
+  setOverviewToggle($('ov-newsim-toggle'),   false, '#7B1FA2');
   renderAllOverview($('ov-search') ? $('ov-search').value : '');
 }
 
@@ -1887,19 +2001,15 @@ function toggleOverviewOverdue() {
   S.showOverviewRevised = false;
   S.showOverviewPartials = false;
   S.showOverviewLoans = false;
+  S.showOverviewNewSim = false;
+  const active = S.showOverviewOverdue;
   const abtn = $('ov-allcards-toggle');
-  if (abtn) { abtn.style.background = S.showOverviewOverdue ? 'none' : '#534AB7'; abtn.style.color = S.showOverviewOverdue ? '#534AB7' : '#fff'; }
-  const rbtn = $('ov-revised-toggle');
-  if (rbtn) { rbtn.style.background = 'none'; rbtn.style.color = '#D4A017'; }
-  const pbtn = $('ov-partials-toggle');
-  if (pbtn) { pbtn.style.background = 'none'; pbtn.style.color = '#A32D2D'; }
-  const btn = $('ov-overdue-toggle');
-  if (btn) {
-    btn.style.background = S.showOverviewOverdue ? '#c62828' : 'none';
-    btn.style.color = S.showOverviewOverdue ? '#fff' : '#c62828';
-  }
-  const lbtn = $('ov-loans-toggle');
-  if (lbtn) { lbtn.style.background = 'none'; lbtn.style.color = '#0F6E56'; }
+  if (abtn) { abtn.style.background = active ? 'none' : '#534AB7'; abtn.style.color = active ? '#534AB7' : '#fff'; }
+  setOverviewToggle($('ov-revised-toggle'),  false, '#D4A017');
+  setOverviewToggle($('ov-partials-toggle'), false, '#A32D2D');
+  setOverviewToggle($('ov-overdue-toggle'),  active, '#c62828');
+  setOverviewToggle($('ov-loans-toggle'),    false, '#0F6E56');
+  setOverviewToggle($('ov-newsim-toggle'),   false, '#7B1FA2');
   renderAllOverview($('ov-search') ? $('ov-search').value : '');
 }
 
@@ -1908,19 +2018,32 @@ function toggleOverviewLoans() {
   S.showOverviewRevised = false;
   S.showOverviewPartials = false;
   S.showOverviewOverdue = false;
+  S.showOverviewNewSim = false;
+  const active = S.showOverviewLoans;
   const abtn = $('ov-allcards-toggle');
-  if (abtn) { abtn.style.background = S.showOverviewLoans ? 'none' : '#534AB7'; abtn.style.color = S.showOverviewLoans ? '#534AB7' : '#fff'; }
-  const rbtn = $('ov-revised-toggle');
-  if (rbtn) { rbtn.style.background = 'none'; rbtn.style.color = '#D4A017'; }
-  const pbtn = $('ov-partials-toggle');
-  if (pbtn) { pbtn.style.background = 'none'; pbtn.style.color = '#A32D2D'; }
-  const obtn = $('ov-overdue-toggle');
-  if (obtn) { obtn.style.background = 'none'; obtn.style.color = '#c62828'; }
-  const btn = $('ov-loans-toggle');
-  if (btn) {
-    btn.style.background = S.showOverviewLoans ? '#0F6E56' : 'none';
-    btn.style.color = S.showOverviewLoans ? '#fff' : '#0F6E56';
-  }
+  if (abtn) { abtn.style.background = active ? 'none' : '#534AB7'; abtn.style.color = active ? '#534AB7' : '#fff'; }
+  setOverviewToggle($('ov-revised-toggle'),  false, '#D4A017');
+  setOverviewToggle($('ov-partials-toggle'), false, '#A32D2D');
+  setOverviewToggle($('ov-overdue-toggle'),  false, '#c62828');
+  setOverviewToggle($('ov-loans-toggle'),    active, '#0F6E56');
+  setOverviewToggle($('ov-newsim-toggle'),   false, '#7B1FA2');
+  renderAllOverview($('ov-search') ? $('ov-search').value : '');
+}
+
+function toggleOverviewNewSim() {
+  S.showOverviewNewSim = !S.showOverviewNewSim;
+  S.showOverviewRevised = false;
+  S.showOverviewPartials = false;
+  S.showOverviewOverdue = false;
+  S.showOverviewLoans = false;
+  const active = S.showOverviewNewSim;
+  const abtn = $('ov-allcards-toggle');
+  if (abtn) { abtn.style.background = active ? 'none' : '#534AB7'; abtn.style.color = active ? '#534AB7' : '#fff'; }
+  setOverviewToggle($('ov-revised-toggle'),  false, '#D4A017');
+  setOverviewToggle($('ov-partials-toggle'), false, '#A32D2D');
+  setOverviewToggle($('ov-overdue-toggle'),  false, '#c62828');
+  setOverviewToggle($('ov-loans-toggle'),    false, '#0F6E56');
+  setOverviewToggle($('ov-newsim-toggle'),   active, '#7B1FA2');
   renderAllOverview($('ov-search') ? $('ov-search').value : '');
 }
 
@@ -1960,6 +2083,65 @@ function renderOverviewLoans() {
   }
   el.innerHTML = `<div style="font-size:12px;color:#888;margin-bottom:0.5rem">${loans.length} loan(s) sorted by bill date ▼</div>
     <div style="overflow-x:auto;overflow-y:hidden"><div style="min-width:max-content">${cardHtml}</div></div>`;
+}
+
+// Full-width list of new-number alerts. Each card carries data-loanid, so the
+// existing #page-all-loans card click handler opens the same detail panel a
+// normal loan card opens. Clicking anywhere on the alert is enough.
+function renderNewSimAlerts() {
+  const el = $('ov-newsim-view');
+  if (!el) return;
+  if (!S._fullLoaded) {
+    el.innerHTML = '<div class="emi-col-empty" style="color:#534AB7">Loading loan details…</div>';
+    return;
+  }
+  const q = ($('ov-search') ? $('ov-search').value : '').toLowerCase();
+  let alerts = newSimAlerts();
+  if (q) alerts = alerts.filter(a =>
+    a.loan.loanId.toLowerCase().includes(q) ||
+    (a.loan.customerName || '').toLowerCase().includes(q) ||
+    a.code.toLowerCase().includes(q) ||
+    a.number.includes(q));
+
+  if (!alerts.length) {
+    el.innerHTML = '<div class="emi-col-empty">No new mobile numbers on defaulted or overdue loans in the last '
+      + NEW_SIM_DAYS + ' days.</div>';
+    return;
+  }
+
+  // Card fill comes from the All-grid ladder, so an alert looks exactly like the
+  // same loan's card in the normal columns. The purple stays only on the badge
+  // that marks the row as a New SIM alert.
+  const badge = '#7B1FA2';
+  const cards = alerts.map(a => {
+    const cust  = a.loan.customerName || '';
+    const model = a.loan.model || '';
+    const state = a.loan.isDefaulted ? 'Defaulted' : 'Overdue';
+    const fill  = loanCardFill(a.loan);
+    const onDark = fill.tc === '#fff';
+    const sub   = onDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)';
+    const faint = onDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.3)';
+    return `<div class="emi-card new-sim" data-loanid="${a.loan.loanId}" style="cursor:pointer;background:${fill.bg};color:${fill.tc};border-left:3px solid rgba(255,255,255,0.3);border:1px solid ${fill.border};margin-bottom:4px;padding:7px 10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0">
+          <span style="font-size:10px;font-weight:600;color:${badge};background:#fff;padding:0 6px;border-radius:8px;white-space:nowrap;line-height:16px">NEW SIM</span>
+          <span style="font-size:12px;font-weight:700;color:${fill.tc};white-space:nowrap;line-height:16px">${a.loan.loanId}</span>
+          ${cust ? `<span style="font-size:12px;color:${fill.tc};white-space:nowrap;line-height:16px">${cust}</span>` : ''}
+        </div>
+        <span style="font-size:11px;color:${sub};white-space:nowrap;line-height:16px">Added: ${fmtDisplayDate(a.addedOn)}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:3px;font-size:12px;color:${fill.tc}">
+        <span style="color:${sub};white-space:nowrap">Code: ${a.code}</span>
+        <span style="color:${faint}">|</span>
+        <span style="font-weight:600;white-space:nowrap">${a.number}</span>
+        ${model ? `<span style="color:${sub};white-space:nowrap">${model}</span>` : ''}
+        <span style="margin-left:auto;font-size:10px;font-weight:600;color:${fill.bg};background:#fff;padding:0 6px;border-radius:8px;white-space:nowrap;line-height:16px">${state}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `<div style="font-size:12px;color:#888;margin-bottom:0.5rem">${alerts.length} new number(s) on defaulted/overdue loans in the last ${NEW_SIM_DAYS} days — click one to open that loan.</div>
+    <div style="overflow-x:auto;overflow-y:hidden"><div style="min-width:max-content">${cards}</div></div>`;
 }
 
 function checkOverviewEmiDiff() {
