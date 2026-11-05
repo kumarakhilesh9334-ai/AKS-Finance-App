@@ -2110,32 +2110,24 @@ function renderNewSimAlerts() {
   }
 
   // Card fill comes from the All-grid ladder, so an alert looks exactly like the
-  // same loan's card in the normal columns. The purple stays only on the badge
-  // that marks the row as a New SIM alert.
-  const badge = '#7B1FA2';
+  // same loan's card in the normal columns. The card only carries what the view
+  // does not already say: the loan, the new number, and when it was added.
+  // "NEW SIM", the customer name (the loan ID already starts with it), the app
+  // code, and the overdue/defaulted label are all redundant here — the header
+  // names the view, and the fill colour already carries the status.
   const cards = alerts.map(a => {
-    const cust  = a.loan.customerName || '';
     const model = a.loan.model || '';
-    const state = a.loan.isDefaulted ? 'Defaulted' : 'Overdue';
     const fill  = loanCardFill(a.loan);
     const onDark = fill.tc === '#fff';
     const sub   = onDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)';
-    const faint = onDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.3)';
     return `<div class="emi-card new-sim" data-loanid="${a.loan.loanId}" style="cursor:pointer;background:${fill.bg};color:${fill.tc};border-left:3px solid rgba(255,255,255,0.3);border:1px solid ${fill.border};margin-bottom:4px;padding:7px 10px">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-        <div style="display:flex;align-items:center;gap:8px;min-width:0">
-          <span style="font-size:10px;font-weight:600;color:${badge};background:#fff;padding:0 6px;border-radius:8px;white-space:nowrap;line-height:16px">NEW SIM</span>
-          <span style="font-size:12px;font-weight:700;color:${fill.tc};white-space:nowrap;line-height:16px">${a.loan.loanId}</span>
-          ${cust ? `<span style="font-size:12px;color:${fill.tc};white-space:nowrap;line-height:16px">${cust}</span>` : ''}
-        </div>
+        <span style="font-size:12px;font-weight:700;color:${fill.tc};white-space:nowrap;line-height:16px">${a.loan.loanId}</span>
         <span style="font-size:11px;color:${sub};white-space:nowrap;line-height:16px">Added: ${fmtDisplayDate(a.addedOn)}</span>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:3px;font-size:12px;color:${fill.tc}">
-        <span style="color:${sub};white-space:nowrap">Code: ${a.code}</span>
-        <span style="color:${faint}">|</span>
-        <span style="font-weight:600;white-space:nowrap">${a.number}</span>
-        ${model ? `<span style="color:${sub};white-space:nowrap">${model}</span>` : ''}
-        <span style="margin-left:auto;font-size:10px;font-weight:600;color:${fill.bg};background:#fff;padding:0 6px;border-radius:8px;white-space:nowrap;line-height:16px">${state}</span>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:3px">
+        <span style="font-size:13px;font-weight:600;color:${fill.tc};white-space:nowrap;line-height:16px">${a.number}</span>
+        ${model ? `<span style="font-size:11px;color:${sub};white-space:nowrap">${model}</span>` : ''}
       </div>
     </div>`;
   }).join('');
