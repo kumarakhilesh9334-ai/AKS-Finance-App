@@ -11,6 +11,18 @@
 let _stock = { headers: [], rows: [] };
 let _stockLoaded = false;
 let _stockFilter = 'available';
+// True while the IMEI search box holds a query. Used by the builders to ignore
+// collapsed groups, so a matching unit is never hidden inside a closed group.
+let _stockSearchActive = false;
+// Admin-only actions. The Stock tab itself can be shared read-only through
+// perms.stock, so every action cell and the "+" button follow this flag.
+let _stockCanEdit = false;
+// Row object -> index in _stock.rows. Builders use it to send the exact sheet
+// row for stage 2 (an undelivered unit has no IMEI to identify it by yet).
+let _stockRowMap = new Map();
+let _stockDeliveryCtx = null;
+let _stockSellCtx = null;
+let _stockPushTimer = null;
 
 // device name -> true when that Device group is collapsed (Available view)
 let _stockCollapsedD = {};
@@ -31,7 +43,7 @@ let _stockUSpecKeys = [];
 const _STOCK_AMT_COLS = ['cost price', 'selling price', 'kunal telecom', 'aks share'];
 
 const _STOCK_DISPLAY = {
-  available:   { cols: ['Device','Brand','Model','Specs','IMEI_1','Cost Price'] },
+  available:   { cols: ['Device','Brand','Model','Specs','IMEI_1','IMEI_2','Cost Price'] },
   costsheet:   { cols: ['Device','Model','Specs','Cost Price'] },
   sold:        { cols: ['Month Sold','Selling Date','Model','Specs','Customer Name','Payment Mode','IMEI_1','Cost Price','Selling Price','Kunal Telecom','AKS Share'] },
   undelivered: { cols: ['Model','Specs','Order Date','Marketplace','Paid By','Cost Price'] },
@@ -48,6 +60,7 @@ const _STOCK_SORT_DESC = {
 
 async function initStockPage() {
   setStockFilter('available');
+  _syncStockFab();
   await loadStock();
 }
 
@@ -59,12 +72,22 @@ function setStockFilter(f) {
   renderStock();
 }
 
+function onStockSearchInput() {
+  debounced(renderStock, 'stock-search', 200);
+}
+
 async function loadStock() {
   // Every snapshot already carries stock: pushSnapshot() runs readStock with
   // forceRefresh=1, and readStock opens the other spreadsheet itself by ID
   // (SpreadsheetApp.openById(STOCK_SHEET_ID)), so a separate worksheet is no
   // obstacle. Paint it and return — zero network calls.
-  if (S.snapStock && S.snapStock.headers) {
+  //
+  // Exception: a direct stock write (order/delivered/sold) stamps
+  // aks_stock_wrote_at. If the snapshot we hold was generated before that
+  // write, it is stale — read the sheet instead of painting old inventory.
+  // _stockLoaded covers the in-session case where applyStock already holds the
+  // fresh table handed back by the write response.
+  if (S.snapStock && S.snapStock.headers && (_stockLoaded || !_stockSnapshotIsStale())) {
     applyStock(S.snapStock);
     if (!_stock.headers.length) showAlert('Stock sheet is empty.', 'e');
     return;
@@ -115,6 +138,349 @@ function applyStock(stock) {
   _stock = stock;
   _stockLoaded = true;
   renderStock();
+}
+
+// ── STOCK ACTIONS (admin only) ──────────────────────────────────────────────
+// Three lifecycle stages write straight to the Stock sheet through Apps Script,
+// deliberately bypassing the approval layer: inventory is a log, not a loan
+// submission. The server re-checks the Users-sheet role, so hiding the buttons
+// here is a convenience, never the security boundary.
+
+// The Stock tab can be shared read-only via perms.stock. Only a real admin gets
+// the "＋", "Sell" and "Deliver" controls.
+function _stockIsAdmin() {
+  return !!(S.cu && S.cu.role === 'admin');
+}
+
+function _syncStockFab() {
+  const fab = $('stock-fab');
+  if (!fab) return;
+  fab.style.display = _stockIsAdmin() ? 'flex' : 'none';
+}
+
+// Local calendar date as YYYY-MM-DD. toISOString() is UTC, which is the
+// previous day for the first 5.5 hours of an IST morning.
+function _todayYMD() {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return d.getFullYear() + '-' + m + '-' + day;
+}
+
+// A direct stock write stamps aks_stock_wrote_at. Any snapshot generated at or
+// before that moment is older than the sheet, so loadStock() must not paint it.
+function _stockSnapshotIsStale() {
+  let wrote = 0;
+  try { wrote = parseInt(localStorage.getItem('aks_stock_wrote_at') || '0', 10) || 0; } catch (e) {}
+  if (!wrote) return false;
+  return !S.snapshotAt || S.snapshotAt <= wrote;
+}
+
+function _markStockWrote() {
+  try { localStorage.setItem('aks_stock_wrote_at', String(Date.now())); } catch (e) {}
+}
+
+// Unique, sorted, non-empty values of one Stock column — the choices offered by
+// the order modal. 'Paid By' resolves to the first payment column, exactly like
+// the rest of this file, because the sheet may name it 'Payment Mode'.
+function _stockUniqueValues(header) {
+  const i = header === 'Paid By' ? _paidByCol(_stock.headers) : _colIndex(_stock.headers, header);
+  if (i < 0) return [];
+  const seen = {};
+  const out = [];
+  _stock.rows.forEach(r => {
+    const val = String(r[i] == null ? '' : r[i]).trim();
+    if (val && !seen[val]) { seen[val] = true; out.push(val); }
+  });
+  out.sort((a, b) => a.localeCompare(b));
+  return out;
+}
+
+function _fillStockSelect(selectId, header) {
+  const sel = $(selectId);
+  if (!sel) return;
+  const opts = ['<option value="">Select…</option>'];
+  _stockUniqueValues(header).forEach(val => {
+    opts.push('<option value="' + _esc(val) + '">' + _esc(val) + '</option>');
+  });
+  opts.push('<option value="__other__">Other</option>');
+  sel.innerHTML = opts.join('');
+}
+
+// Reveal the free-text box when "Other" is picked. Clearing it on any other
+// choice stops a previously typed name from being submitted by accident.
+function onStockSelectChange(selectId) {
+  const sel = $(selectId);
+  const wrap = $(selectId + '-other-wrap');
+  if (!sel || !wrap) return;
+  const isOther = sel.value === '__other__';
+  wrap.style.display = isOther ? '' : 'none';
+  if (!isOther) {
+    const inp = $(selectId + '-other');
+    if (inp) inp.value = '';
+  }
+}
+
+function _stockSelectValue(selectId) {
+  const sel = $(selectId);
+  if (!sel) return '';
+  if (sel.value === '__other__') return v(selectId + '-other');
+  return String(sel.value || '').trim();
+}
+
+// Paint the fresh table the write response carried back. If the response had no
+// stock payload (the write landed but the follow-up read failed) fall back to a
+// normal load rather than leaving stale inventory on screen.
+function _refreshStockAfterWrite(stock) {
+  _markStockWrote();
+  if (stock && stock.headers) {
+    applyStock(stock);
+  } else {
+    _stockLoaded = false;
+    loadStock();
+  }
+  _scheduleStockSnapshotPush();
+}
+
+// Debounced: three quick writes should rebuild the shared Worker snapshot once.
+// The write itself is already committed; this only keeps other devices current.
+function _scheduleStockSnapshotPush() {
+  if (_stockPushTimer) clearTimeout(_stockPushTimer);
+  _stockPushTimer = setTimeout(async () => {
+    _stockPushTimer = null;
+    try {
+      const r = await gasPost({ action: 'pushSnapshotNow' }, { priority: PRIORITY.push });
+      if (r && r.ok && typeof refreshSnapshot === 'function') {
+        _snapRefreshP = null;
+        refreshSnapshot();
+      }
+    } catch (e) { /* the next periodic push will catch up */ }
+  }, 2500);
+}
+
+// ── Stage 1: log a newly ordered unit ───────────────────────────────────────
+function openStockOrderModal() {
+  if (!_stockIsAdmin()) { showAlert('Admin only.', 'e'); return; }
+  if (!_stock.headers.length) { showAlert('Stock sheet is empty.', 'e'); return; }
+  $('so-date').value = _todayYMD();
+  $('so-cost').value = '';
+  const selects = ['so-device', 'so-brand', 'so-model', 'so-specs', 'so-marketplace', 'so-paidby'];
+  _fillStockSelect('so-device', 'Device');
+  _fillStockSelect('so-brand', 'Brand');
+  _fillStockSelect('so-model', 'Model');
+  _fillStockSelect('so-specs', 'Specs');
+  _fillStockSelect('so-marketplace', 'Marketplace');
+  _fillStockSelect('so-paidby', 'Paid By');
+  selects.forEach(id => {
+    onStockSelectChange(id);
+    const inp = $(id + '-other');
+    if (inp) inp.value = '';
+  });
+  $('stock-order-modal').style.display = 'flex';
+}
+
+function closeStockOrderModal() {
+  const m = $('stock-order-modal');
+  if (m) m.style.display = 'none';
+}
+
+async function submitStockOrder() {
+  if (!_stockIsAdmin()) { showAlert('Admin only.', 'e'); return; }
+  const orderDate   = v('so-date');
+  const costRaw     = v('so-cost');
+  const device      = _stockSelectValue('so-device');
+  const brand       = _stockSelectValue('so-brand');
+  const model       = _stockSelectValue('so-model');
+  const specs       = _stockSelectValue('so-specs');
+  const marketplace = _stockSelectValue('so-marketplace');
+  const paidBy      = _stockSelectValue('so-paidby');
+  const cost        = parseFloat(costRaw);
+
+  if (!orderDate)   { showAlert('Order Date is required.', 'e'); return; }
+  if (!device)      { showAlert('Device is required.', 'e'); return; }
+  if (!brand)       { showAlert('Brand is required.', 'e'); return; }
+  if (!model)       { showAlert('Model is required.', 'e'); return; }
+  if (!specs)       { showAlert('Specification is required.', 'e'); return; }
+  if (costRaw === '' || isNaN(cost)) { showAlert('Cost Price must be a number.', 'e'); return; }
+  if (!marketplace) { showAlert('Marketplace is required.', 'e'); return; }
+  if (!paidBy)      { showAlert('Paid By is required.', 'e'); return; }
+
+  const btn = $('so-submit');
+  if (btn) btn.disabled = true;
+  showLoader();
+  try {
+    const res = await gasPost({
+      action: 'addStockOrder',
+      orderDate, device, brand, model, specs,
+      costPrice: cost, marketplace, paidBy,
+    });
+    if (!res || !res.ok) {
+      showAlert('Could not save order: ' + ((res && res.error) || 'Unknown error'), 'e');
+      return;
+    }
+    closeStockOrderModal();
+    showAlert('Order logged.', 's');
+    _refreshStockAfterWrite(res.stock);
+  } catch (err) {
+    showAlert('Could not save order: ' + err.message, 'e');
+  } finally {
+    hideLoader();
+    if (btn) btn.disabled = false;
+  }
+}
+
+// ── Stage 2: mark an undelivered unit delivered ─────────────────────────────
+// Undelivered units have no IMEI yet, so the row is identified by its position
+// in _stock.rows plus the Order Date it showed. The server verifies both before
+// writing, so a sheet edited in the meantime cannot receive another unit's IMEIs.
+function openStockDeliveryModal(rowIndex) {
+  if (!_stockIsAdmin()) { showAlert('Admin only.', 'e'); return; }
+  const idx = parseInt(rowIndex, 10);
+  if (!(idx >= 0) || idx >= _stock.rows.length) {
+    showAlert('Stock row not found. Refresh the Stock tab and try again.', 'e'); return;
+  }
+  const r = _stock.rows[idx];
+  const h = _stock.headers;
+  const mIdx = _colIndex(h, 'Model');
+  const sIdx = _colIndex(h, 'Specs');
+  const oIdx = _colIndex(h, 'Order Date');
+  const model     = mIdx >= 0 ? String(r[mIdx] == null ? '' : r[mIdx]).trim() : '';
+  const specs     = sIdx >= 0 ? String(r[sIdx] == null ? '' : r[sIdx]).trim() : '';
+  const orderDate = oIdx >= 0 ? String(r[oIdx] == null ? '' : r[oIdx]).trim() : '';
+
+  _stockDeliveryCtx = { rowIndex: idx, orderDate: orderDate, model: model, specs: specs };
+  const parts = [model || '(no model)'];
+  if (specs) parts.push(specs);
+  if (orderDate) parts.push('ordered ' + orderDate);
+  $('sd-context').textContent = parts.join(' · ');
+  $('sd-date').value = _todayYMD();
+  $('sd-imei1').value = '';
+  $('sd-imei2').value = '';
+  $('stock-delivery-modal').style.display = 'flex';
+}
+
+function closeStockDeliveryModal() {
+  const m = $('stock-delivery-modal');
+  if (m) m.style.display = 'none';
+}
+
+async function submitStockDelivery() {
+  if (!_stockIsAdmin()) { showAlert('Admin only.', 'e'); return; }
+  if (!_stockDeliveryCtx) { showAlert('Open this from an Undelivered row.', 'e'); return; }
+  const deliveryDate = v('sd-date');
+  const imei1        = v('sd-imei1');
+  const imei2        = v('sd-imei2');
+  if (!deliveryDate) { showAlert('Delivery Date is required.', 'e'); return; }
+  if (!imei1)        { showAlert('IMEI_1 is required.', 'e'); return; }
+
+  const btn = $('sd-submit');
+  if (btn) btn.disabled = true;
+  showLoader();
+  try {
+    const res = await gasPost({
+      action: 'markStockDelivered',
+      rowIndex: _stockDeliveryCtx.rowIndex,
+      orderDate: _stockDeliveryCtx.orderDate,
+      model: _stockDeliveryCtx.model,
+      specs: _stockDeliveryCtx.specs,
+      deliveryDate, imei1, imei2,
+    });
+    if (!res || !res.ok) {
+      showAlert('Could not mark delivered: ' + ((res && res.error) || 'Unknown error'), 'e');
+      return;
+    }
+    closeStockDeliveryModal();
+    showAlert('Marked delivered.', 's');
+    _refreshStockAfterWrite(res.stock);
+  } catch (err) {
+    showAlert('Could not mark delivered: ' + err.message, 'e');
+  } finally {
+    hideLoader();
+    if (btn) btn.disabled = false;
+  }
+}
+
+// ── Stage 3: mark an available unit sold ────────────────────────────────────
+// IMEI_1 is the key: the Available view only shows units that have one, and the
+// server refuses a row whose Selling Date is already filled.
+function openStockSellModal(rowIndex) {
+  if (!_stockIsAdmin()) { showAlert('Admin only.', 'e'); return; }
+  const idx = parseInt(rowIndex, 10);
+  if (!(idx >= 0) || idx >= _stock.rows.length) {
+    showAlert('Stock row not found. Refresh the Stock tab and try again.', 'e'); return;
+  }
+  const r = _stock.rows[idx];
+  const h = _stock.headers;
+  const i1Idx = _colIndex(h, 'IMEI_1');
+  const i2Idx = _colIndex(h, 'IMEI_2');
+  const mIdx  = _colIndex(h, 'Model');
+  const sIdx  = _colIndex(h, 'Specs');
+  const imei1 = i1Idx >= 0 ? String(r[i1Idx] == null ? '' : r[i1Idx]).trim() : '';
+  if (!imei1) { showAlert('This row has no IMEI_1.', 'e'); return; }
+
+  _stockSellCtx = { imei1: imei1 };
+  const model = mIdx >= 0 ? String(r[mIdx] == null ? '' : r[mIdx]).trim() : '';
+  const specs = sIdx >= 0 ? String(r[sIdx] == null ? '' : r[sIdx]).trim() : '';
+  const parts = [];
+  if (model) parts.push(model);
+  if (specs) parts.push(specs);
+  parts.push('IMEI ' + imei1);
+  if (i2Idx >= 0 && r[i2Idx] != null && String(r[i2Idx]).trim()) parts.push('IMEI_2 ' + String(r[i2Idx]).trim());
+  $('ss-context').textContent = parts.join(' · ');
+  $('ss-price').value = '';
+  $('ss-date').value = _todayYMD();
+  $('ss-customer').value = '';
+  $('ss-payment').value = '';
+  $('ss-billing').value = '';
+  $('stock-sell-modal').style.display = 'flex';
+}
+
+function closeStockSellModal() {
+  const m = $('stock-sell-modal');
+  if (m) m.style.display = 'none';
+}
+
+async function submitStockSold() {
+  if (!_stockIsAdmin()) { showAlert('Admin only.', 'e'); return; }
+  if (!_stockSellCtx) { showAlert('Open this from an Available row.', 'e'); return; }
+  const priceRaw     = v('ss-price');
+  const sellingDate  = v('ss-date');
+  const customerName = v('ss-customer');
+  const paymentMode  = v('ss-payment');
+  const billingDate  = v('ss-billing');
+  const price        = parseFloat(priceRaw);
+
+  if (priceRaw === '' || isNaN(price)) { showAlert('Selling Price must be a number.', 'e'); return; }
+  if (!sellingDate)  { showAlert('Selling Date is required.', 'e'); return; }
+  if (!customerName) { showAlert('Customer Name is required.', 'e'); return; }
+  if (!paymentMode)  { showAlert('Payment Mode is required.', 'e'); return; }
+
+  const btn = $('ss-submit');
+  if (btn) btn.disabled = true;
+  showLoader();
+  try {
+    const res = await gasPost({
+      action: 'markStockSold',
+      imei1: _stockSellCtx.imei1,
+      sellingPrice: price,
+      sellingDate,
+      customerName,
+      paymentMode,
+      billingDate,
+    });
+    if (!res || !res.ok) {
+      showAlert('Could not mark sold: ' + ((res && res.error) || 'Unknown error'), 'e');
+      return;
+    }
+    closeStockSellModal();
+    showAlert('Marked sold.', 's');
+    _refreshStockAfterWrite(res.stock);
+  } catch (err) {
+    showAlert('Could not mark sold: ' + err.message, 'e');
+  } finally {
+    hideLoader();
+    if (btn) btn.disabled = false;
+  }
 }
 
 function _esc(s) {
@@ -252,8 +618,18 @@ function buildAvailableRows(data, headers) {
   const mIdx = _colIndex(headers, 'Model');
   const sIdx = _colIndex(headers, 'Specs');
   const iIdx = _colIndex(headers, 'IMEI_1');
+  const i2Idx = _colIndex(headers, 'IMEI_2');
   const cIdx = _colIndex(headers, 'Cost Price');
   const blank = '<td></td>';
+  const searching = _stockSearchActive;
+  // Action column exists only for admins. Every collapsed/group row leaves it
+  // blank; only a real unit (a leaf row) gets a Sell button.
+  const actBlank = _stockCanEdit ? '<td class="st-action-cell"></td>' : '';
+  const actSell = r => {
+    if (!_stockCanEdit) return '';
+    const idx = _stockRowMap.has(r) ? _stockRowMap.get(r) : -1;
+    return '<td class="st-action-cell"><button class="btn btn-sm" onclick="openStockSellModal(' + idx + ')">Sell</button></td>';
+  };
 
   const cell = (v, i, empty) => String(v[i] == null ? '' : v[i]).trim() || empty;
 
@@ -310,9 +686,9 @@ function buildAvailableRows(data, headers) {
   devices.forEach(devG => {
     const d = devG.dev;
     const devN = count(devG);
-    if (_stockCollapsedD[d]) {
-      html.push('<tr>' + devCell(d, true, devN) + blank + blank + blank + blank + '<td>'
-        + _stockAmt(_sumCost(allRows(devG), cIdx)) + '</td></tr>');
+    if (!searching && _stockCollapsedD[d]) {
+      html.push('<tr>' + devCell(d, true, devN) + blank + blank + blank + blank + blank + '<td>'
+        + _stockAmt(_sumCost(allRows(devG), cIdx)) + '</td>' + actBlank + '</tr>');
       return;
     }
     // Each level emits its own cell exactly once — on the first row it shows.
@@ -321,9 +697,9 @@ function buildAvailableRows(data, headers) {
 
     devG.brands.forEach(brG => {
       const b = brG.brand, bKey = d + '||' + b, bN = count(brG);
-      if (_stockCollapsedB[bKey]) {
+      if (!searching && _stockCollapsedB[bKey]) {
         html.push('<tr>' + takeDev() + brandCell(b, d, true, bN)
-          + blank + blank + blank + '<td>' + _stockAmt(_sumCost(allRows(brG), cIdx)) + '</td></tr>');
+          + blank + blank + blank + blank + '<td>' + _stockAmt(_sumCost(allRows(brG), cIdx)) + '</td>' + actBlank + '</tr>');
         devDone = true;
         return;
       }
@@ -332,9 +708,9 @@ function buildAvailableRows(data, headers) {
 
       brG.models.forEach(moG => {
         const m = moG.model, mKey = bKey + '||' + m, mN = count(moG);
-        if (_stockCollapsedMod[mKey]) {
+        if (!searching && _stockCollapsedMod[mKey]) {
           html.push('<tr>' + takeDev() + takeBrand() + modelCell(m, d, b, true, mN)
-            + blank + blank + '<td>' + _stockAmt(_sumCost(allRows(moG), cIdx)) + '</td></tr>');
+            + blank + blank + blank + '<td>' + _stockAmt(_sumCost(allRows(moG), cIdx)) + '</td>' + actBlank + '</tr>');
           devDone = brandDone = true;
           return;
         }
@@ -344,9 +720,9 @@ function buildAvailableRows(data, headers) {
         moG.specs.forEach(spG => {
           const s = spG.spec, sKey = mKey + '||' + s, sN = spG.rows.length;
           const lead = takeDev() + takeBrand() + takeModel();
-          if (_stockCollapsedSpec[sKey]) {
+          if (!searching && _stockCollapsedSpec[sKey]) {
             html.push('<tr>' + lead + specCell(s, d, b, m, true, sN)
-              + blank + '<td>' + _stockAmt(_sumCost(spG.rows, cIdx)) + '</td></tr>');
+              + blank + blank + '<td>' + _stockAmt(_sumCost(spG.rows, cIdx)) + '</td>' + actBlank + '</tr>');
             devDone = brandDone = modelDone = true;
             return;
           }
@@ -357,7 +733,9 @@ function buildAvailableRows(data, headers) {
           const leadRest = blank + blank + blank + blank;
           const leaf = spG.rows.map((r, ri) => '<tr>' + (ri === 0 ? leadFirst : leadRest)
             + '<td>' + _stockCell(r[iIdx], 'IMEI_1') + '</td>'
-            + '<td>' + _stockCell(r[cIdx], 'Cost Price') + '</td></tr>');
+            + '<td>' + _stockCell(r[i2Idx], 'IMEI_2') + '</td>'
+            + '<td>' + _stockCell(r[cIdx], 'Cost Price') + '</td>'
+            + actSell(r) + '</tr>');
           devDone = brandDone = modelDone = true;
           html.push(leaf.join(''));
         });
@@ -392,7 +770,7 @@ function buildSoldRows(data, headers) {
   const html = [];
   months.forEach(mg => {
     const m = mg.month;
-    const collapsed = !!_stockCollapsedM[m];
+    const collapsed = !_stockSearchActive && !!_stockCollapsedM[m];
     const monthCell = _toggleCell(m, 'st-month-cell',
       "toggleStockMonth('" + _jsStr(m) + "')", collapsed, mg.rows.length);
 
@@ -459,6 +837,13 @@ function buildUndeliveredRows(data, headers) {
   const mIdx = iOf('Model'), sIdx = iOf('Specs'), cIdx = iOf('Cost Price');
   const oIdx = iOf('Order Date'), pIdx = iOf('Marketplace'), payIdx = _paidByCol(headers);
   const blank = '<td></td>';
+  // Action column exists only for admins; only a leaf unit gets a Deliver button.
+  const actBlank = _stockCanEdit ? '<td class="st-action-cell"></td>' : '';
+  const actDeliver = r => {
+    if (!_stockCanEdit) return '';
+    const idx = _stockRowMap.has(r) ? _stockRowMap.get(r) : -1;
+    return '<td class="st-action-cell"><button class="btn btn-sm" onclick="openStockDeliveryModal(' + idx + ')">Deliver</button></td>';
+  };
   const text = (r, i, empty) => String(r[i] == null ? '' : r[i]).trim() || empty;
 
   const groups = [];
@@ -486,9 +871,9 @@ function buildUndeliveredRows(data, headers) {
   const html = [];
   groups.forEach(mg => {
     const m = mg.model, mN = count(mg);
-    if (_stockCollapsedUM[m]) {
+    if (!_stockSearchActive && _stockCollapsedUM[m]) {
       html.push('<tr>' + modelCell(m, true, mN) + blank + blank + blank + blank
-        + '<td>' + sum(mg.specs.reduce((a, sg) => a.concat(sg.rows), [])) + '</td></tr>');
+        + '<td>' + sum(mg.specs.reduce((a, sg) => a.concat(sg.rows), [])) + '</td>' + actBlank + '</tr>');
       return;
     }
     let mDone = false;
@@ -496,9 +881,9 @@ function buildUndeliveredRows(data, headers) {
     mg.specs.forEach(sg => {
       const s = sg.spec, sKey = m + '||' + s, sN = sg.rows.length;
       const lead = takeModel();
-      if (_stockCollapsedUS[sKey]) {
+      if (!_stockSearchActive && _stockCollapsedUS[sKey]) {
         html.push('<tr>' + lead + specCell(s, m, true, sN) + blank + blank + blank
-          + '<td>' + sum(sg.rows) + '</td></tr>');
+          + '<td>' + sum(sg.rows) + '</td>' + actBlank + '</tr>');
         mDone = true;
         return;
       }
@@ -509,7 +894,8 @@ function buildUndeliveredRows(data, headers) {
         + '<td>' + _stockCell(r[oIdx], 'Order Date') + '</td>'
         + '<td>' + _stockCell(r[pIdx], 'Marketplace') + '</td>'
         + '<td>' + _stockCell(r[payIdx], 'Paid By') + '</td>'
-        + '<td>' + _stockCell(r[cIdx], 'Cost Price') + '</td></tr>');
+        + '<td>' + _stockCell(r[cIdx], 'Cost Price') + '</td>'
+        + actDeliver(r) + '</tr>');
       mDone = true;
       html.push(leaf.join(''));
     });
@@ -532,11 +918,29 @@ function _availFilter(headers) {
 function renderStock() {
   const el = $('stock-results');
   if (!el) return;
+  _stockCanEdit = _stockIsAdmin();
+  _syncStockFab();
   const { headers, rows } = _stock;
   if (!headers.length) { el.innerHTML = '<div class="empty">No stock data found.</div>'; return; }
 
+  // Row object -> index in the sheet-backed array. Stage 2 needs the exact row
+  // because an undelivered unit has no IMEI to identify it by yet.
+  _stockRowMap = new Map();
+  rows.forEach((r, i) => _stockRowMap.set(r, i));
+
+  // IMEI search: match the query against IMEI_1 or IMEI_2 on every pill.
+  const q = (($('stock-search') ? $('stock-search').value : '') || '').trim().toLowerCase();
+  _stockSearchActive = !!q;
+  const i1Idx = _colIndex(headers, 'IMEI_1');
+  const i2Idx = _colIndex(headers, 'IMEI_2');
+  const searchRows = q ? rows.filter(r => {
+    const i1 = i1Idx >= 0 ? String(r[i1Idx] == null ? '' : r[i1Idx]) : '';
+    const i2 = i2Idx >= 0 ? String(r[i2Idx] == null ? '' : r[i2Idx]) : '';
+    return i1.toLowerCase().includes(q) || i2.toLowerCase().includes(q);
+  }) : rows;
+
   let cols = headers;
-  let data = rows;
+  let data = searchRows;
   let grouped = false;
 
   if (_STOCK_FILTERS.indexOf(_stockFilter) !== -1) {
@@ -544,7 +948,7 @@ function renderStock() {
     cols = cfg.cols;
     if (_stockFilter === 'costsheet') {
       // Flat roll-up: filter + collapse happen inside the builder.
-      data = buildCostSheet(rows, headers);
+      data = buildCostSheet(searchRows, headers);
     } else {
       const idx = cols.map(n => n === 'Paid By' ? _paidByCol(headers) : _colIndex(headers, n));
       const sIdx = _colIndex(headers, 'Selling Date');
@@ -556,9 +960,9 @@ function renderStock() {
         const hasDelivery = dIdx >= 0 && r[dIdx] != null && String(r[dIdx]).trim() !== '';
         return hasOrder && !hasDelivery;
       };
-      if (_stockFilter === 'available') data = rows.filter(_availFilter(headers));
-      else if (_stockFilter === 'sold') data = rows.filter(r => isSold(r));
-      else data = rows.filter(isUndelivered);
+      if (_stockFilter === 'available') data = searchRows.filter(_availFilter(headers));
+      else if (_stockFilter === 'sold') data = searchRows.filter(r => isSold(r));
+      else data = searchRows.filter(isUndelivered);
       const descSet = _STOCK_SORT_DESC[_stockFilter] || {};
       data = data.slice().sort((a, b) => {
         for (let i = 0; i < idx.length; i++) {
@@ -594,14 +998,22 @@ function renderStock() {
           _stockUSpecKeys.some(k => _stockCollapsedUS[k])
       : _stockMonthKeys.some(k => _stockCollapsedM[k]);
   }
-  const collapseBtn = grouped
+  // Groups are force-expanded while searching, so the collapse toggle would
+  // have no visible effect — hide it until the search box is cleared.
+  const collapseBtn = (grouped && !_stockSearchActive)
     ? ' <button class="btn btn-sm" onclick="toggleStockAllDevices()" style="margin-left:8px">' + (anyCollapsed ? 'Expand all' : 'Collapse all') + '</button>'
     : '';
+
+  // The Action column is admin-only and exists only on the two pills that carry
+  // row buttons. Appended after sorting so it never participates in the sort.
+  const showActions = _stockCanEdit &&
+    (_stockFilter === 'available' || _stockFilter === 'undelivered');
+  const displayCols = showActions ? cols.concat(['Action']) : cols;
 
   el.innerHTML = `<div style="font-size:12px;color:#888;margin-bottom:0.5rem">${data.length} of ${rows.length} rows${collapseBtn}</div>
     <div style="overflow-x:auto;border:0.5px solid #eee;border-radius:8px">
       <table class="emi-table${_stockFilter === 'sold' ? ' stock-table' : ''}">
-        <thead><tr>${cols.map(h => {
+        <thead><tr>${displayCols.map(h => {
           const wide = (_stockFilter === 'available' && (h === 'Device' || h === 'Model'))
             ? ' class="stock-wide-' + (h === 'Device' ? 'device' : 'model') + '"' : '';
           return '<th' + wide + '>' + _esc(h) + '</th>';

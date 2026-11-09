@@ -500,73 +500,279 @@ function handleGet(e, opts) {
   if (action === 'readStock') {
     try {
       const forceRefresh = (e && e.parameter && e.parameter.forceRefresh === '1');
-      const cache  = CacheService.getScriptCache();
-      const cached = (!forceRefresh) ? cache.get('stock_data_t') : null;
-      if (cached) return jsonResponse({ok:true, stock: JSON.parse(cached)});
-
-      const sheet = ss.getSheetByName(STOCK_SHEET);
-      tm('stock.sheet');
-      if (!sheet) return jsonResponse({ok:true, stock:{headers:[],rows:[]}});
-      const b = configBounds(ss)[STOCK_SHEET];
-      tm('stock.cfg');
-
-      // Read only through column T (20 cols) and stop at the first empty cell in
-      // column A. This used to be getLastRow() + a whole-column A scan + a second
-      // getRange; Config bounds make it one read, and the gap test below runs on
-      // what came back, so a blank row in column A still ends the table.
-      const MAX_COLS = 20;
-      // A hand-added column (Specification) can push the tab past this floor, so
-      // Config's column count wins whenever it is the wider of the two.
-      const wantCols = Math.max(MAX_COLS, (b && b.cols > 0) ? b.cols : 0);
-      let all;
-      try {
-        all = (b && b.rows > 0) ? sheet.getRange(1, 1, b.rows, wantCols).getValues()
-                                : sheet.getRange(1, 1, sheet.getLastRow(), wantCols).getValues();
-      } catch (e) {
-        all = sheet.getRange(1, 1, sheet.getLastRow(), wantCols).getValues();
-      }
-      // Filled every column we asked for, so the tab may be wider than we know:
-      // read the real width once instead of silently dropping the newest column.
-      const hdr0 = all[0] || [];
-      if (hdr0.length && String(hdr0[hdr0.length - 1]).trim() !== '') {
-        try {
-          const realCols = sheet.getLastColumn();
-          if (realCols > wantCols) {
-            const wide = sheet.getRange(1, 1, all.length, realCols).getValues();
-            if (wide && wide.length) all = wide;
-          }
-        } catch (e2) { /* keep what we already have */ }
-      }
-      tm('stock.values');
-      if (!all.length) return jsonResponse({ok:true, stock:{headers:[],rows:[]}});
-      let lastDataRow = 0;
-      for (let i = 0; i < all.length; i++) {
-        const a = all[i][0];
-        if (a === null || a === undefined || String(a).trim() === '') break;
-        lastDataRow = i + 1;
-      }
-      if (lastDataRow < 1) return jsonResponse({ok:true, stock:{headers:[],rows:[]}});
-
-      const headers = all[0].map(h => String(h||'').trim());
-      const dateCols = {};
-      headers.forEach((h,i) => {
-        const lh = String(h||'').toLowerCase();
-        if (lh === 'month sold') dateCols[i] = 'm';
-        else if (lh === 'order date' || lh === 'delivery date' || lh === 'selling date' || lh === 'billing date') dateCols[i] = 'd';
-      });
-      const rows = all.slice(1, lastDataRow).map(r => r.map((c,i) => {
-        if (c instanceof Date && !isNaN(c)) {
-          return dateCols[i] === 'm' ? Utilities.formatDate(c, 'IST', 'MMM yy') : fmtDate(c);
-        }
-        return (typeof c === 'string') ? c.trim() : c;
-      }));
-      const stock = { headers, rows };
-      cache.put('stock_data_t', JSON.stringify(stock), 900); // 15 min TTL
-      return jsonResponse({ok:true, stock});
+      return jsonResponse({ok:true, stock: readStockPayload_(ss, forceRefresh)});
     } catch(err){ return jsonResponse({ok:false, error:err.message}); }
   }
 
   return jsonResponse({ok:true, message:'AKS Finance running.'});
+}
+
+// ── STOCK READ ───────────────────────────────────────────────────────────────
+// One definition of how the Stock tab is read. Shared by GET readStock and by
+// the three stock write actions, so a write can hand the fresh table back in the
+// same response instead of making the client ask again.
+function readStockPayload_(ss, forceRefresh) {
+  const cache  = CacheService.getScriptCache();
+  const cached = (!forceRefresh) ? cache.get('stock_data_t') : null;
+  if (cached) return JSON.parse(cached);
+
+  const sheet = ss.getSheetByName(STOCK_SHEET);
+  tm('stock.sheet');
+  if (!sheet) return {headers:[], rows:[]};
+  const b = configBounds(ss)[STOCK_SHEET];
+  tm('stock.cfg');
+
+  // Read only through column T (20 cols) and stop at the first empty cell in
+  // column A. This used to be getLastRow() + a whole-column A scan + a second
+  // getRange; Config bounds make it one read, and the gap test below runs on
+  // what came back, so a blank row in column A still ends the table.
+  const MAX_COLS = 20;
+  // A hand-added column (Specification) can push the tab past this floor, so
+  // Config's column count wins whenever it is the wider of the two.
+  const wantCols = Math.max(MAX_COLS, (b && b.cols > 0) ? b.cols : 0);
+  let all;
+  try {
+    all = (b && b.rows > 0) ? sheet.getRange(1, 1, b.rows, wantCols).getValues()
+                            : sheet.getRange(1, 1, sheet.getLastRow(), wantCols).getValues();
+  } catch (e) {
+    all = sheet.getRange(1, 1, sheet.getLastRow(), wantCols).getValues();
+  }
+  // Filled every column we asked for, so the tab may be wider than we know:
+  // read the real width once instead of silently dropping the newest column.
+  const hdr0 = all[0] || [];
+  if (hdr0.length && String(hdr0[hdr0.length - 1]).trim() !== '') {
+    try {
+      const realCols = sheet.getLastColumn();
+      if (realCols > wantCols) {
+        const wide = sheet.getRange(1, 1, all.length, realCols).getValues();
+        if (wide && wide.length) all = wide;
+      }
+    } catch (e2) { /* keep what we already have */ }
+  }
+  tm('stock.values');
+  if (!all.length) return {headers:[], rows:[]};
+  let lastDataRow = 0;
+  for (let i = 0; i < all.length; i++) {
+    const a = all[i][0];
+    if (a === null || a === undefined || String(a).trim() === '') break;
+    lastDataRow = i + 1;
+  }
+  if (lastDataRow < 1) return {headers:[], rows:[]};
+
+  const headers = all[0].map(h => String(h||'').trim());
+  const dateCols = {};
+  headers.forEach((h,i) => {
+    const lh = String(h||'').toLowerCase();
+    if (lh === 'month sold') dateCols[i] = 'm';
+    else if (lh === 'order date' || lh === 'delivery date' || lh === 'selling date' || lh === 'billing date') dateCols[i] = 'd';
+  });
+  const rows = all.slice(1, lastDataRow).map(r => r.map((c,i) => {
+    if (c instanceof Date && !isNaN(c)) {
+      return dateCols[i] === 'm' ? Utilities.formatDate(c, 'IST', 'MMM yy') : fmtDate(c);
+    }
+    return (typeof c === 'string') ? c.trim() : c;
+  }));
+  const stock = { headers, rows };
+  // CacheService caps a value at 100 KB. A stock tab larger than that must not
+  // turn a successful read (or write) into an error — skip the cache instead.
+  try { cache.put('stock_data_t', JSON.stringify(stock), 900); } catch (e) {}
+  return stock;
+}
+
+// ── STOCK WRITE HELPERS ─────────────────────────────────────────────────────
+// Header lookup by one or more accepted names, case-insensitive.
+function stockCol_(headers, names) {
+  const want = names.map(n => String(n).trim().toLowerCase());
+  for (let i = 0; i < headers.length; i++) {
+    if (want.indexOf(String(headers[i]||'').trim().toLowerCase()) !== -1) return i;
+  }
+  return -1;
+}
+
+// The Stock tab has two payment columns. Their headers may both read
+// 'Paid By' or both read 'Payment Mode'; by convention the first is Paid By
+// (bank/UPI) and the second is Payment Mode (Cash/AKS Fin). Same rule the
+// client applies in applyStock().
+function stockPaymentCols_(headers) {
+  const idxs = [];
+  headers.forEach((h,i) => {
+    const lh = String(h||'').trim().toLowerCase();
+    if (lh === 'paid by' || lh === 'payment mode') idxs.push(i);
+  });
+  return {
+    paidBy:      idxs.length ? idxs[0] : -1,
+    paymentMode: idxs.length > 1 ? idxs[1] : (idxs.length ? idxs[0] : -1),
+  };
+}
+
+function stockHeaders_(sheet) {
+  const lastCol = Math.max(sheet.getLastColumn(), 1);
+  return sheet.getRange(1, 1, 1, lastCol).getValues()[0]
+    .map(h => String(h || '').trim());
+}
+
+function bustStockCache_() {
+  try { CacheService.getScriptCache().remove('stock_data_t'); } catch (e) {}
+}
+
+function stockMissingCols_(labels) {
+  return 'Stock sheet is missing column(s): ' + labels.join(', ');
+}
+
+// Stage 1 — append a newly ordered unit.
+function stockAddOrder_(ss, p) {
+  const sheet = ss.getSheetByName(STOCK_SHEET);
+  if (!sheet) return {ok:false, error:'Stock sheet not found'};
+  const headers = stockHeaders_(sheet);
+  const pay = stockPaymentCols_(headers);
+  const cols = {
+    'Order Date':  stockCol_(headers, ['Order Date']),
+    'Device':      stockCol_(headers, ['Device']),
+    'Brand':       stockCol_(headers, ['Brand']),
+    'Model':       stockCol_(headers, ['Model']),
+    'Specs':       stockCol_(headers, ['Specs','Specification']),
+    'Cost Price':  stockCol_(headers, ['Cost Price']),
+    'Marketplace': stockCol_(headers, ['Marketplace']),
+    'Paid By':     pay.paidBy,
+  };
+  const missing = Object.keys(cols).filter(k => cols[k] < 0);
+  if (missing.length) return {ok:false, error:stockMissingCols_(missing)};
+
+  const orderDate   = String(p.orderDate   == null ? '' : p.orderDate).trim();
+  const device      = String(p.device      == null ? '' : p.device).trim();
+  const brand       = String(p.brand       == null ? '' : p.brand).trim();
+  const model       = String(p.model       == null ? '' : p.model).trim();
+  const specs       = String(p.specs       == null ? '' : p.specs).trim();
+  const marketplace = String(p.marketplace == null ? '' : p.marketplace).trim();
+  const paidBy      = String(p.paidBy      == null ? '' : p.paidBy).trim();
+  const cost        = parseFloat(p.costPrice);
+  if (!orderDate || !device || !brand || !model || !specs || !marketplace || !paidBy) {
+    return {ok:false, error:'All order fields are required'};
+  }
+  if (isNaN(cost)) return {ok:false, error:'Cost Price must be a number'};
+
+  const row = new Array(headers.length).fill('');
+  row[cols['Order Date']]  = fmtDateFromYMD(orderDate);
+  row[cols['Device']]      = device;
+  row[cols['Brand']]       = brand;
+  row[cols['Model']]       = model;
+  row[cols['Specs']]       = specs;
+  row[cols['Cost Price']]  = cost;
+  row[cols['Marketplace']] = marketplace;
+  row[cols['Paid By']]     = paidBy;
+  const rowNum = sheet.getLastRow() + 1;
+  sheet.getRange(rowNum, 1, 1, headers.length).setValues([row]);
+  return {ok:true};
+}
+
+// Stage 2 — attach a delivery date and IMEIs to an undelivered order.
+// The client sends the row's position plus the order date it displayed; both
+// are checked before writing, so a row inserted/deleted in the sheet in the
+// meantime cannot silently receive another unit's IMEIs.
+function stockMarkDelivered_(ss, p) {
+  const sheet = ss.getSheetByName(STOCK_SHEET);
+  if (!sheet) return {ok:false, error:'Stock sheet not found'};
+  const headers = stockHeaders_(sheet);
+  const cols = {
+    'Order Date':    stockCol_(headers, ['Order Date']),
+    'Delivery Date': stockCol_(headers, ['Delivery Date']),
+    'IMEI_1':        stockCol_(headers, ['IMEI_1']),
+  };
+  const missing = Object.keys(cols).filter(k => cols[k] < 0);
+  if (missing.length) return {ok:false, error:stockMissingCols_(missing)};
+  const imei2Col = stockCol_(headers, ['IMEI_2']);   // optional column
+  const modelCol = stockCol_(headers, ['Model']);
+  const specsCol = stockCol_(headers, ['Specs','Specification']);
+
+  const rowIndex = parseInt(p.rowIndex, 10);
+  if (!(rowIndex >= 0)) return {ok:false, error:'Missing stock row'};
+  const rowNum = rowIndex + 2;
+  if (rowNum > sheet.getLastRow()) {
+    return {ok:false, error:'Stock row not found. Refresh the Stock tab and try again.'};
+  }
+  const row = sheet.getRange(rowNum, 1, 1, headers.length).getValues()[0];
+  const orderCell = String(row[cols['Order Date']] == null ? '' : row[cols['Order Date']]).trim();
+  const deliveryCell = String(row[cols['Delivery Date']] == null ? '' : row[cols['Delivery Date']]).trim();
+  if (!orderCell || deliveryCell) {
+    return {ok:false, error:'This row is no longer undelivered. Refresh the Stock tab and try again.'};
+  }
+  if (p.orderDate && String(p.orderDate).trim() !== fmtDate(row[cols['Order Date']])) {
+    return {ok:false, error:'This row changed. Refresh the Stock tab and try again.'};
+  }
+  // Model + Specs narrow the match further, so two undelivered units sharing an
+  // order date cannot be confused if rows were inserted above this one.
+  if (p.model != null && modelCol >= 0 &&
+      String(p.model).trim() !== String(row[modelCol] == null ? '' : row[modelCol]).trim()) {
+    return {ok:false, error:'This row changed. Refresh the Stock tab and try again.'};
+  }
+  if (p.specs != null && specsCol >= 0 &&
+      String(p.specs).trim() !== String(row[specsCol] == null ? '' : row[specsCol]).trim()) {
+    return {ok:false, error:'This row changed. Refresh the Stock tab and try again.'};
+  }
+
+  const deliveryDate = String(p.deliveryDate == null ? '' : p.deliveryDate).trim();
+  const imei1 = String(p.imei1 == null ? '' : p.imei1).trim();
+  const imei2 = String(p.imei2 == null ? '' : p.imei2).trim();
+  if (!deliveryDate) return {ok:false, error:'Delivery Date is required'};
+  if (!imei1) return {ok:false, error:'IMEI_1 is required'};
+
+  sheet.getRange(rowNum, cols['Delivery Date'] + 1).setValue(fmtDateFromYMD(deliveryDate));
+  sheet.getRange(rowNum, cols['IMEI_1'] + 1).setValue(imei1);
+  if (imei2Col >= 0) sheet.getRange(rowNum, imei2Col + 1).setValue(imei2);
+  return {ok:true};
+}
+
+// Stage 3 — mark an available unit sold. IMEI_1 is the natural key: the
+// Available view only shows units that have one, and it stays unique per unit.
+function stockMarkSold_(ss, p) {
+  const sheet = ss.getSheetByName(STOCK_SHEET);
+  if (!sheet) return {ok:false, error:'Stock sheet not found'};
+  const headers = stockHeaders_(sheet);
+  const pay = stockPaymentCols_(headers);
+  const cols = {
+    'IMEI_1':        stockCol_(headers, ['IMEI_1']),
+    'Selling Price': stockCol_(headers, ['Selling Price']),
+    'Selling Date':  stockCol_(headers, ['Selling Date']),
+    'Customer Name': stockCol_(headers, ['Customer Name']),
+    'Payment Mode':  pay.paymentMode,
+  };
+  const missing = Object.keys(cols).filter(k => cols[k] < 0);
+  if (missing.length) return {ok:false, error:stockMissingCols_(missing)};
+  const billingCol = stockCol_(headers, ['Billing Date']);   // optional column
+
+  const imei1 = String(p.imei1 == null ? '' : p.imei1).trim();
+  if (!imei1) return {ok:false, error:'IMEI_1 is required'};
+  const sellingDate  = String(p.sellingDate  == null ? '' : p.sellingDate).trim();
+  const customerName = String(p.customerName == null ? '' : p.customerName).trim();
+  const paymentMode  = String(p.paymentMode  == null ? '' : p.paymentMode).trim();
+  const price = parseFloat(p.sellingPrice);
+  if (isNaN(price)) return {ok:false, error:'Selling Price must be a number'};
+  if (!sellingDate) return {ok:false, error:'Selling Date is required'};
+  if (!customerName) return {ok:false, error:'Customer Name is required'};
+  if (!paymentMode) return {ok:false, error:'Payment Mode is required'};
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return {ok:false, error:'IMEI not found in available stock'};
+  const imeis = sheet.getRange(2, cols['IMEI_1'] + 1, lastRow - 1, 1).getValues();
+  let rowNum = 0;
+  for (let i = 0; i < imeis.length; i++) {
+    if (String(imeis[i][0] == null ? '' : imeis[i][0]).trim() !== imei1) continue;
+    const sold = sheet.getRange(i + 2, cols['Selling Date'] + 1).getValue();
+    if (String(sold == null ? '' : sold).trim() === '') { rowNum = i + 2; break; }
+  }
+  if (!rowNum) {
+    return {ok:false, error:'IMEI not found in available stock (it may already be sold).'};
+  }
+
+  sheet.getRange(rowNum, cols['Selling Price'] + 1).setValue(price);
+  sheet.getRange(rowNum, cols['Selling Date'] + 1).setValue(fmtDateFromYMD(sellingDate));
+  sheet.getRange(rowNum, cols['Customer Name'] + 1).setValue(customerName);
+  sheet.getRange(rowNum, cols['Payment Mode'] + 1).setValue(paymentMode);
+  if (billingCol >= 0) {
+    const billingDate = String(p.billingDate == null ? '' : p.billingDate).trim();
+    sheet.getRange(rowNum, billingCol + 1).setValue(billingDate ? fmtDateFromYMD(billingDate) : '');
+  }
+  return {ok:true};
 }
 
 // ── SESSION AUTH ────────────────────────────────────────────────────────────
@@ -724,6 +930,32 @@ function doPost(e) {
     const authUser = authUserFromParams_(ss, payload);
     if (!authUser) {
       return jsonResponse({ok:false, error:'Unauthorized'});
+    }
+
+    // ── Direct Stock writes (admin only) ────────────────────────────────
+    // These deliberately skip the approval layer: the Stock tab is an
+    // inventory log, not a loan submission. The admin role comes from the
+    // Users-sheet row belonging to the authenticated identity — never from a
+    // client-supplied flag.
+    if (payload.action === 'addStockOrder' ||
+        payload.action === 'markStockDelivered' ||
+        payload.action === 'markStockSold') {
+      const caller = getCachedUsers(ss).find(u => u.id === authUser.id);
+      if (!caller || caller.role !== 'admin') return jsonResponse({ok:false, error:'Admin only'});
+
+      let r;
+      if (payload.action === 'addStockOrder')            r = stockAddOrder_(ss, payload);
+      else if (payload.action === 'markStockDelivered')  r = stockMarkDelivered_(ss, payload);
+      else                                               r = stockMarkSold_(ss, payload);
+      if (!r || !r.ok) return jsonResponse(r || {ok:false, error:'Stock update failed'});
+
+      // The row is committed from here on. A follow-up read that breaks must
+      // never be reported as a failed write — return ok and let the client
+      // re-read the stock tab itself.
+      bustStockCache_();
+      let stock = null;
+      try { stock = readStockPayload_(ss, true); } catch (e) { stock = null; }
+      return jsonResponse(stock ? {ok:true, stock:stock} : {ok:true});
     }
 
     // ── Rebuild the snapshot on demand (the "Data as of" strip) ─────────

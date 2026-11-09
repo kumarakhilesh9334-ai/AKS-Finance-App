@@ -13,7 +13,7 @@
   if (location.protocol === 'http:' || location.protocol === 'https:')
     document.write('<link rel="manifest" href="manifest.json">');
 </script>
-<link rel="stylesheet" href="css/styles.css?v=14">
+<link rel="stylesheet" href="css/styles.css?v=15">
 <style>
   #install-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:99999;align-items:center;justify-content:center}
   #install-overlay.show{display:flex}
@@ -392,6 +392,10 @@
     <!-- ── STOCK (admin) ─────────────────────────────────────────────── -->
     <div class="page" id="page-stock">
       <div style="font-size:15px;font-weight:500;margin-bottom:0.75rem">Stock</div>
+      <div class="emi-search-wrap">
+        <span class="emi-search-icon">🔍</span>
+        <input type="text" id="stock-search" placeholder="Search IMEI_1 or IMEI_2…" oninput="onStockSearchInput(this.value)">
+      </div>
       <div class="stock-tabs" id="stock-pills">
           <button class="stock-tab active" data-f="available" onclick="setStockFilter('available')">Available</button>
           <button class="stock-tab" data-f="costsheet" onclick="setStockFilter('costsheet')">Cost Sheet</button>
@@ -399,6 +403,120 @@
         <button class="stock-tab" data-f="undelivered" onclick="setStockFilter('undelivered')">Undelivered</button>
       </div>
       <div id="stock-results"></div>
+      <button class="stock-fab" id="stock-fab" onclick="openStockOrderModal()" title="Log new order" aria-label="Log new order">+</button>
+    </div>
+
+    <!-- ── STOCK: LOG NEW ORDER (stage 1) ────────────────────────────── -->
+    <div id="stock-order-modal" class="stock-modal">
+      <div class="stock-modal-card">
+        <div class="stock-modal-hd">
+          <span class="stock-modal-title">Log new order</span>
+          <button class="btn btn-sm" onclick="closeStockOrderModal()">✕ Close</button>
+        </div>
+        <div class="fg fg-2">
+          <div><label>Order Date *</label><input type="date" id="so-date"></div>
+          <div><label>Cost Price *</label><input type="number" id="so-cost" min="0" step="1" placeholder="0"></div>
+          <div>
+            <label>Device *</label>
+            <select id="so-device" onchange="onStockSelectChange('so-device')"></select>
+            <div id="so-device-other-wrap" style="display:none;margin-top:6px">
+              <label>Device name *</label><input type="text" id="so-device-other" placeholder="Enter device">
+            </div>
+          </div>
+          <div>
+            <label>Brand *</label>
+            <select id="so-brand" onchange="onStockSelectChange('so-brand')"></select>
+            <div id="so-brand-other-wrap" style="display:none;margin-top:6px">
+              <label>Brand name *</label><input type="text" id="so-brand-other" placeholder="Enter brand">
+            </div>
+          </div>
+          <div>
+            <label>Model *</label>
+            <select id="so-model" onchange="onStockSelectChange('so-model')"></select>
+            <div id="so-model-other-wrap" style="display:none;margin-top:6px">
+              <label>Model name *</label><input type="text" id="so-model-other" placeholder="Enter model">
+            </div>
+          </div>
+          <div>
+            <label>Specification *</label>
+            <select id="so-specs" onchange="onStockSelectChange('so-specs')"></select>
+            <div id="so-specs-other-wrap" style="display:none;margin-top:6px">
+              <label>Specification name *</label><input type="text" id="so-specs-other" placeholder="Enter specification">
+            </div>
+          </div>
+          <div>
+            <label>Marketplace *</label>
+            <select id="so-marketplace" onchange="onStockSelectChange('so-marketplace')"></select>
+            <div id="so-marketplace-other-wrap" style="display:none;margin-top:6px">
+              <label>Marketplace name *</label><input type="text" id="so-marketplace-other" placeholder="Enter marketplace">
+            </div>
+          </div>
+          <div>
+            <label>Paid By *</label>
+            <select id="so-paidby" onchange="onStockSelectChange('so-paidby')"></select>
+            <div id="so-paidby-other-wrap" style="display:none;margin-top:6px">
+              <label>Paid By name *</label><input type="text" id="so-paidby-other" placeholder="Enter paid by">
+            </div>
+          </div>
+        </div>
+        <div class="submit-row">
+          <button class="btn" onclick="closeStockOrderModal()">Cancel</button>
+          <button class="btn btn-primary" id="so-submit" onclick="submitStockOrder()">Save order</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STOCK: MARK DELIVERED (stage 2) ───────────────────────────── -->
+    <div id="stock-delivery-modal" class="stock-modal">
+      <div class="stock-modal-card">
+        <div class="stock-modal-hd">
+          <span class="stock-modal-title">Mark delivered</span>
+          <button class="btn btn-sm" onclick="closeStockDeliveryModal()">✕ Close</button>
+        </div>
+        <div id="sd-context" class="stock-ctx"></div>
+        <div class="fg">
+          <div><label>Delivery Date *</label><input type="date" id="sd-date"></div>
+          <div><label>IMEI_1 *</label><input type="text" id="sd-imei1" inputmode="numeric" autocomplete="off"></div>
+          <div><label>IMEI_2 (optional)</label><input type="text" id="sd-imei2" inputmode="numeric" autocomplete="off"></div>
+        </div>
+        <div class="submit-row">
+          <button class="btn" onclick="closeStockDeliveryModal()">Cancel</button>
+          <button class="btn btn-primary" id="sd-submit" onclick="submitStockDelivery()">Mark delivered</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STOCK: MARK SOLD (stage 3) ────────────────────────────────── -->
+    <div id="stock-sell-modal" class="stock-modal">
+      <div class="stock-modal-card">
+        <div class="stock-modal-hd">
+          <span class="stock-modal-title">Mark sold</span>
+          <button class="btn btn-sm" onclick="closeStockSellModal()">✕ Close</button>
+        </div>
+        <div id="ss-context" class="stock-ctx"></div>
+        <div class="fg fg-2">
+          <div><label>Selling Price *</label><input type="number" id="ss-price" min="0" step="1" placeholder="0"></div>
+          <div><label>Selling Date *</label><input type="date" id="ss-date"></div>
+          <div class="full"><label>Customer Name *</label><input type="text" id="ss-customer" autocomplete="off"></div>
+          <div>
+            <label>Payment Mode *</label>
+            <select id="ss-payment">
+              <option value="">Select…</option>
+              <option value="Cash">Cash</option>
+              <option value="AKS Fin">AKS Fin</option>
+              <option value="Other Fin">Other Fin</option>
+            </select>
+          </div>
+          <div>
+            <label>Billing Date <span title="Exact date on the bill" style="cursor:help;color:#888;font-weight:400">ⓘ</span></label>
+            <input type="date" id="ss-billing" title="Exact date on the bill">
+          </div>
+        </div>
+        <div class="submit-row">
+          <button class="btn" onclick="closeStockSellModal()">Cancel</button>
+          <button class="btn btn-success" id="ss-submit" onclick="submitStockSold()">Mark sold</button>
+        </div>
+      </div>
     </div>
 
     <!-- ── EDIT MODAL ────────────────────────────────────────────────── -->
@@ -501,7 +619,7 @@
 <script src="js/approvals.js?v=20"></script>
 <script src="js/my-subs.js?v=4"></script>
 <script src="js/emi-messages.js?v=19"></script>
-<script src="js/stock.js?v=14"></script>
+<script src="js/stock.js?v=16"></script>
 <script src="js/users.js?v=7"></script>
 
 <!-- ── Install Banner ─────────────────────────────────────────────────── -->
