@@ -588,7 +588,27 @@
     </div>
     <div class="divider" style="margin:12px 0"></div>
     <div style="font-size:11px;color:#888;margin-bottom:6px">Or mark the device as seized:</div>
-    <button class="btn" style="width:100%;background:#000;color:#fff;border:none;padding:8px;border-radius:8px;font-size:12px;cursor:pointer" onclick="submitMobileJabt()">Mark as Mobile Jabt</button>
+    <button class="btn" style="width:100%;background:#000;color:#fff;border:none;padding:8px;border-radius:8px;font-size:12px;cursor:pointer" onclick="openMobileJabtForm()">Mark as Mobile Jabt</button>
+  </div>
+</div>
+
+<!-- Mobile Jabt modal -->
+<div id="mobile-jabt-modal" class="modal-overlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center" onclick="if(event.target===this)closeMobileJabtForm()">
+  <div class="card" style="width:90%;max-width:380px;margin:0;padding:16px" onclick="event.stopPropagation()">
+    <div style="font-size:14px;font-weight:600;color:#534AB7;margin-bottom:10px">Mark as Mobile Jabt</div>
+    <div class="fg" style="display:flex;flex-direction:column;gap:10px">
+      <div><label>Resale Price (₹)</label>
+        <input type="number" id="jabt-resale-price" placeholder="Resale price" min="0" step="0.01">
+      </div>
+      <div><label>Flipkart Link</label>
+        <input type="url" id="jabt-flipkart-link" placeholder="https://www.flipkart.com/...">
+      </div>
+    </div>
+    <div class="submit-row" style="margin-top:12px">
+      <button class="btn" onclick="closeMobileJabtForm()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitMobileJabt()">Confirm</button>
+    </div>
+    <div style="font-size:11px;color:#888;margin-top:8px">Resale price is saved to the Amount column (D) and the Flipkart link to the EMI number column (B).</div>
   </div>
 </div>
 
@@ -615,7 +635,7 @@
 <script src="js/auth.js?v=9"></script>
 <script src="js/nav.js?v=8"></script>
 <script src="js/loans.js?v=10"></script>
-<script src="js/emi.js?v=40"></script>
+<script src="js/emi.js?v=41"></script>
 <script src="js/approvals.js?v=20"></script>
 <script src="js/my-subs.js?v=4"></script>
 <script src="js/emi-messages.js?v=19"></script>

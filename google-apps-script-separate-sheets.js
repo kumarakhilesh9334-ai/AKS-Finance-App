@@ -1563,13 +1563,17 @@ function doPost(e) {
     // ── Set revised date ────────────────────────────────────────────
     if (payload.action === 'setRevisedDate') {
       const { loanId, emiNum, revisedDate, amount, note } = payload;
+      const noteTxt = String(note||'').trim();
+      const isJabt = noteTxt.toLowerCase() === 'mobile jabt';
       const sheet = ensureSheet(ss, REVISED_DATES_SHEET, ['LoanID','EMI_Num','Revised_Date','Amount','Note','CreatedAt']);
       sheet.appendRow([
         String(loanId||'').trim(),
-        parseInt(emiNum)||0,
+        // Mobile Jabt reuses EMI_Num (column B) for the Flipkart link; every
+        // other revision keeps the numeric EMI number.
+        isJabt ? String(emiNum||'').trim() : (parseInt(emiNum)||0),
         fmtDateFromYMD(revisedDate||''),
         parseFloat(amount)||0,
-        String(note||'').trim(),
+        noteTxt,
         new Date().toISOString(),
       ]);
       // Lean response, exactly like saveLoan/saveEmi: the row is committed, so
@@ -1720,14 +1724,19 @@ function readAllRevisedDates(ss) {
   const b = configBounds(ss)[REVISED_DATES_SHEET];
   tm('rev.cfg');
   const rows = readDataRows(sheet, 2, b, 6, 'rev.');
-  return rows.filter(r => r[0] && String(r[0]).trim()).map(r => ({
-    loanId: String(r[0]||'').trim(),
-    emiNum: parseInt(r[1])||0,
-    revisedDate: fmtDate(r[2]),
-    amount: parseFloat(r[3])||0,
-    note: String(r[4]||'').trim(),
-    createdAt: String(r[5]||''),
-  }));
+  return rows.filter(r => r[0] && String(r[0]).trim()).map(r => {
+    const note = String(r[4]||'').trim();
+    return {
+      loanId: String(r[0]||'').trim(),
+      // Mobile Jabt stores the Flipkart link in EMI_Num (column B) — preserve
+      // it as text instead of coercing it to 0.
+      emiNum: note.toLowerCase() === 'mobile jabt' ? String(r[1]||'').trim() : (parseInt(r[1])||0),
+      revisedDate: fmtDate(r[2]),
+      amount: parseFloat(r[3])||0,
+      note,
+      createdAt: String(r[5]||''),
+    };
+  });
 }
 
 // ── Cached helpers for per-loan detail reads (readLoanDetail) ─────────────
@@ -1819,14 +1828,18 @@ function getCachedRevisedDatesFor(ss, loanId) {
     try {
       const revSheet = ss.getSheetByName(REVISED_DATES_SHEET);
       if (revSheet && revSheet.getLastRow() > 1) {
-        rows = revSheet.getRange(2, 1, revSheet.getLastRow()-1, 6).getValues().map(r => [
-          String(r[0]||'').trim(),
-          parseInt(r[1])||0,
-          fmtDate(r[2]),
-          parseFloat(r[3])||0,
-          String(r[4]||'').trim(),
-          String(r[5]||''),
-        ]);
+        rows = revSheet.getRange(2, 1, revSheet.getLastRow()-1, 6).getValues().map(r => {
+          const note = String(r[4]||'').trim();
+          return [
+            String(r[0]||'').trim(),
+            // Mobile Jabt stores the Flipkart link in column B.
+            note.toLowerCase() === 'mobile jabt' ? String(r[1]||'').trim() : (parseInt(r[1])||0),
+            fmtDate(r[2]),
+            parseFloat(r[3])||0,
+            note,
+            String(r[5]||''),
+          ];
+        });
       }
     } catch(e) { /* non-critical */ }
     cachePutIfSmall(cache, 'revised_dates_raw', rows, DETAIL_CACHE_TTL);

@@ -277,6 +277,19 @@ function revisedBadgeHtml(loan) {
   return `<div style="text-align:center;margin-bottom:2px"><span style="display:inline-block;font-size:12px;font-weight:600;color:#000;background:#fff;padding:1px 10px;border-radius:8px;border:1px solid #ddd">${text}</span></div>`;
 }
 
+// Mobile Jabt stores the resale price in Amount (column D) and the Flipkart
+// link in EMI_Num (column B). Older rows have no link and a numeric sentinel
+// (0), so only a non-numeric EMI_Num is treated as the link.
+function mobileJabtInfo(loanId) {
+  const rows = (S.revisedDates || []).filter(rd => rd.loanId === loanId && rd.note === 'Mobile Jabt');
+  if (!rows.length) return null;
+  // Sheet order is append order, so the last row is the latest mark.
+  const rec = rows[rows.length - 1];
+  const raw = rec.emiNum;
+  const link = (raw != null && String(raw).trim() !== '' && isNaN(Number(raw))) ? String(raw).trim() : '';
+  return { resalePrice: rec.amount || 0, link: link };
+}
+
 // A partial receipt is any EMI row whose reason says so, or whose amount is
 // below the standard EMI. Partial rows must not block a second receipt for the
 // same EMI number the way a full pending submission does.
@@ -842,6 +855,12 @@ async function openCdDetail(loanId) {
     ['Drive Link',                   l.driveLink ? '<a href="'+l.driveLink+'" target="_blank" style="color:#534AB7">Open ↗</a>' : '—'],
     ['Down Payment %',               D(l.downPaymentPct)],
   ];
+
+  const jabt = mobileJabtInfo(l.loanId);
+  if (jabt) {
+    rows.push(['Mobile Jabt Resale Price', M(jabt.resalePrice)]);
+    rows.push(['Flipkart Link', jabt.link ? '<a href="'+jabt.link.replace(/"/g,'&quot;')+'" target="_blank" style="color:#534AB7;word-break:break-all">'+jabt.link+'</a>' : '—']);
+  }
 
   let emiTableHtml = '';
   const slots2 = l.slots || [];
@@ -1933,6 +1952,14 @@ async function selectOverviewLoan(loanId) {
       ['AK Share', akPct + '%'],
       ['AKS Share', aksPct + '%'],
     ];
+    const jabt = mobileJabtInfo(loan.loanId);
+    const jabtHtml = jabt ? `
+      <div class="divider"></div>
+      <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px;text-align:left">Mobile Jabt Detail</div>
+      <div class="kv" style="font-size:12px;text-align:left">
+        <span class="kv-l">Resale Price</span><span class="kv-v">${Mf(jabt.resalePrice)}</span>
+        <span class="kv-l">Flipkart Link</span><span class="kv-v">${jabt.link ? '<a href="'+jabt.link.replace(/"/g,'&quot;')+'" target="_blank" style="color:#534AB7;word-break:break-all">'+jabt.link+'</a>' : '—'}</span>
+      </div>` : '';
     const newSections = `
       <div class="divider"></div>
       <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px;text-align:left">Main Detail</div>
@@ -1943,6 +1970,7 @@ async function selectOverviewLoan(loanId) {
       <div class="divider"></div>
       <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px;text-align:left">Loan Detail</div>
       <div class="kv" style="font-size:12px;text-align:left">${loanRows.map(([l,v])=>`<span class="kv-l">${l}</span><span class="kv-v">${v}</span>`).join('')}</div>
+      ${jabtHtml}
     `;
     const oldExtra = $('ov-detail-extra');
     if (oldExtra) oldExtra.remove();
@@ -2366,6 +2394,10 @@ function renderOverviewRevised() {
   const today = new Date(); today.setHours(0,0,0,0);
   const hasRevDates = filtered.filter(l => {
     const revs = S.revisedDates.filter(rd => rd.loanId === l.loanId);
+    const hasJabt = revs.some(rd => rd.note === 'Mobile Jabt');
+    // A loan carrying the Mobile Jabt flag is done once it is defaulted or has
+    // completed its EMIs — keep it out of the Mobile Jabt section entirely.
+    if (hasJabt && (l.isDefaulted || l.emiCompleted || l.status === 'Closed')) return false;
     return revs.some(rd => {
       if (rd.note === 'Mobile Jabt') return true;
       const slot = (l.slots || []).find(s => s.num === rd.emiNum);
@@ -2521,19 +2553,56 @@ function renderOverviewOverdue() {
     + sectionHtml('90+ days', 'over90', '#5C0000', '#f0f0f0', '\uD83D\uDD34', over90);
 }
 
+function openMobileJabtForm() {
+  const loanId = S.selectedEmiLoanId;
+  if (!loanId) return;
+  const existing = mobileJabtInfo(loanId);
+  const priceEl = $('jabt-resale-price');
+  const linkEl  = $('jabt-flipkart-link');
+  if (priceEl) priceEl.value = existing && existing.resalePrice ? existing.resalePrice : '';
+  if (linkEl)  linkEl.value  = existing ? existing.link : '';
+  const modal = $('mobile-jabt-modal');
+  if (modal) modal.style.display = 'flex';
+  setTimeout(() => { if (priceEl) priceEl.focus(); }, 0);
+}
+
+function closeMobileJabtForm() {
+  const modal = $('mobile-jabt-modal');
+  if (modal) modal.style.display = 'none';
+}
+
 async function submitMobileJabt() {
   const loanId = S.selectedEmiLoanId;
   if (!loanId) return;
+  const priceEl = $('jabt-resale-price');
+  const linkEl  = $('jabt-flipkart-link');
+  const priceRaw = priceEl ? String(priceEl.value || '').trim() : '';
+  const resalePrice = parseFloat(priceRaw);
+  let flipkartLink = linkEl ? String(linkEl.value || '').trim() : '';
+  if (priceRaw === '' || isNaN(resalePrice) || resalePrice < 0) {
+    showAlert('Enter the resale price.', 'e');
+    if (priceEl) priceEl.focus();
+    return;
+  }
+  if (!flipkartLink) {
+    showAlert('Enter the Flipkart link.', 'e');
+    if (linkEl) linkEl.focus();
+    return;
+  }
+  if (!/^https?:\/\//i.test(flipkartLink)) flipkartLink = 'https://' + flipkartLink;
   if (!confirm('Confirm marking this loan as Mobile Jabt (device seized, no further action)?')) return;
+  closeMobileJabtForm();
   closeRevisedDateForm();
   showLoader();
   try {
-    const res = await gasPost({ action: 'setRevisedDate', loanId, emiNum: 0, revisedDate: '', amount: 0, note: 'Mobile Jabt' });
+    // EMI_Num (column B) carries the Flipkart link for Mobile Jabt rows;
+    // Amount (column D) carries the resale price.
+    const res = await gasPost({ action: 'setRevisedDate', loanId, emiNum: flipkartLink, revisedDate: '', amount: resalePrice, note: 'Mobile Jabt' });
     if (res.ok) {
       // Lean {ok:true} — record it locally instead of reading the sheet back:
       // no follow-up GET, and no selectEmiLoan() re-read either (a write is
       // never followed by a read).
-      noteLocalRevisedDate(loanId, 0, '', 0, 'Mobile Jabt');
+      noteLocalRevisedDate(loanId, flipkartLink, '', resalePrice, 'Mobile Jabt');
       rerenderActiveTab();
       renderApprovals($('appr-search') ? $('appr-search').value : '');
       showAlert('Loan marked as Mobile Jabt.');
