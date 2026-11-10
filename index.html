@@ -392,9 +392,12 @@
     <!-- ── STOCK (admin) ─────────────────────────────────────────────── -->
     <div class="page" id="page-stock">
       <div style="font-size:15px;font-weight:500;margin-bottom:0.75rem">Stock</div>
-      <div class="emi-search-wrap">
-        <span class="emi-search-icon">🔍</span>
-        <input type="text" id="stock-search" placeholder="Search IMEI_1 or IMEI_2…" oninput="onStockSearchInput(this.value)">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:1rem">
+        <div class="emi-search-wrap" style="flex:1;margin-bottom:0">
+          <span class="emi-search-icon">🔍</span>
+          <input type="text" id="stock-search" placeholder="Search IMEI_1 or IMEI_2…" oninput="onStockSearchInput(this.value)">
+        </div>
+        <button class="btn btn-clear" onclick="clearStockSearch()" title="Clear search">Clear</button>
       </div>
       <div class="stock-tabs" id="stock-pills">
           <button class="stock-tab active" data-f="available" onclick="setStockFilter('available')">Available</button>
@@ -639,7 +642,7 @@
 <script src="js/approvals.js?v=20"></script>
 <script src="js/my-subs.js?v=4"></script>
 <script src="js/emi-messages.js?v=19"></script>
-<script src="js/stock.js?v=16"></script>
+<script src="js/stock.js?v=17"></script>
 <script src="js/users.js?v=7"></script>
 
 <!-- ── Install Banner ─────────────────────────────────────────────────── -->

@@ -76,6 +76,14 @@ function onStockSearchInput() {
   debounced(renderStock, 'stock-search', 200);
 }
 
+function clearStockSearch() {
+  const inp = $('stock-search');
+  if (!inp) return;
+  inp.value = '';
+  renderStock();
+  inp.focus();
+}
+
 async function loadStock() {
   // Every snapshot already carries stock: pushSnapshot() runs readStock with
   // forceRefresh=1, and readStock opens the other spreadsheet itself by ID
