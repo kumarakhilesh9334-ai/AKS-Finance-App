@@ -323,8 +323,8 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 .ov-header{display:flex;flex-direction:column;gap:6px;margin-bottom:0.5rem;margin-top:-0.75rem}
 .ov-row1{display:flex;align-items:center;gap:6px;width:100%;flex-wrap:wrap;min-height:30px}
 .ov-row2{display:flex;align-items:center;width:100%;min-height:30px}
-.ov-scope-select{width:auto;max-width:160px;flex:0 0 auto;margin-right:6px;padding:7px 24px 7px 10px;font-size:12px;height:34px;background:#fff;color:#1a1a1a;border:0.5px solid #ccc;border-radius:8px;cursor:pointer}
-@media(orientation:portrait){.ov-sticky{position:sticky;top:41px;z-index:5;background:#f5f5f3;padding-bottom:4px}.ov-sticky .ov-row2{background:#fff;padding:6px 8px;border-radius:10px;margin-bottom:0.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.06)}.ov-sticky .ov-row2 input{min-height:28px;padding:2px 8px 2px 32px;font-size:12px;box-sizing:border-box}.ov-sticky .ov-row2 .btn-clear{min-height:32px;padding:6px 14px;font-size:13px;box-sizing:border-box}.ov-sticky .ov-row2 .ov-scope-select{height:28px;min-height:28px;max-width:118px;padding:2px 18px 2px 6px;font-size:11px;box-sizing:border-box}}
+.ov-scope-select{width:64px;flex:0 0 auto;margin-right:6px;padding:7px 16px 7px 6px;font-size:12px;height:34px;background:#fff;color:#1a1a1a;border:0.5px solid #ccc;border-radius:8px;cursor:pointer;text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
+@media(orientation:portrait){.ov-sticky{position:sticky;top:41px;z-index:5;background:#f5f5f3;padding-bottom:4px}.ov-sticky .ov-row2{background:#fff;padding:6px 8px;border-radius:10px;margin-bottom:0.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.06)}.ov-sticky .ov-row2 input{min-height:28px;padding:2px 8px 2px 32px;font-size:12px;box-sizing:border-box}.ov-sticky .ov-row2 .btn-clear{min-height:32px;padding:6px 14px;font-size:13px;box-sizing:border-box}.ov-sticky .ov-row2 .ov-scope-select{height:28px;min-height:28px;width:64px;padding:2px 16px 2px 4px;font-size:11px;box-sizing:border-box}}
 
 /* ═══════════════════════════════════════════════════════════════════════
    MOBILE RESPONSIVE — Android Chrome (≤600px)

@@ -114,6 +114,7 @@ function completeLogin(user) {
   restoreState();   // hydrate from cache for instant first paint
   buildNav();
   goTo(S.page || defPage());
+  focusLandingSearch();
 
   // First paint is done. snapshot.js now holds the decision: the five Google
   // boot reads run only if the Worker could not answer for them.

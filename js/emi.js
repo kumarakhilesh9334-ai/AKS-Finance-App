@@ -18,6 +18,34 @@ function onSearchScopeChange() {
   renderAllOverview($('ov-search') ? $('ov-search').value : '');
 }
 
+// Keep the scope dropdown exactly as wide as the Clear button beside it. The
+// button's width comes from its own text and padding, so measure it instead of
+// guessing, and re-measure whenever the viewport can change font metrics.
+function syncSearchScopeWidth() {
+  const sel = $('ov-search-scope');
+  const btn = document.querySelector('#page-all-loans .ov-row2 .btn-clear');
+  if (!sel || !btn) return;
+  const w = btn.offsetWidth;
+  if (w > 0) sel.style.width = w + 'px';
+}
+window.addEventListener('resize', syncSearchScopeWidth);
+window.addEventListener('orientationchange', syncSearchScopeWidth);
+
+// On first entry to the All Loans page put the cursor in the search box, so the
+// soft keyboard is already up when the app opens. Called once per login from
+// completeLogin(); later tab switches must not steal focus.
+function focusLandingSearch() {
+  if (S.page !== 'all-loans') return;
+  const inp = $('ov-search');
+  if (!inp) return;
+  // A field that is still display:none cannot take focus, so wait for the page
+  // to paint (rAF) before focusing.
+  requestAnimationFrame(() => setTimeout(() => {
+    if (S.page !== 'all-loans') return;
+    try { inp.focus({ preventScroll: true }); } catch (e) { inp.focus(); }
+  }, 0));
+}
+
 // Search scope for the All Loans page. 'customer' (the default) covers only
 // what a customer is identified by — loan ID, name and mobile — while 'all'
 // opens up every field the page already knew how to search.
