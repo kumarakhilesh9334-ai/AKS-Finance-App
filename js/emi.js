@@ -14,6 +14,34 @@ function clearOverviewSearch() {
   const inp = $('ov-search');
   if (inp) { inp.value = ''; renderAllOverview(''); inp.focus(); }
 }
+function onSearchScopeChange() {
+  renderAllOverview($('ov-search') ? $('ov-search').value : '');
+}
+
+// Search scope for the All Loans page. 'customer' (the default) covers only
+// what a customer is identified by — loan ID, name and mobile — while 'all'
+// opens up every field the page already knew how to search.
+function overviewSearchScope() {
+  const el = $('ov-search-scope');
+  return el && el.value === 'all' ? 'all' : 'customer';
+}
+
+function overviewMatches(l, q, scope) {
+  if (!q) return true;
+  if (String(l.loanId || '').toLowerCase().includes(q)) return true;
+  if (String(l.customerName || '').toLowerCase().includes(q)) return true;
+  if (String(l.phone || '').includes(q)) return true;
+  if (scope !== 'all') return false;
+
+  const cdKey = String(l.aadhaarPan || '').toUpperCase().replace(/\s/g, '');
+  const cd = (S.customerDetails && S.customerDetails[cdKey]) ? S.customerDetails[cdKey] : null;
+  const custFields = cd ? [cd.yob, cd.landlord, cd.husband, cd.father, cd.colony, cd.area, cd.district, cd.pincode] : [];
+  return String(l.guarantor || '').toLowerCase().includes(q) ||
+    String(l.model || '').toLowerCase().includes(q) ||
+    String(l.aadhaarPan || '').toLowerCase().includes(q) ||
+    String((l.lockAppCode || l.lockingAppCode) || '').toLowerCase().includes(q) ||
+    custFields.some(f => String(f || '').toLowerCase().includes(q));
+}
 
 // ── Full-data load, retry and preemption ─────────────────────────────────
 // The app boots with slim loan rows and upgrades them to full rows via
@@ -1385,59 +1413,82 @@ function renderAllOverview(query) {
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const q = (query || '').toLowerCase();
+  const scope = overviewSearchScope();
 
-  const filtered = q ? source.filter(l => {
-    const cdKey = String(l.aadhaarPan || '').toUpperCase().replace(/\s/g, '');
-    const cd = (S.customerDetails && S.customerDetails[cdKey]) ? S.customerDetails[cdKey] : null;
-    const custFields = cd ? [cd.yob, cd.landlord, cd.husband, cd.father, cd.colony, cd.area, cd.district, cd.pincode] : [];
-    return l.loanId.toLowerCase().includes(q) ||
-      (l.customerName||'').toLowerCase().includes(q) ||
-      (l.phone||'').includes(q) ||
-      (l.guarantor||'').toLowerCase().includes(q) ||
-      (l.model||'').toLowerCase().includes(q) ||
-      (l.aadhaarPan||'').toLowerCase().includes(q) ||
-      ((l.lockAppCode || l.lockingAppCode) || '').toLowerCase().includes(q) ||
-      custFields.some(f => String(f||'').toLowerCase().includes(q));
-  }) : source;
+  const filtered = q ? source.filter(l => overviewMatches(l, q, scope)) : source;
 
-  const upcoming  = [];
-  const overdue   = [];
-  const closed    = [];
+  // Buckets render in exactly this order in the All column: due today, then the
+  // future, then the three overdue bands mild → severe, then the terminal two.
+  const dueToday  = [];
+  const notDue    = [];
+  const due1to30  = [];
+  const due31to90 = [];
+  const due91plus = [];
   const defaulted = [];
+  const closed    = [];
 
   filtered.forEach(l => {
     if (l.isDefaulted) { defaulted.push(l); return; }
     if (l.emiCompleted || l.status === 'Closed') { closed.push(l); return; }
-    if (!l.nextEmiDate) { upcoming.push(l); return; }
-    const due = new Date(l.nextEmiDate); due.setHours(0,0,0,0);
-    if (due < today) overdue.push(l); else upcoming.push(l);
+    const due = l.nextEmiDate ? parseSheetDate(l.nextEmiDate) : null;
+    if (!due) { notDue.push(l); return; }
+    due.setHours(0, 0, 0, 0);
+    const days = Math.round((today - due) / 86400000);
+    if (days < 0)        notDue.push(l);
+    else if (days === 0) dueToday.push(l);
+    else if (days <= 30) due1to30.push(l);
+    else if (days <= 90) due31to90.push(l);
+    else                 due91plus.push(l);
   });
 
-  overdue.sort((a, b) => {
-    const diff = new Date(b.nextEmiDate||'0') - new Date(a.nextEmiDate||'0');
-    return diff !== 0 ? diff : a.loanId.localeCompare(b.loanId);
-  });
-  upcoming.sort((a, b) => {
-    const diff = new Date(a.nextEmiDate||'9999') - new Date(b.nextEmiDate||'9999');
-    return diff !== 0 ? diff : a.loanId.localeCompare(b.loanId);
-  });
-  closed.sort((a, b) => {
-    const diff = new Date(b.lastEmiDate||'0') - new Date(a.lastEmiDate||'0');
-    return diff !== 0 ? diff : a.loanId.localeCompare(b.loanId);
-  });
-  defaulted.sort((a, b) => {
-    const diff = new Date(b.billDate||'0') - new Date(a.billDate||'0');
-    return diff !== 0 ? diff : a.loanId.localeCompare(b.loanId);
-  });
+  // Newest due date first inside each overdue band (least overdue first),
+  // soonest first for not-due, newest bill/close date first for the terminal
+  // buckets. loanId breaks ties so the order is stable across renders.
+  const dateTs = v => { const d = parseSheetDate(v); return d ? d.getTime() : null; };
+  const byDueDesc = (a, b) => {
+    const da = dateTs(a.nextEmiDate), db = dateTs(b.nextEmiDate);
+    if (da === null && db === null) return a.loanId.localeCompare(b.loanId);
+    if (da === null) return 1;
+    if (db === null) return -1;
+    return db - da || a.loanId.localeCompare(b.loanId);
+  };
+  const byDueAsc = (a, b) => {
+    const da = dateTs(a.nextEmiDate), db = dateTs(b.nextEmiDate);
+    if (da === null && db === null) return a.loanId.localeCompare(b.loanId);
+    if (da === null) return 1;
+    if (db === null) return -1;
+    return da - db || a.loanId.localeCompare(b.loanId);
+  };
+  const byDateDesc = field => (a, b) =>
+    (dateTs(b[field]) || 0) - (dateTs(a[field]) || 0) || a.loanId.localeCompare(b.loanId);
 
-  $('ov-all-count').textContent = upcoming.length + overdue.length + closed.length + defaulted.length;
+  dueToday.sort((a, b) => a.loanId.localeCompare(b.loanId));
+  notDue.sort(byDueAsc);
+  due1to30.sort(byDueDesc);
+  due31to90.sort(byDueDesc);
+  due91plus.sort(byDueDesc);
+  defaulted.sort(byDateDesc('billDate'));
+  closed.sort(byDateDesc('lastEmiDate'));
+
+  const overdue  = [...due1to30, ...due31to90, ...due91plus];
+  const upcoming = [...dueToday, ...notDue];
+
+  $('ov-all-count').textContent = filtered.length;
   $('ov-upcoming-count').textContent  = upcoming.length;
   $('ov-overdue-count').textContent   = overdue.length;
   $('ov-closed-count').textContent    = closed.length;
   $('ov-defaulted-count').textContent = defaulted.length;
 
   const noDataMsg = (!S.sheetLoans || !S.sheetLoans.length) ? loansEmptyMsg() : '';
-  const allCards = [...overdue.map(l => overviewCard(l, 'overdue')), ...upcoming.map(l => overviewCard(l, 'upcoming')), ...defaulted.map(l => overviewCard(l, 'defaulted')), ...closed.map(l => overviewCard(l, 'closed'))];
+  const allCards = [
+    ...dueToday.map(l  => overviewCard(l, 'upcoming')),
+    ...notDue.map(l    => overviewCard(l, 'upcoming')),
+    ...due1to30.map(l  => overviewCard(l, 'overdue')),
+    ...due31to90.map(l => overviewCard(l, 'overdue')),
+    ...due91plus.map(l => overviewCard(l, 'overdue')),
+    ...defaulted.map(l => overviewCard(l, 'defaulted')),
+    ...closed.map(l    => overviewCard(l, 'closed')),
+  ];
   $('ov-all-list').innerHTML       = allCards.length ? allCards.join('') : (noDataMsg || '<div class="emi-col-empty">No loans</div>');
   $('ov-upcoming-list').innerHTML  = upcoming.length  ? upcoming.map(l  => overviewCard(l, 'upcoming')).join('')  : (noDataMsg || '<div class="emi-col-empty">No upcoming EMIs</div>');
   $('ov-overdue-list').innerHTML   = overdue.length   ? overdue.map(l   => overviewCard(l, 'overdue')).join('')   : (noDataMsg || '<div class="emi-col-empty">All clear ✓</div>');
@@ -2100,7 +2151,7 @@ function renderOverviewLoans() {
   if (!el) return;
   const source = (S.sheetLoans && S.sheetLoans.length) ? S.sheetLoans : [];
   const q = ($('ov-search') ? $('ov-search').value : '').toLowerCase();
-  let loans = q ? source.filter(l => l.loanId.toLowerCase().includes(q) || (l.customerName||'').toLowerCase().includes(q)) : source;
+  let loans = q ? source.filter(l => overviewMatches(l, q, overviewSearchScope())) : source;
   loans = [...loans]; // copy
   loans.sort((a, b) => {
     const da = a.billDate ? new Date(a.billDate) : new Date(0);
@@ -2390,7 +2441,7 @@ function renderOverviewRevised() {
   if (!el) return;
   const q = (($('ov-search') ? $('ov-search').value : '') || '').toLowerCase();
   const source = (S.sheetLoans && S.sheetLoans.length) ? S.sheetLoans : [];
-  const filtered = q ? source.filter(l => l.loanId.toLowerCase().includes(q) || (l.customerName||'').toLowerCase().includes(q)) : source;
+  const filtered = q ? source.filter(l => overviewMatches(l, q, overviewSearchScope())) : source;
   const today = new Date(); today.setHours(0,0,0,0);
   const hasRevDates = filtered.filter(l => {
     const revs = S.revisedDates.filter(rd => rd.loanId === l.loanId);
@@ -2450,7 +2501,7 @@ function renderOverviewPartials() {
   const partialLoanIds = new Set(pts.map(p => p.loanId));
   const source = (S.sheetLoans && S.sheetLoans.length) ? S.sheetLoans : [];
   let loans = source.filter(l => partialLoanIds.has(l.loanId));
-  if (q) loans = loans.filter(l => l.loanId.toLowerCase().includes(q) || (l.customerName||'').toLowerCase().includes(q));
+  if (q) loans = loans.filter(l => overviewMatches(l, q, overviewSearchScope()));
   if (!loans.length) {
     el.innerHTML = '<div class="emi-col-empty">No loans with partial payments</div>';
     return;

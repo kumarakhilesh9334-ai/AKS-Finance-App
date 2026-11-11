@@ -13,7 +13,7 @@
   if (location.protocol === 'http:' || location.protocol === 'https:')
     document.write('<link rel="manifest" href="manifest.json">');
 </script>
-<link rel="stylesheet" href="css/styles.css?v=15">
+<link rel="stylesheet" href="css/styles.css?v=16">
 <style>
   #install-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:99999;align-items:center;justify-content:center}
   #install-overlay.show{display:flex}
@@ -194,6 +194,10 @@
         <div class="ls-left">
       <div class="ov-sticky">
         <div class="ov-row2">
+          <select id="ov-search-scope" class="ov-scope-select" onchange="onSearchScopeChange()" title="Search in">
+            <option value="customer" selected>Customer Detail</option>
+            <option value="all">All Detail</option>
+          </select>
           <div class="emi-search-wrap" style="flex:1;margin-bottom:0">
             <span class="emi-search-icon">🔍</span>
             <input type="text" id="ov-search" placeholder="Search Loan ID or customer…" oninput="onSearchInput(this.value)">
@@ -638,7 +642,7 @@
 <script src="js/auth.js?v=9"></script>
 <script src="js/nav.js?v=8"></script>
 <script src="js/loans.js?v=10"></script>
-<script src="js/emi.js?v=41"></script>
+<script src="js/emi.js?v=42"></script>
 <script src="js/approvals.js?v=20"></script>
 <script src="js/my-subs.js?v=4"></script>
 <script src="js/emi-messages.js?v=19"></script>
