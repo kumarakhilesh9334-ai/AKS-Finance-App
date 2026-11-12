@@ -6,7 +6,9 @@
 // summed Cost Price of everything under it. Undelivered is two levels —
 // Model > Specs. Cost Sheet is a flat roll-up: one row per Device/Model/Specs
 // holding the HIGHEST cost seen, for units that have both an order and a
-// selling date.
+// selling date. A leaf in the Available view also carries Check (copy IMEI_1
+// and open the brand's activation page), Add/Edit date, and Sell; a leaf whose
+// Activation date is filled is tinted amber until the sale is logged.
 
 let _stock = { headers: [], rows: [] };
 let _stockLoaded = false;
@@ -43,7 +45,7 @@ let _stockUSpecKeys = [];
 const _STOCK_AMT_COLS = ['cost price', 'selling price', 'kunal telecom', 'aks share'];
 
 const _STOCK_DISPLAY = {
-  available:   { cols: ['Device','Brand','Model','Specs','IMEI_1','IMEI_2','Cost Price'] },
+  available:   { cols: ['Device','Brand','Model','Specs','IMEI_1','IMEI_2','Activation Date','Cost Price'] },
   costsheet:   { cols: ['Device','Model','Specs','Cost Price'] },
   sold:        { cols: ['Month Sold','Selling Date','Model','Specs','Customer Name','Payment Mode','IMEI_1','Cost Price','Selling Price','Kunal Telecom','AKS Share'] },
   undelivered: { cols: ['Model','Specs','Order Date','Marketplace','Paid By','Cost Price'] },
@@ -161,9 +163,13 @@ function _stockIsAdmin() {
 }
 
 function _syncStockFab() {
+  const admin = _stockIsAdmin();
   const fab = $('stock-fab');
-  if (!fab) return;
-  fab.style.display = _stockIsAdmin() ? 'flex' : 'none';
+  if (fab) fab.style.display = admin ? 'flex' : 'none';
+  // The activation checker is an admin tool as well. Hiding it here keeps a
+  // read-only Stock tab clean without a second admin check in activation.js.
+  const bar = $('act-toolbar');
+  if (bar) bar.style.display = admin ? 'flex' : 'none';
 }
 
 // Local calendar date as YYYY-MM-DD. toISOString() is UTC, which is the
@@ -491,6 +497,196 @@ async function submitStockSold() {
   }
 }
 
+// ── Manual activation check (Stock tab) ─────────────────────────────────────
+// The batch checker (js/activation.js) asks the local server to visit every IMEI
+// and returns a CSV. This per-row path is deliberately manual: copy IMEI_1, open
+// the brand's own activation page, solve the captcha there, then log the date it
+// reports. That date is written to the Stock sheet's "Activation date" column.
+// Brand -> activation page. Brand names come from the Stock sheet, so matching
+// is case/spacing-insensitive. Short aliases such as "mi" only match the whole
+// brand name, so they cannot swallow unrelated brands like "Micromax".
+const _STOCK_ACTIVATION_SITES = [
+  { names: ['nothing'], url: 'https://in.nothing.tech/pages/imei' },
+  { names: ['oppo'], url: 'https://support.oppo.com/in/check/' },
+  { names: ['iqoo'], url: 'https://www.iqoo.com/in/support/IMEI' },
+  { names: ['vivo'], url: 'https://www.vivo.com/en/support/IMEI' },
+  { names: ['motorola', 'moto'], url: 'https://en-in.support.motorola.com/app/warranty/check' },
+  { names: ['xiaomi', 'redmi', 'mi'], url: 'https://www.mi.com/global/verify/#/en/tab/imei' },
+  { names: ['realme'], url: 'https://www.realme.com/in/support/phonecheck' },
+  { names: ['oneplus'], url: 'https://service.oneplus.com/in/check#/' },
+];
+
+let _stockActivationCtx = null;
+
+function _stockActivationUrl(brand) {
+  const b = String(brand == null ? '' : brand).toLowerCase().replace(/[^a-z0-9]+/g, '');
+  if (!b) return '';
+  // Exact brand first, so a short alias cannot match inside another brand.
+  for (let i = 0; i < _STOCK_ACTIVATION_SITES.length; i++) {
+    const site = _STOCK_ACTIVATION_SITES[i];
+    for (let j = 0; j < site.names.length; j++) {
+      if (b === site.names[j]) return site.url;
+    }
+  }
+  // Longer names may appear inside a combined label such as "Xiaomi Redmi".
+  for (let i = 0; i < _STOCK_ACTIVATION_SITES.length; i++) {
+    const site = _STOCK_ACTIVATION_SITES[i];
+    for (let j = 0; j < site.names.length; j++) {
+      if (site.names[j].length >= 3 && b.indexOf(site.names[j]) !== -1) return site.url;
+    }
+  }
+  return '';
+}
+
+// Clipboard writes have to start inside the click handler; window.open moves
+// focus to the new tab, so do both synchronously.
+function _stockCopyText(text) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(() => _stockCopyFallback(text));
+      return true;
+    }
+  } catch (e) { /* fall through to the textarea copy */ }
+  return _stockCopyFallback(text);
+}
+
+function _stockCopyFallback(text) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-1000px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return !!ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+// 'Activation date' is the current header; 'Settled' was its old name.
+function _stockActivationDateIndex(headers) {
+  const i = _colIndex(headers, 'Activation date');
+  return i >= 0 ? i : _colIndex(headers, 'Settled');
+}
+
+// A cell may hold a placeholder such as NA / N/A / - after a check that found
+// nothing. Only a real date should tint the row or turn "Add date" into
+// "Edit date".
+function _stockHasActivationDate(value) {
+  const s = String(value == null ? '' : value).trim();
+  return !!s && !/^(n\/?a|nil|none|-|—)$/i.test(s);
+}
+
+function _stockRowCtx(rowIndex) {
+  const idx = parseInt(rowIndex, 10);
+  if (!(idx >= 0) || idx >= _stock.rows.length) return null;
+  const r = _stock.rows[idx];
+  const h = _stock.headers;
+  const text = i => (i >= 0 && r[i] != null) ? String(r[i]).trim() : '';
+  return {
+    idx: idx,
+    row: r,
+    imei1: text(_colIndex(h, 'IMEI_1')),
+    brand: text(_colIndex(h, 'Brand')),
+    model: text(_colIndex(h, 'Model')),
+    specs: text(_colIndex(h, 'Specs')),
+  };
+}
+
+function openStockActivationCheck(rowIndex) {
+  const c = _stockRowCtx(rowIndex);
+  if (!c) { showAlert('Stock row not found. Refresh the Stock tab and try again.', 'e'); return; }
+  if (!c.imei1) { showAlert('This row has no IMEI_1.', 'e'); return; }
+
+  const url = _stockActivationUrl(c.brand);
+  const copied = _stockCopyText(c.imei1);
+  if (!url) {
+    showAlert('No activation page saved for ' + _esc(c.brand || 'this brand') + ' yet. IMEI '
+      + _esc(c.imei1) + ' was copied.', 'w');
+    return;
+  }
+  // Open synchronously so the browser treats it as part of the click.
+  const win = window.open(url, '_blank');
+  if (win) { try { win.opener = null; } catch (e) {} }
+  if (copied) {
+    showAlert('IMEI ' + _esc(c.imei1) + ' copied. Paste it on the ' + _esc(c.brand)
+      + ' page, then solve the captcha.', 's');
+  } else {
+    showAlert('Could not copy automatically. IMEI: ' + _esc(c.imei1), 'w');
+  }
+}
+
+function _stockYMD(d) {
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return d.getFullYear() + '-' + m + '-' + day;
+}
+
+function openStockActivationDateModal(rowIndex) {
+  if (!_stockIsAdmin()) { showAlert('Admin only.', 'e'); return; }
+  const c = _stockRowCtx(rowIndex);
+  if (!c) { showAlert('Stock row not found. Refresh the Stock tab and try again.', 'e'); return; }
+  if (!c.imei1) { showAlert('This row has no IMEI_1.', 'e'); return; }
+  const aIdx = _stockActivationDateIndex(_stock.headers);
+  if (aIdx < 0) {
+    showAlert('The Stock sheet has no "Activation date" column.', 'e');
+    return;
+  }
+
+  _stockActivationCtx = { imei1: c.imei1 };
+  const parts = [];
+  if (c.model) parts.push(c.model);
+  if (c.specs) parts.push(c.specs);
+  parts.push('IMEI ' + c.imei1);
+  $('sa-context').textContent = parts.join(' · ');
+
+  const existing = parseSheetDate(c.row[aIdx]);
+  $('sa-date').value = existing ? _stockYMD(existing) : _todayYMD();
+  $('stock-activation-modal').style.display = 'flex';
+  const inp = $('sa-date');
+  if (inp && inp.focus) setTimeout(() => inp.focus(), 50);
+}
+
+function closeStockActivationDateModal() {
+  const m = $('stock-activation-modal');
+  if (m) m.style.display = 'none';
+}
+
+async function submitStockActivationDate() {
+  if (!_stockIsAdmin()) { showAlert('Admin only.', 'e'); return; }
+  if (!_stockActivationCtx) { showAlert('Open this from an Available row.', 'e'); return; }
+  const activationDate = v('sa-date');
+  if (!activationDate) { showAlert('Activation Date is required.', 'e'); return; }
+
+  const btn = $('sa-submit');
+  if (btn) btn.disabled = true;
+  showLoader();
+  try {
+    const res = await gasPost({
+      action: 'markStockActivation',
+      imei1: _stockActivationCtx.imei1,
+      activationDate,
+    });
+    if (!res || !res.ok) {
+      showAlert('Could not save the activation date: ' + ((res && res.error) || 'Unknown error'), 'e');
+      return;
+    }
+    closeStockActivationDateModal();
+    showAlert('Activation date saved.', 's');
+    _refreshStockAfterWrite(res.stock);
+  } catch (err) {
+    showAlert('Could not save the activation date: ' + err.message, 'e');
+  } finally {
+    hideLoader();
+    if (btn) btn.disabled = false;
+  }
+}
+
 function _esc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -627,16 +823,24 @@ function buildAvailableRows(data, headers) {
   const sIdx = _colIndex(headers, 'Specs');
   const iIdx = _colIndex(headers, 'IMEI_1');
   const i2Idx = _colIndex(headers, 'IMEI_2');
+  const aIdx = _stockActivationDateIndex(headers);
   const cIdx = _colIndex(headers, 'Cost Price');
   const blank = '<td></td>';
   const searching = _stockSearchActive;
   // Action column exists only for admins. Every collapsed/group row leaves it
-  // blank; only a real unit (a leaf row) gets a Sell button.
+  // blank; only a real unit (a leaf row) gets Check / Add date / Sell buttons.
   const actBlank = _stockCanEdit ? '<td class="st-action-cell"></td>' : '';
-  const actSell = r => {
+  const actCell = r => {
     if (!_stockCanEdit) return '';
     const idx = _stockRowMap.has(r) ? _stockRowMap.get(r) : -1;
-    return '<td class="st-action-cell"><button class="btn btn-sm" onclick="openStockSellModal(' + idx + ')">Sell</button></td>';
+    const hasDate = aIdx >= 0 && _stockHasActivationDate(r[aIdx]);
+    return '<td class="st-action-cell"><div class="st-action-stack">'
+      + '<button class="btn btn-sm" title="Copy IMEI_1 and open this brand\'s activation page"'
+      + ' onclick="openStockActivationCheck(' + idx + ')">Check</button>'
+      + '<button class="btn btn-sm" title="' + (hasDate ? 'Edit' : 'Add') + ' the activation date"'
+      + ' onclick="openStockActivationDateModal(' + idx + ')">' + (hasDate ? 'Edit date' : 'Add date') + '</button>'
+      + '<button class="btn btn-sm" onclick="openStockSellModal(' + idx + ')">Sell</button>'
+      + '</div></td>';
   };
 
   const cell = (v, i, empty) => String(v[i] == null ? '' : v[i]).trim() || empty;
@@ -695,7 +899,7 @@ function buildAvailableRows(data, headers) {
     const d = devG.dev;
     const devN = count(devG);
     if (!searching && _stockCollapsedD[d]) {
-      html.push('<tr>' + devCell(d, true, devN) + blank + blank + blank + blank + blank + '<td>'
+      html.push('<tr>' + devCell(d, true, devN) + blank + blank + blank + blank + blank + blank + '<td>'
         + _stockAmt(_sumCost(allRows(devG), cIdx)) + '</td>' + actBlank + '</tr>');
       return;
     }
@@ -707,7 +911,7 @@ function buildAvailableRows(data, headers) {
       const b = brG.brand, bKey = d + '||' + b, bN = count(brG);
       if (!searching && _stockCollapsedB[bKey]) {
         html.push('<tr>' + takeDev() + brandCell(b, d, true, bN)
-          + blank + blank + blank + blank + '<td>' + _stockAmt(_sumCost(allRows(brG), cIdx)) + '</td>' + actBlank + '</tr>');
+          + blank + blank + blank + blank + blank + '<td>' + _stockAmt(_sumCost(allRows(brG), cIdx)) + '</td>' + actBlank + '</tr>');
         devDone = true;
         return;
       }
@@ -718,7 +922,7 @@ function buildAvailableRows(data, headers) {
         const m = moG.model, mKey = bKey + '||' + m, mN = count(moG);
         if (!searching && _stockCollapsedMod[mKey]) {
           html.push('<tr>' + takeDev() + takeBrand() + modelCell(m, d, b, true, mN)
-            + blank + blank + blank + '<td>' + _stockAmt(_sumCost(allRows(moG), cIdx)) + '</td>' + actBlank + '</tr>');
+            + blank + blank + blank + blank + '<td>' + _stockAmt(_sumCost(allRows(moG), cIdx)) + '</td>' + actBlank + '</tr>');
           devDone = brandDone = true;
           return;
         }
@@ -730,7 +934,7 @@ function buildAvailableRows(data, headers) {
           const lead = takeDev() + takeBrand() + takeModel();
           if (!searching && _stockCollapsedSpec[sKey]) {
             html.push('<tr>' + lead + specCell(s, d, b, m, true, sN)
-              + blank + blank + '<td>' + _stockAmt(_sumCost(spG.rows, cIdx)) + '</td>' + actBlank + '</tr>');
+              + blank + blank + blank + '<td>' + _stockAmt(_sumCost(spG.rows, cIdx)) + '</td>' + actBlank + '</tr>');
             devDone = brandDone = modelDone = true;
             return;
           }
@@ -739,11 +943,15 @@ function buildAvailableRows(data, headers) {
           // row after it gets blanks, or the name repeats down the column.
           const leadFirst = lead + specHtml;
           const leadRest = blank + blank + blank + blank;
-          const leaf = spG.rows.map((r, ri) => '<tr>' + (ri === 0 ? leadFirst : leadRest)
-            + '<td>' + _stockCell(r[iIdx], 'IMEI_1') + '</td>'
-            + '<td>' + _stockCell(r[i2Idx], 'IMEI_2') + '</td>'
-            + '<td>' + _stockCell(r[cIdx], 'Cost Price') + '</td>'
-            + actSell(r) + '</tr>');
+          const leaf = spG.rows.map((r, ri) => {
+            const actDate = aIdx >= 0 && _stockHasActivationDate(r[aIdx]);
+            return '<tr' + (actDate ? ' class="st-activation-row"' : '') + '>' + (ri === 0 ? leadFirst : leadRest)
+              + '<td>' + _stockCell(r[iIdx], 'IMEI_1') + '</td>'
+              + '<td>' + _stockCell(r[i2Idx], 'IMEI_2') + '</td>'
+              + '<td>' + _stockCell(r[aIdx], 'Activation Date') + '</td>'
+              + '<td>' + _stockCell(r[cIdx], 'Cost Price') + '</td>'
+              + actCell(r) + '</tr>';
+          });
           devDone = brandDone = modelDone = true;
           html.push(leaf.join(''));
         });

@@ -13,7 +13,7 @@
   if (location.protocol === 'http:' || location.protocol === 'https:')
     document.write('<link rel="manifest" href="manifest.json">');
 </script>
-<link rel="stylesheet" href="css/styles.css?v=17">
+<link rel="stylesheet" href="css/styles.css?v=18">
 <style>
   #install-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:99999;align-items:center;justify-content:center}
   #install-overlay.show{display:flex}
@@ -409,6 +409,10 @@
           <button class="stock-tab" data-f="sold" onclick="setStockFilter('sold')">Sold</button>
         <button class="stock-tab" data-f="undelivered" onclick="setStockFilter('undelivered')">Undelivered</button>
       </div>
+      <div class="act-toolbar" id="act-toolbar" style="display:none">
+        <button class="btn btn-sm act-open" id="activation-btn" onclick="openActivationModal()">🔎 Find recent sales</button>
+        <span class="act-toolbar-note">Checks brand activation for units still marked Available</span>
+      </div>
       <div id="stock-results"></div>
       <button class="stock-fab" id="stock-fab" onclick="openStockOrderModal()" title="Log new order" aria-label="Log new order">+</button>
     </div>
@@ -522,6 +526,69 @@
         <div class="submit-row">
           <button class="btn" onclick="closeStockSellModal()">Cancel</button>
           <button class="btn btn-success" id="ss-submit" onclick="submitStockSold()">Mark sold</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STOCK: ADD / EDIT ACTIVATION DATE ─────────────────────────── -->
+    <div id="stock-activation-modal" class="stock-modal">
+      <div class="stock-modal-card">
+        <div class="stock-modal-hd">
+          <span class="stock-modal-title">Activation date</span>
+          <button class="btn btn-sm" onclick="closeStockActivationDateModal()">✕ Close</button>
+        </div>
+        <div id="sa-context" class="stock-ctx"></div>
+        <div class="fg">
+          <div>
+            <label>Activation Date *</label>
+            <input type="date" id="sa-date">
+          </div>
+        </div>
+        <div class="stock-ctx" style="margin-top:0.6rem">
+          Saved to the <b>Activation date</b> column in the Stock sheet. The Available row turns amber.
+        </div>
+        <div class="submit-row">
+          <button class="btn" onclick="closeStockActivationDateModal()">Cancel</button>
+          <button class="btn btn-primary" id="sa-submit" onclick="submitStockActivationDate()">Save date</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STOCK: ACTIVATION CHECK ───────────────────────────────────── -->
+    <div id="activation-modal" class="stock-modal">
+      <div class="stock-modal-card act-card">
+        <div class="stock-modal-hd">
+          <span class="stock-modal-title">Find recent sales</span>
+          <button class="btn btn-sm" onclick="closeActivationModal()">✕ Close</button>
+        </div>
+        <div class="act-body">
+          <div id="act-server" class="act-server"></div>
+          <div id="act-summary" class="act-summary"></div>
+          <div id="act-progress-wrap" style="display:none">
+            <div class="act-progress"><div id="act-progress-bar" class="act-progress-bar"></div></div>
+            <div id="act-phase" class="act-phase"></div>
+            <div id="act-counts" class="act-counts"></div>
+          </div>
+          <div id="act-results" class="act-results"></div>
+          <details id="act-log-wrap" class="act-log-wrap" style="display:none">
+            <summary>Activity log</summary>
+            <div id="act-log" class="act-log"></div>
+          </details>
+          <details class="act-advanced">
+            <summary>Checker address</summary>
+            <div style="display:flex;gap:6px;margin-top:6px">
+              <input type="text" id="act-server-url" placeholder="http://127.0.0.1:8787" style="flex:1">
+              <button class="btn btn-sm" onclick="retryActivationServer()">Connect</button>
+            </div>
+            <div style="margin-top:4px">Only change this if the checker runs on another computer. Open the app from that
+              computer's local address — an HTTPS page cannot reach a plain-HTTP checker on your network.</div>
+          </details>
+        </div>
+        <div class="submit-row act-actions">
+          <button class="btn" onclick="closeActivationModal()">Close</button>
+          <button class="btn" id="act-stop" style="display:none" onclick="stopActivationCheck()">Stop</button>
+          <button class="btn btn-primary" id="act-start" onclick="startActivationCheck()">Check now</button>
+          <button class="btn btn-primary" id="act-download" style="display:none" onclick="downloadActivationCsv()">Download CSV</button>
         </div>
       </div>
     </div>
@@ -646,7 +713,8 @@
 <script src="js/approvals.js?v=20"></script>
 <script src="js/my-subs.js?v=4"></script>
 <script src="js/emi-messages.js?v=19"></script>
-<script src="js/stock.js?v=17"></script>
+<script src="js/stock.js?v=20"></script>
+<script src="js/activation.js?v=3"></script>
 <script src="js/users.js?v=7"></script>
 
 <!-- ── Install Banner ─────────────────────────────────────────────────── -->

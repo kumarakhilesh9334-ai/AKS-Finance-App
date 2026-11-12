@@ -564,7 +564,7 @@ function readStockPayload_(ss, forceRefresh) {
   headers.forEach((h,i) => {
     const lh = String(h||'').toLowerCase();
     if (lh === 'month sold') dateCols[i] = 'm';
-    else if (lh === 'order date' || lh === 'delivery date' || lh === 'selling date' || lh === 'billing date') dateCols[i] = 'd';
+    else if (lh === 'order date' || lh === 'delivery date' || lh === 'selling date' || lh === 'billing date' || lh === 'activation date') dateCols[i] = 'd';
   });
   const rows = all.slice(1, lastDataRow).map(r => r.map((c,i) => {
     if (c instanceof Date && !isNaN(c)) {
@@ -775,6 +775,43 @@ function stockMarkSold_(ss, p) {
   return {ok:true};
 }
 
+// Activation date — written after the user checks the brand portal by hand
+// from the Stock tab. Same IMEI_1 key and same "still available" rule as sold.
+// The header used to be called 'Settled'; accept that spelling too.
+function stockMarkActivation_(ss, p) {
+  const sheet = ss.getSheetByName(STOCK_SHEET);
+  if (!sheet) return {ok:false, error:'Stock sheet not found'};
+  const headers = stockHeaders_(sheet);
+  const cols = {
+    'IMEI_1':          stockCol_(headers, ['IMEI_1']),
+    'Selling Date':    stockCol_(headers, ['Selling Date']),
+    'Activation date': stockCol_(headers, ['Activation date', 'Activation Date', 'Settled']),
+  };
+  const missing = Object.keys(cols).filter(k => cols[k] < 0);
+  if (missing.length) return {ok:false, error:stockMissingCols_(missing)};
+
+  const imei1 = String(p.imei1 == null ? '' : p.imei1).trim();
+  if (!imei1) return {ok:false, error:'IMEI_1 is required'};
+  const activationDate = String(p.activationDate == null ? '' : p.activationDate).trim();
+  if (!activationDate) return {ok:false, error:'Activation Date is required'};
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return {ok:false, error:'IMEI not found in available stock'};
+  const imeis = sheet.getRange(2, cols['IMEI_1'] + 1, lastRow - 1, 1).getValues();
+  let rowNum = 0;
+  for (let i = 0; i < imeis.length; i++) {
+    if (String(imeis[i][0] == null ? '' : imeis[i][0]).trim() !== imei1) continue;
+    const sold = sheet.getRange(i + 2, cols['Selling Date'] + 1).getValue();
+    if (String(sold == null ? '' : sold).trim() === '') { rowNum = i + 2; break; }
+  }
+  if (!rowNum) {
+    return {ok:false, error:'IMEI not found in available stock (it may already be sold).'};
+  }
+
+  sheet.getRange(rowNum, cols['Activation date'] + 1).setValue(fmtDateFromYMD(activationDate));
+  return {ok:true};
+}
+
 // ── SESSION AUTH ────────────────────────────────────────────────────────────
 // A signed-in browser carries a random session token in every request instead
 // of the user's PIN. The PIN itself travels exactly once, inside the body of
@@ -939,13 +976,15 @@ function doPost(e) {
     // client-supplied flag.
     if (payload.action === 'addStockOrder' ||
         payload.action === 'markStockDelivered' ||
-        payload.action === 'markStockSold') {
+        payload.action === 'markStockSold' ||
+        payload.action === 'markStockActivation') {
       const caller = getCachedUsers(ss).find(u => u.id === authUser.id);
       if (!caller || caller.role !== 'admin') return jsonResponse({ok:false, error:'Admin only'});
 
       let r;
       if (payload.action === 'addStockOrder')            r = stockAddOrder_(ss, payload);
       else if (payload.action === 'markStockDelivered')  r = stockMarkDelivered_(ss, payload);
+      else if (payload.action === 'markStockActivation') r = stockMarkActivation_(ss, payload);
       else                                               r = stockMarkSold_(ss, payload);
       if (!r || !r.ok) return jsonResponse(r || {ok:false, error:'Stock update failed'});
 

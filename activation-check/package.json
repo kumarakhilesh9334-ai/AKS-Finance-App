@@ -1,0 +1,14 @@
+{
+  "name": "aks-activation-check",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local Playwright runner that checks brand activation status for AKS stock units.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "browser": "node ./node_modules/playwright/cli.js install chromium"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0"
+  }
+}

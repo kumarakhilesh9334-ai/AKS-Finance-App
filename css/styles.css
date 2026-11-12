@@ -281,9 +281,15 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
    so the far-right totals (Kunal Telecom / AKS Share) are fully reachable */
 .emi-table.stock-table { width: 100%; min-width: 900px; }
 
-/* Stage action column (Sell / Deliver) — admin only, so it never steals
-   width from the product columns on a read-only stock tab. */
+/* Stage action column (Sell / Deliver / Check activation) — admin only, so it
+   never steals width from the product columns on a read-only stock tab. */
 .st-action-cell { white-space: nowrap; text-align: right; }
+.st-action-stack { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+
+/* An Available unit whose activation date is filled is almost always an
+   unrecorded sale. Tint the whole row so it stands out in the tree. */
+.st-activation-row > td { background: #FFF4D6; }
+.st-activation-row > td:first-child { box-shadow: inset 3px 0 0 #E0A100; }
 
 /* Floating "+" button — stage 1 order entry (admin only). Sits above the
    mobile bottom nav; hidden by default and shown by renderStock(). */
@@ -319,6 +325,79 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
   .stock-modal { align-items: center; }
   .stock-modal-card { border-radius: 16px; max-width: 560px; }
 }
+
+/* ── Activation check (Stock tab) ──────────────────────────────────── */
+.act-toolbar {
+  display: flex; align-items: center; gap: 8px;
+  margin: -0.25rem 0 0.75rem; flex-wrap: wrap;
+}
+.act-open { background: #E8F0FE; color: #1a56db; border: 0.5px solid #c7d9f7; }
+.act-toolbar-note { font-size: 11px; color: #888; }
+.act-card { max-width: 640px; }
+.act-body { display: flex; flex-direction: column; gap: 12px; }
+.act-server {
+  font-size: 12px; border-radius: 10px; padding: 10px 12px;
+  line-height: 1.5; background: #f5f5f3; color: #555;
+}
+.act-server.ok { background: #EAF6EC; color: #1a6b2f; border: 0.5px solid #cfe8d5; }
+.act-server.bad { background: #FDF3E7; color: #8a4b12; border: 0.5px solid #f3dcc0; }
+.act-server code {
+  background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 4px;
+  font-size: 11px; word-break: break-all;
+}
+.act-summary { font-size: 12px; color: #444; line-height: 1.55; }
+.act-brand-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.act-brand {
+  font-size: 11px; background: #f0f0ee; color: #555;
+  border-radius: 999px; padding: 3px 9px;
+}
+.act-brand.no { background: #FCEBEB; color: #A32D2D; }
+.act-progress { height: 8px; border-radius: 999px; background: #e8e8e6; overflow: hidden; }
+.act-progress-bar {
+  height: 100%; width: 0; background: #534AB7;
+  transition: width 0.35s ease;
+}
+.act-phase { font-size: 12px; color: #444; margin-top: 6px; line-height: 1.45; }
+.act-phase.captcha { color: #8a4b12; font-weight: 600; }
+.act-counts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.act-count {
+  font-size: 11px; border-radius: 999px; padding: 3px 9px;
+  background: #f0f0ee; color: #555; white-space: nowrap;
+}
+.act-count.activated { background: #EAF6EC; color: #1a6b2f; }
+.act-count.skipped { background: #FDF3E7; color: #8a4b12; }
+.act-count.error { background: #FCEBEB; color: #A32D2D; }
+.act-result { font-size: 12px; color: #444; }
+.act-results { max-height: 260px; overflow-y: auto; }
+.act-hit {
+  border: 0.5px solid #eee; border-radius: 10px;
+  padding: 8px 10px; margin-top: 6px; background: #fff;
+}
+.act-hit-hd {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 8px; font-weight: 600; font-size: 12px;
+}
+.act-hit-sub { color: #777; font-size: 11px; margin-top: 2px; line-height: 1.45; word-break: break-word; }
+.act-log-wrap { font-size: 11px; color: #666; }
+.act-log-wrap summary, .act-advanced summary { cursor: pointer; }
+.act-log {
+  max-height: 180px; overflow: auto; background: #fafafa;
+  border: 0.5px solid #eee; border-radius: 8px; padding: 8px; margin-top: 6px;
+  font-family: ui-monospace, Consolas, monospace; font-size: 10px;
+  line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+}
+.act-log .warn { color: #8a4b12; }
+.act-log .error { color: #A32D2D; }
+.act-log .success { color: #1a6b2f; }
+.act-advanced { font-size: 11px; color: #777; }
+.act-advanced input { font-size: 11px; }
+.act-actions { position: sticky; bottom: 0; background: #fff; padding-top: 10px; }
+.act-spin {
+  display: inline-block; width: 10px; height: 10px; margin-right: 5px;
+  border: 2px solid #c7d9f7; border-top-color: #1a56db; border-radius: 50%;
+  vertical-align: -1px; animation: act-spin 0.8s linear infinite;
+}
+@keyframes act-spin { to { transform: rotate(360deg); } }
 
 .ov-header{display:flex;flex-direction:column;gap:6px;margin-bottom:0.5rem;margin-top:-0.75rem}
 .ov-row1{display:flex;align-items:center;gap:6px;width:100%;flex-wrap:wrap;min-height:30px}
