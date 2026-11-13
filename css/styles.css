@@ -282,9 +282,20 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 .emi-table.stock-table { width: 100%; min-width: 900px; }
 
 /* Stage action column (Sell / Deliver / Check activation) — admin only, so it
-   never steals width from the product columns on a read-only stock tab. */
-.st-action-cell { white-space: nowrap; text-align: right; }
-.st-action-stack { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+   never steals width from the product columns on a read-only stock tab. The
+   buttons must stay on ONE line: wrapping them stacked the row into three
+   lines on a phone. `width:1%` + nowrap lets the column shrink to exactly the
+   buttons' width; the table wrapper scrolls sideways when the rest no longer
+   fits. */
+.st-action-cell { white-space: nowrap; text-align: right; width: 1%; }
+.st-action-stack { display: flex; gap: 4px; flex-wrap: nowrap; justify-content: flex-end; }
+.st-action-stack .btn { flex: 0 0 auto; white-space: nowrap; }
+/* Keep the three action buttons compact enough for a phone while still
+   fitting on a single line. */
+@media(max-width:600px){
+  .st-action-stack .btn { padding: 4px 6px; font-size: 11px; }
+  .st-action-stack { gap: 3px; }
+}
 
 /* An Available unit whose activation date is filled is almost always an
    unrecorded sale. Tint the whole row so it stands out in the tree. */
