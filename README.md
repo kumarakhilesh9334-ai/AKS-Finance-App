@@ -53,6 +53,20 @@ Any Available row whose **Activation date** is filled is tinted **amber** in the
 Stock tab, so a unit that is activated but still not marked sold is impossible
 to miss.
 
+#### Opening the page from an installed PWA (Android)
+
+Android PWAs cannot hand a normal link to Chrome — an out-of-scope navigation
+(including `target="_blank"`) always opens an in-app browser in its own task,
+which is the window that appears on top of the app and covers split screen.
+
+So when the app detects it is running as an installed PWA on Android
+(`display-mode: standalone`), **Check** becomes an Android `intent://` link that
+names `com.android.chrome`. Android then launches Chrome itself, and Chrome adds
+the page as a new tab in the Chrome window that is already on the other side of
+the split screen. `S.browser_fallback_url` carries the plain page in case Chrome
+is missing or the link cannot be resolved. In a normal browser tab, on desktop,
+and on iOS the plain `target="_blank"` link is used instead.
+
 Activation pages are configured in `_STOCK_ACTIVATION_SITES` in `js/stock.js`:
 
 | Brand | Page |

@@ -538,6 +538,46 @@ function _stockActivationUrl(brand) {
   return '';
 }
 
+// True only when the app runs as an installed PWA on Android. That is the one
+// case where a normal link cannot reach Chrome: Android always opens
+// out-of-scope navigations (including target="_blank") in an in-app browser
+// task, which is the window that appears on top of the app.
+function _stockIsAndroidPwa() {
+  if (!/Android/i.test(navigator.userAgent || '')) return false;
+  try {
+    if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true;
+    if (window.matchMedia && window.matchMedia('(display-mode: minimal-ui)').matches) return true;
+  } catch (e) { /* older WebView */ }
+  return false;
+}
+
+// Android PWA -> Chrome tab.
+// An intent:// URL makes Android launch the Chrome app itself (package
+// com.android.chrome) instead of the PWA's in-app browser. Chrome then treats
+// it as an external link and adds a tab to the Chrome window that is already
+// on the other half of the split screen. If Chrome is missing, Chrome falls
+// back to S.browser_fallback_url, which is the plain page.
+// Everything else (desktop, browser tab, iOS) keeps the plain URL: a real
+// <a target="_blank"> already opens a new tab there.
+function _stockActivationHref(url) {
+  if (!url) return '';
+  if (!_stockIsAndroidPwa()) return url;
+  // Parse by hand: the app only ever stores http(s) URLs, and this avoids
+  // depending on URL() in older WebViews.
+  const m = /^(https?):\/\/([^/?#]+)([^#]*)(#.*)?$/i.exec(url);
+  if (!m) return url;
+  const scheme = m[1].toLowerCase();
+  const data = m[2] + (m[3] || '/') + (m[4] || '');
+  // Keep path, query and hash. Android's intent parser splits on the LAST
+  // '#', so a page hash such as mi.com's '#/en/tab/imei' survives.
+  return 'intent://' + data
+    + '#Intent;scheme=' + scheme
+    + ';action=android.intent.action.VIEW'
+    + ';package=com.android.chrome'
+    + ';S.browser_fallback_url=' + encodeURIComponent(url)
+    + ';end';
+}
+
 // Clipboard writes have to start inside the click handler; following the link
 // moves focus to the new tab, so start the copy synchronously.
 function _stockCopyText(text) {
@@ -860,11 +900,17 @@ function buildAvailableRows(data, headers) {
     const hasDate = aIdx >= 0 && _stockHasActivationDate(r[aIdx]);
     const brand = bIdx >= 0 && r[bIdx] != null ? String(r[bIdx]).trim() : '';
     const url = _stockActivationUrl(brand);
-    // A real <a target="_blank"> is what makes an installed PWA hand the URL to
-    // Chrome as a NEW TAB. window.open() opens a separate window on top of the
-    // app instead, which breaks side-by-side use.
+    const href = _stockActivationHref(url);
+    // Android PWA: an intent:// href launches Chrome, which adds a tab to the
+    // Chrome window already on the other side of the split screen. It must NOT
+    // carry target="_blank", or the PWA opens a throwaway blank window first.
+    // Everywhere else the plain URL keeps target="_blank" and becomes a tab.
+    const isIntent = href.indexOf('intent://') === 0;
+    const linkAttrs = isIntent
+      ? ' href="' + _esc(href) + '"'
+      : ' href="' + _esc(href) + '" target="_blank" rel="noopener noreferrer"';
     const check = url
-      ? '<a class="btn btn-sm" href="' + _esc(url) + '" target="_blank" rel="noopener noreferrer"'
+      ? '<a class="btn btn-sm"' + linkAttrs
         + ' title="Copy IMEI_1 and open ' + _esc(brand) + '\'s activation page"'
         + ' onclick="copyStockActivationImei(' + idx + ')">Check</a>'
       : '<button class="btn btn-sm" title="Copy IMEI_1 and look up this brand\'s activation page"'
