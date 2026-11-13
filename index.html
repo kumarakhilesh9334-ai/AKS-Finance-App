@@ -13,7 +13,7 @@
   if (location.protocol === 'http:' || location.protocol === 'https:')
     document.write('<link rel="manifest" href="manifest.json">');
 </script>
-<link rel="stylesheet" href="css/styles.css?v=18">
+<link rel="stylesheet" href="css/styles.css?v=19">
 <style>
   #install-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:99999;align-items:center;justify-content:center}
   #install-overlay.show{display:flex}
@@ -259,6 +259,7 @@
               <div id="ov-emi-slots"></div>
             </div>
             <div id="ov-partial-banner"></div>
+            <div id="ov-recovery-banner"></div>
             <div id="ov-fine-extra" style="margin:6px 0;font-size:12px"></div>
             <div id="ov-revised-stats" style="margin:8px 0;font-size:12px;color:#555"></div>
             <div style="margin:8px 0;position:relative;min-height:26px" id="ov-revised-btn-wrap">
@@ -272,6 +273,7 @@
               <div><label>Amount received (₹)</label><input type="number" id="ov-emi-amt" placeholder="0" oninput="checkOverviewEmiDiff()"></div>
               <div><label>Payment date</label><input type="date" id="ov-emi-date"></div>
             </div>
+            <div id="ov-emi-recovery-hint" style="display:none;font-size:11px;color:#A32D2D;background:#fdf0ed;border:0.5px solid #e8c8c8;border-radius:6px;padding:5px 8px;margin-bottom:0.6rem"></div>
             <div class="fg fg-3" style="margin-bottom:0.75rem">
               <div><label>Received</label>
                 <select id="ov-emi-received">
@@ -671,8 +673,15 @@
   <div class="card" style="width:90%;max-width:380px;margin:0;padding:16px" onclick="event.stopPropagation()">
     <div style="font-size:14px;font-weight:600;color:#534AB7;margin-bottom:10px">Mark as Mobile Jabt</div>
     <div class="fg" style="display:flex;flex-direction:column;gap:10px">
+      <div><label>Date</label>
+        <input type="date" id="jabt-date">
+      </div>
       <div><label>Resale Price (₹)</label>
         <input type="number" id="jabt-resale-price" placeholder="Resale price" min="0" step="0.01">
+      </div>
+      <div><label>Recovery Charge (₹)</label>
+        <input type="number" id="jabt-recovery-charge" placeholder="0" min="0" step="0.01" value="0">
+        <div style="font-size:11px;color:#888;margin-top:4px">Amount paid to the customer when the device was collected. Default 0.</div>
       </div>
       <div><label>Flipkart Link</label>
         <input type="url" id="jabt-flipkart-link" placeholder="https://www.flipkart.com/...">
@@ -682,7 +691,7 @@
       <button class="btn" onclick="closeMobileJabtForm()">Cancel</button>
       <button class="btn btn-primary" onclick="submitMobileJabt()">Confirm</button>
     </div>
-    <div style="font-size:11px;color:#888;margin-top:8px">Resale price is saved to the Amount column (D) and the Flipkart link to the EMI number column (B).</div>
+    <div style="font-size:11px;color:#888;margin-top:8px">Date is saved to the Revised_Date column (C), resale price to the Amount column (D), the Flipkart link to the EMI number column (B) and the recovery charge to the Recovery_Charge column (G).</div>
   </div>
 </div>
 
@@ -706,14 +715,14 @@
 <!-- ── SCRIPTS (order matters) ────────────────────────────────────────── -->
 <script src="js/state.js?v=19"></script>
 <script src="js/snapshot.js?v=9"></script>
-<script src="js/auth.js?v=10"></script>
+<script src="js/auth.js?v=11"></script>
 <script src="js/nav.js?v=9"></script>
 <script src="js/loans.js?v=10"></script>
-<script src="js/emi.js?v=43"></script>
+<script src="js/emi.js?v=48"></script>
 <script src="js/approvals.js?v=20"></script>
 <script src="js/my-subs.js?v=4"></script>
 <script src="js/emi-messages.js?v=19"></script>
-<script src="js/stock.js?v=20"></script>
+<script src="js/stock.js?v=21"></script>
 <script src="js/activation.js?v=3"></script>
 <script src="js/users.js?v=7"></script>
 

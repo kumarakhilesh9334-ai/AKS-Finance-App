@@ -570,20 +570,6 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
   .emi-card-name { font-size: 14px; }
   .emi-card-date-big { font-size: 13px; }
 
-  /* ── EMI detail panel: sticky bottom sheet feel ──────────────────── */
-  #emi-detail {
-    position: fixed;
-    bottom: 56px; /* above bottom nav */
-    left: 0; right: 0;
-    max-height: 70vh;
-    overflow-y: auto;
-    border-radius: 16px 16px 0 0;
-    border: none;
-    box-shadow: 0 -4px 24px rgba(0,0,0,0.15);
-    z-index: 90;
-    margin: 0;
-  }
-
   /* ── KV grid: slightly more readable on mobile ───────────────────── */
   .kv { grid-template-columns: 120px 1fr; gap: 3px 10px; }
   .kv-l { font-size: 11px; }
@@ -714,7 +700,6 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
   .ls-left .emi-col-body { max-height: calc(100vh - 260px); overflow-y: auto; }
 
   /* Right panel: detail card */
-  .ls-right #emi-detail,
   .ls-right #cd-detail-panel,
   .ls-right #ov-detail { margin-top: 0; }
 

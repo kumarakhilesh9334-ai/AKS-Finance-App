@@ -1,5 +1,5 @@
 // ── EMI ───────────────────────────────────────────────────────────────────
-// Log EMI tab: two-column layout — Upcoming (left) | Overdue (right)
+// All Loans: card lists, loan detail panel, EMI logging and approvals hand-off.
 // Closed & Defaulted are on their own admin-only tab.
 
 const _debounceTimers = {};
@@ -46,9 +46,19 @@ function focusLandingSearch() {
   }, 0));
 }
 
-// Search scope for the All Loans page. 'customer' (the default) covers only
-// what a customer is identified by — loan ID, name and mobile — while 'all'
-// opens up every field the page already knew how to search.
+// Role-based starting value for the scope dropdown. Admins search every field,
+// so they open on All Detail; everyone else keeps the narrower customer scope.
+// Called once per login (completeLogin) so a choice made later survives tab
+// switches.
+function applySearchScopeDefault() {
+  const el = $('ov-search-scope');
+  if (!el) return;
+  el.value = (S.cu && S.cu.role === 'admin') ? 'all' : 'customer';
+}
+
+// Search scope for the All Loans page. 'customer' covers only what a customer
+// is identified by — loan ID, name and mobile — while 'all' opens up every
+// field the page already knew how to search.
 function overviewSearchScope() {
   const el = $('ov-search-scope');
   return el && el.value === 'all' ? 'all' : 'customer';
@@ -302,8 +312,15 @@ function rerenderActiveTab() {
   if (S.page === 'my-subs')      renderMySubs();
 }
 
+// A closed/defaulted loan is finished: revised dates and the Mobile Jabt mark
+// no longer apply to it, so none of that content is rendered on its cards.
+function isClosedOrDefaulted(loan) {
+  return !!(loan && (loan.isDefaulted || loan.emiCompleted || loan.status === 'Closed'));
+}
+
 // ── Revised badge helper (used by the loan cards) ───────────────────────
 function revisedBadgeHtml(loan) {
+  if (isClosedOrDefaulted(loan)) return '';
   const loanId = loan.loanId;
   // Mobile Jabt takes priority — check across ALL emiNums (Jabt uses emiNum=0 sentinel)
   const jabtRecord = (S.revisedDates||[]).find(rd => rd.loanId === loanId && rd.note === 'Mobile Jabt');
@@ -333,17 +350,82 @@ function revisedBadgeHtml(loan) {
   return `<div style="text-align:center;margin-bottom:2px"><span style="display:inline-block;font-size:12px;font-weight:600;color:#000;background:#fff;padding:1px 10px;border-radius:8px;border:1px solid #ddd">${text}</span></div>`;
 }
 
-// Mobile Jabt stores the resale price in Amount (column D) and the Flipkart
-// link in EMI_Num (column B). Older rows have no link and a numeric sentinel
-// (0), so only a non-numeric EMI_Num is treated as the link.
-function mobileJabtInfo(loanId) {
-  const rows = (S.revisedDates || []).filter(rd => rd.loanId === loanId && rd.note === 'Mobile Jabt');
-  if (!rows.length) return null;
-  // Sheet order is append order, so the last row is the latest mark.
-  const rec = rows[rows.length - 1];
+// Mobile Jabt stores the resale price in Amount (column D), the Flipkart link
+// in EMI_Num (column B) and the recovery charge in Recovery_Charge (column G).
+// Older rows have no link and a numeric sentinel (0), so only a non-numeric
+// EMI_Num is treated as the link.
+function mobileJabtInfo(loanId, loan) {
+  if (!loan) loan = (S.sheetLoans || []).find(l => l.loanId === loanId);
+  if (isClosedOrDefaulted(loan)) return null;
+  const rec = mobileJabtRow(loanId);
+  if (!rec) return null;
   const raw = rec.emiNum;
   const link = (raw != null && String(raw).trim() !== '' && isNaN(Number(raw))) ? String(raw).trim() : '';
-  return { resalePrice: rec.amount || 0, link: link };
+  return { resalePrice: rec.amount || 0, link: link,
+           recoveryCharge: Number(rec.recoveryCharge || 0),
+           date: rec.revisedDate || '' };
+}
+
+// The latest Mobile Jabt row for a loan, ignoring the closed/defaulted
+// suppression mobileJabtInfo() applies — a recovery charge is still history
+// worth showing after the loan is settled.
+function mobileJabtRow(loanId) {
+  const rows = (S.revisedDates || []).filter(rd => rd.loanId === loanId && rd.note === 'Mobile Jabt');
+  return rows.length ? rows[rows.length - 1] : null;
+}
+
+// Recovery charge recorded when the device was seized. The Revised_Dates Jabt
+// row is authoritative and available immediately; loan.recoveryCharge is the
+// Data-tab lookup the user maintains, used only as a fallback for older rows.
+function recoveryChargeOf(loanId, loan) {
+  const rec = mobileJabtRow(loanId);
+  const fromJabt = rec ? Number(rec.recoveryCharge || 0) : 0;
+  if (fromJabt > 0) return fromJabt;
+  if (!loan) loan = (S.sheetLoans || []).find(l => l.loanId === loanId);
+  return Number((loan && loan.recoveryCharge) || 0);
+}
+
+// The small red pill shown just below the partial-payment indicator.
+function recoveryChargeHtml(l) {
+  const amt = recoveryChargeOf(l.loanId, l);
+  if (!(amt > 0)) return '';
+  return `<div style="display:flex;justify-content:flex-end;margin-top:2px">
+    <span style="font-size:11px;font-weight:600;color:#A32D2D;background:#fdf0ed;border:0.5px solid #e8c8c8;border-radius:6px;padding:1px 8px">Recovery: ${fmtAmt(amt)}</span>
+  </div>`;
+}
+
+// Marker written into an EMI submission's Notes when a recovery charge was
+// deducted. Pending submissions and approved partial receipts are the records
+// that survive a reload, so this text is how a retry knows the charge has
+// already been applied.
+function recoveryNoteText(gross, recovery) {
+  return 'Recovery ' + fmtAmt(recovery) + ' deducted from ' + fmtAmt(gross);
+}
+
+function recoveryHasMarker(notes) {
+  return /Recovery\s+₹[\d,.]+\s+deducted from/i.test(String(notes || ''));
+}
+
+function recoveryAlreadyDeducted(loanId) {
+  const id = String(loanId);
+  const pendingHit = (S.pending || []).some(p =>
+    p.type === 'emi' && p.status === 'pending'
+    && String(p.data && p.data.loanId) === id
+    && recoveryHasMarker(p.data && p.data.notes));
+  if (pendingHit) return true;
+  // A resale that nets below the standard EMI stays in Unapproved_EMI as an
+  // approved partial, carrying the same marker in its Notes.
+  return (S.approvedPartials || []).some(p =>
+    String(p.loanId) === id && recoveryHasMarker(p.notes));
+}
+
+// Recovery charge to deduct on the next EMI submission. Zero once the loan is
+// finished (nothing left to collect) or once an earlier submission already took
+// it — the charge is per device, not per receipt.
+function pendingRecoveryDeduction(loanId, loan) {
+  if (isClosedOrDefaulted(loan)) return 0;
+  if (recoveryAlreadyDeducted(loanId)) return 0;
+  return recoveryChargeOf(loanId, loan);
 }
 
 // A partial receipt is any EMI row whose reason says so, or whose amount is
@@ -385,344 +467,6 @@ function partialIndicator(l, subColor) {
   if (!items.length) return '';
   const total = items.reduce((s, p) => s + Number(p.amount || 0), 0);
   return `<span style="font-size:12px;font-weight:700;color:${subColor||'#888'};margin-left:auto;flex-shrink:0">${fmtAmt(total)} already received</span>`;
-}
-
-// ── Loan selection ────────────────────────────────────────────────────────
-async function selectEmiLoan(loanId) {
-  showLoader();
-  try {
-    document.querySelectorAll('.emi-card').forEach(r => r.classList.remove('selected'));
-    document.querySelectorAll(`.emi-card[data-loanid="${loanId}"]`).forEach(r => r.classList.add('selected'));
-    S.selectedEmiLoanId = loanId;
-
-    let loan = (S.sheetLoans && S.sheetLoans.find(l => l.loanId === loanId))
-      || (() => { const l = S.loans.find(l => l.loanId === loanId); return l ? { ...l.data, status:'Active', slots:[], numReceivedEmi: l.emis.length } : null; })();
-    if (!loan) return;
-
-    // If full data not yet loaded and card is slim, fetch detail on click
-    if (loan._slim) {
-      try {
-        const data = await gasGet('readLoanDetail', { loanId }, { priority: PRIORITY.detail });
-        if (data.ok && data.loan) {
-          const idx = S.sheetLoans.findIndex(l => l.loanId === loanId);
-          if (idx !== -1) S.sheetLoans[idx] = data.loan;
-          loan = data.loan;
-        }
-      } catch(e) { console.warn('Could not load detail:', e.message); }
-    }
-
-    $('emi-detail-loanid').textContent = loanId;
-    $('emi-detail-sub').textContent    = loan.customerName || '';
-
-    const detail = $('emi-detail');
-    detail.style.display = 'block';
-    if ($('emi-detail-ph')) $('emi-detail-ph').style.display = 'none';
-    if (window.matchMedia('(orientation: portrait)').matches)
-      detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
-  const akPct  = Math.round((loan.akShare  || 0) * 100);
-  const aksPct = Math.round((loan.aksShare || 0) * 100);
-
-  $('emi-kv').innerHTML = `
-    <span class="kv-l">Loan ID</span>       <span class="kv-v" style="color:#534AB7">${loan.loanId}</span>
-    <span class="kv-l">Customer</span>      <span class="kv-v">${loan.customerName}${loan.phone ? ' · '+smsLink(loan.phone) : ''}</span>
-    ${loan.model ? `<span class="kv-l">Model</span><span class="kv-v">${loan.model}${loan.deviceType ? ' ('+loan.deviceType+')' : ''}</span>` : ''}
-    <span class="kv-l">Monthly EMI</span>   <span class="kv-v">${fmtAmt(loan.monthlyEmi)}</span>
-    <span class="kv-l">Tenure</span>        <span class="kv-v">${loan.emiDuration} months</span>
-    <span class="kv-l">EMIs received</span> <span class="kv-v">${loan.numReceivedEmi} of ${loan.emiDuration}</span>
-    ${loan.nextEmiDate ? `<span class="kv-l">Next EMI date</span><span class="kv-v">${fmtDisplayDate(loan.nextEmiDate)}</span>` : ''}
-    ${loan.totalPending   ? `<span class="kv-l">Total pending</span><span class="kv-v" style="color:#A32D2D">${fmtAmt(loan.totalPending)}</span>` : ''}
-    ${loan.lateEmis       ? `<span class="kv-l">Late EMIs</span><span class="kv-v" style="color:#BA7517">${loan.lateEmis}</span>` : ''}
-    ${loan.latePaymentFine? `<span class="kv-l">Late fine</span><span class="kv-v">${fmtAmt(loan.latePaymentFine)}</span>` : ''}
-    <span class="kv-l">AK / AKS</span>      <span class="kv-v">${akPct}% / ${aksPct}%</span>
-    ${loan.guarantor ? `<span class="kv-l">Guarantor</span><span class="kv-v">${(() => { const g = String(loan.guarantor).trim(); const m = g.match(/\b(\d{10})\b/); if (m) return g.replace(m[1], smsLink(m[1])); return g; })()}</span>` : ''}
-  `;
-
-  // EMI slots — tabular format
-  const duration = loan.emiDuration || 0;
-  const slots    = loan.slots || [];
-  const today2 = new Date(); today2.setHours(0,0,0,0);
-  const pendingEmiSet = new Set(
-    S.pending.filter(p => p.type==='emi' && p.data.loanId===loanId && p.status==='pending')
-      .map(p => Number(p.data.emiNum))
-  );
-  // Merge locally-submitted EMIs (instant, no server dependency)
-  Object.keys(S._submittedEmis || {}).forEach(k => {
-    if (k.startsWith(loanId + '_')) pendingEmiSet.add(parseInt(k.split('_')[1]));
-  });
-  // Remove approved ones from local tracking
-  [...pendingEmiSet].forEach(n => {
-    if (loan.slots && loan.slots[n-1] && loan.slots[n-1].received) {
-      delete S._submittedEmis[loanId + '_' + n];
-      pendingEmiSet.delete(n);
-    }
-  });
-  if (duration > 0) {
-    let tableHtml = '<table class="emi-table"><thead><tr><th>EMI</th><th>Status</th><th>Due Date</th><th>Rcvd Date</th><th>Amount</th><th>Misc</th><th>Reason</th></tr></thead><tbody>';
-    for (let i = 0; i < duration && i < 8; i++) {
-      const slot = slots[i] || { num:i+1, received:false, scheduledDate:'', receivedDate:'', misc:0, cashflow:0 };
-      const scheduledTxt = slot.scheduledDate ? fmtDisplayDate(slot.scheduledDate) : '—';
-      const lateEmi = wasLateEmi(slot);
-      const receivedTxt  = slot.receivedDate  ? fmtDisplayDate(slot.receivedDate) + (lateEmi ? ' <span style="color:#BA7517;font-size:11px" title="Received late">⚠️ late</span>' : '') : '—';
-      let statusHtml, rowClass = '';
-      if (slot.received) {
-        statusHtml = '<span class="badge b-approved">Received</span>';
-        rowClass = ' rcvd' + (lateEmi ? ' late' : '');
-      }
-      if (pendingEmiSet.has(i+1)) statusHtml += ' <span class="badge b-pending" style="font-size:10px">⏳ Pending</span>';
-      const miscTxt = slot.misc !== 0 ? fmtAmt(slot.misc) : '—';
-      const reason = slot.miscType || (pendingEmiSet.has(i+1) ? (S.pending.find(p => p.type==='emi' && p.data.loanId===loanId && p.status==='pending' && Number(p.data.emiNum)===i+1)?.data?.reason || '—') : '—');
-      tableHtml += `<tr class="emi-tr${rowClass}"><td>${i+1}</td><td>${statusHtml}</td><td>${scheduledTxt}</td><td>${receivedTxt}</td><td>${fmtAmt(slot.cashflow)}</td><td>${miscTxt}</td><td style="font-size:11px;color:#555">${reason}</td></tr>`;
-    }
-    tableHtml += '</tbody></table>';
-    $('emi-slots').innerHTML = tableHtml;
-    $('emi-slots-wrap').style.display = 'block';
-    // Show late payment fine & extra EMI received
-    const fineEl = $('emi-fine-extra');
-    if (fineEl) {
-      const fine = loan.latePaymentFine || 0;
-      const extra = loan.extraEmiReceived || 0;
-      fineEl.innerHTML = (fine || extra) ? `<div style="display:flex;gap:16px;flex-wrap:wrap">
-        ${fine ? `<span style="color:#A32D2D;font-weight:500">Late fine: ${fmtAmt(fine)}</span>` : ''}
-        ${extra ? `<span style="color:#0F6E56;font-weight:500">Extra EMI: ${fmtAmt(extra)}</span>` : ''}
-      </div>` : '';
-    }
-  } else {
-    $('emi-slots').innerHTML = '';
-    $('emi-slots-wrap').style.display = 'none';
-  }
-
-  // Show approved partial payment banner if any exist for this loan
-  const bannerEl = $('emi-partial-banner');
-  if (bannerEl) {
-    const partialItems = S.approvedPartials.filter(p => p.loanId === loanId);
-    if (partialItems.length) {
-      let h = '<div class="divider"></div><div style="font-size:12px;font-weight:500;color:#A32D2D;margin-bottom:6px">Approved Partial Payments</div>';
-      partialItems.forEach(p => {
-        const dateStr = p.receivedDate ? fmtDisplayDate(p.receivedDate) : '—';
-        h += `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;margin:6px 0;background:#fff5f5;border-radius:8px;border:0.5px solid #e8c8c8">
-          <div>
-            <div style="font-size:13px;font-weight:500">EMI ${p.emiNum} · ${fmtAmt(p.amount)} received</div>
-            <div style="font-size:11px;color:#888">Received on: ${dateStr}</div>
-          </div>
-        </div>`;
-      });
-      bannerEl.innerHTML = h;
-    } else {
-      bannerEl.innerHTML = '';
-    }
-  }
-
-  // Revised date stats
-  const statsEl = $('emi-revised-stats');
-  const btnWrap = $('emi-revised-btn-wrap');
-  if (statsEl) {
-    const customerPrefix = loan.loanId.split('/')[0];
-    const dates = S.revisedDates || [];
-    const emiCount = dates.filter(d => d.loanId === loanId && d.emiNum === loan.numReceivedEmi + 1).length;
-    const loanCount = dates.filter(d => d.loanId === loanId).length;
-    const customerCount = dates.filter(d => d.loanId.split('/')[0] === customerPrefix).length;
-    if (loanCount > 0) {
-      statsEl.innerHTML = `<div style="display:flex;gap:12px;flex-wrap:wrap;padding:6px 0">
-        <span style="color:#399C9C;font-weight:500">Revised Date Revisions:</span>
-        <span>This EMI: <strong>${emiCount}</strong></span>
-        <span>This Loan: <strong>${loanCount}</strong></span>
-        <span>This Customer: <strong>${customerCount}</strong></span>
-      </div>`;
-    } else {
-      statsEl.innerHTML = '';
-    }
-  }
-  if (btnWrap) {
-    btnWrap.style.display = (loan.numReceivedEmi < duration) ? '' : 'none';
-    // Store the loan data for the form
-    btnWrap.dataset.monthlyEmi = loan.monthlyEmi || '';
-    btnWrap.dataset.duration = duration;
-  }
-
-  const nextNum = loan.numReceivedEmi + 1;
-  // Expected to collect = monthlyEmi - extraEmiReceived
-  const extraReceived = loan.extraEmiReceived || 0;
-  const expectedAmt   = Math.max(0, (loan.monthlyEmi || 0) - extraReceived);
-  let labelTxt = nextNum > duration ? 'All EMIs collected!'
-    : `Recording: EMI ${nextNum} of ${duration} · Standard EMI: ${fmtAmt(loan.monthlyEmi)}${extraReceived ? ' · Expected to collect: ' + fmtAmt(expectedAmt) : ''}`;
-  $('emi-next-label').textContent = labelTxt;
-
-  // Prefill with full monthly EMI (agent types what they actually received)
-  $('emi-amt').value  = loan.monthlyEmi || '';
-  // Default payment date = today
-  $('emi-date').value = new Date().toISOString().split('T')[0];
-  $('emi-notes').value  = '';
-  $('emi-reason').value = '';
-  $('emi-reason-wrap').style.display = 'none';
-  $('emi-diff-warn').style.display   = 'none';
-
-  // Disable submit button if this EMI already has a pending submission
-  const subBtn = $('emi-submit-btn');
-  if (pendingEmiSet.has(nextNum)) {
-    subBtn.disabled = true;
-    subBtn.style.opacity = '0.5';
-    subBtn.style.cursor = 'not-allowed';
-    $('emi-next-label').textContent = '⚠ EMI ' + nextNum + ' already pending approval.';
-  } else {
-    subBtn.disabled = false;
-    subBtn.style.opacity = '';
-    subBtn.style.cursor = '';
-  }
-
-  // Show revised date field for next EMI if this loan has a revised date for the current EMI
-  const revWrap = $('emi-revised-next-wrap');
-  const revDt   = $('emi-next-revised-date');
-  if (revWrap && revDt) {
-    const hasRevForCurrEmi = (S.revisedDates||[]).some(d => d.loanId === loanId && d.emiNum === nextNum);
-    if (hasRevForCurrEmi && nextNum < duration) {
-      revWrap.style.display = 'block';
-      // Default = bottom-most appended revised date + 1 month
-      const loanRevs = (S.revisedDates||[]).filter(d => d.loanId === loanId && d.revisedDate);
-      let latest = loanRevs.length ? parseSheetDate(loanRevs[loanRevs.length-1].revisedDate) : null;
-      if (!latest) {
-        const loanRevsAll = (S.revisedDates||[]).filter(d => d.loanId === loanId);
-        if (loanRevsAll.length) latest = parseSheetDate(loanRevsAll[loanRevsAll.length-1].revisedDate);
-      }
-      if (latest) {
-        const next = new Date(latest);
-        next.setMonth(next.getMonth() + 1);
-        revDt.value = next.getFullYear() + '-' + String(next.getMonth()+1).padStart(2,'0') + '-' + String(next.getDate()).padStart(2,'0');
-      } else {
-        revDt.value = '';
-      }
-    } else {
-      revWrap.style.display = 'none';
-      revDt.value = '';
-    }
-  }
-  } finally { hideLoader(); }
-}
-
-function clearRevisedDateField() {
-  const dt = $('emi-next-revised-date');
-  if (dt) dt.value = '';
-}
-
-// ── Diff check ────────────────────────────────────────────────────────────
-function closeEmiDetail() {
-  $('emi-detail').style.display = 'none';
-  if ($('emi-detail-ph')) $('emi-detail-ph').style.display = '';
-  S.selectedEmiLoanId = null;
-  document.querySelectorAll('.emi-card').forEach(r => r.classList.remove('selected'));
-}
-
-function checkEmiDiff() {
-  const loanId = S.selectedEmiLoanId; if (!loanId) return;
-  const loan = (S.sheetLoans && S.sheetLoans.find(l => l.loanId === loanId)) || S.loans.find(l => l.loanId === loanId);
-  if (!loan) return;
-  const stdEmi  = loan.monthlyEmi || loan?.data?.monthlyEmi || 0;
-  const got     = parseFloat($('emi-amt').value) || 0;
-  if (!got) return;
-  const diff = got - stdEmi;
-  if (Math.abs(diff) > 1) {
-    $('emi-reason-wrap').style.display = 'block';
-    $('emi-diff-warn').style.display   = 'block';
-    $('emi-diff-msg').textContent = `Differs from standard EMI ${fmtAmt(stdEmi)} by ${diff>0?'+':''}${fmtAmt(Math.abs(diff))}. Please select a reason.`;
-  } else {
-    $('emi-reason-wrap').style.display = 'none';
-    $('emi-diff-warn').style.display   = 'none';
-  }
-}
-
-// ── Submit ────────────────────────────────────────────────────────────────
-async function submitEmi() {
-  const loanId = S.selectedEmiLoanId;
-  if (!loanId) { showAlert('Please select a loan first.', 'e'); return; }
-  const sheetLoan = S.sheetLoans && S.sheetLoans.find(l => l.loanId === loanId);
-  const inAppLoan = S.loans.find(l => l.loanId === loanId);
-  if (!sheetLoan && !inAppLoan) { showAlert('Loan data not found.', 'e'); return; }
-  const amt  = parseFloat($('emi-amt').value) || 0;
-  const date = v('emi-date');
-  if (!amt || !date) { showAlert('Please enter amount and payment date.', 'e'); return; }
-  const extraRcv = (sheetLoan ? sheetLoan.extraEmiReceived : 0) || 0;
-  const stdEmi   = sheetLoan ? sheetLoan.monthlyEmi : inAppLoan.data.monthlyEmi;
-  const expected = Math.max(0, stdEmi - extraRcv);
-  if (Math.abs(amt - stdEmi) > 1 && !v('emi-reason')) { showAlert('Please select a reason for the amount difference.', 'e'); return; }
-  const numReceived = sheetLoan ? sheetLoan.numReceivedEmi : inAppLoan.emis.length;
-  // Compute scheduled due date for this EMI number
-  const emiNum       = numReceived + 1;
-  const emiStartDate = sheetLoan ? sheetLoan.emiStartDate : (inAppLoan ? inAppLoan.data.emiStart : '');
-  let scheduledDate  = '';
-  if (emiStartDate) {
-    // Parse start date and add (emiNum-1) months
-    const parts = String(emiStartDate).match(/(\d{1,2})[\-\/](\w{3})[\-\/](\d{2,4})/);
-    if (parts) {
-      const months = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
-      const mon = months[parts[2].toLowerCase()];
-      let yr = parseInt(parts[3]); if (yr<100) yr += yr<50?2000:1900;
-      const sd = new Date(yr, mon, parseInt(parts[1]));
-      sd.setMonth(sd.getMonth() + (emiNum - 1));
-      scheduledDate = sd.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}).replace(/ /g,'-');
-    }
-  }
-
-  const receivedVal = $('emi-received') ? $('emi-received').value !== 'false' : true;
-  const d = {
-    loanId,
-    customerName:   sheetLoan ? sheetLoan.customerName : inAppLoan.data.customerName,
-    model:          sheetLoan ? sheetLoan.model        : inAppLoan.data.model,
-    emiNum,
-    amount:         amt, expectedAmount: stdEmi, misc: amt - stdEmi,
-    date, scheduledDate, emiStartDate,
-    received: receivedVal,
-    mode: v('emi-mode'), reason: v('emi-reason'), miscType: v('emi-reason'), notes: v('emi-notes'),
-    akShare:  sheetLoan ? Math.round(sheetLoan.akShare  * 100) : inAppLoan.data.akShare,
-    aksShare: sheetLoan ? Math.round(sheetLoan.aksShare * 100) : inAppLoan.data.aksShare,
-  };
-  const emiItem = { id: nextPid(), type: 'emi', data: d, submittedBy: S.cu.id, submittedAt: new Date().toISOString(), status: 'pending', note: '' };
-  showAlert('Submitting…', 'w');
-  showLoader();
-  try {
-    if (S.sheetsUrl) {
-      // Include amount + date so a second partial receipt for the same EMI is
-      // allowed, while an identical double-click is still blocked.
-      const r = await runAction(
-        actionKey('saveEmi', loanId, emiNum, amt, date),
-        {action:'saveEmi', item:emiItem});
-      if (r.outcome === 'blocked') {
-        showAlert(r.message, 'e');
-      } else if (r.outcome === 'unconfirmed') {
-        showAlert("Couldn't confirm the submission — it may still have saved. Refresh the page to check.", 'w');
-      } else if (r.outcome === 'done') {
-        const res = r.res;
-        S._submittedEmis[loanId + '_' + emiNum] = true;
-        // Server confirmed — add our own submission locally, no extra round-trip.
-        S.pending.push(emiItem);
-        cacheState();
-        refreshNav();
-        rerenderActiveTab();
-        showAlert('EMI payment submitted for approval.');
-        // Revised date syncs quietly in the background (recorded locally on success).
-        const revDt = $('emi-next-revised-date');
-        const revVal = revDt ? revDt.value : '';
-        if (revVal && emiNum < (sheetLoan ? sheetLoan.emiDuration : 0)) {
-          const nextNum2 = emiNum + 1;
-          const nextAmt = sheetLoan ? sheetLoan.monthlyEmi : 0;
-          runAction(actionKey('setRevisedDate', loanId, nextNum2),
-            { action: 'setRevisedDate', loanId, emiNum: nextNum2, revisedDate: revVal, amount: nextAmt || 0, note: '' })
-            .then(revRes => {
-              if (revRes.outcome === 'done') {
-                noteLocalRevisedDate(loanId, nextNum2, ymdToSheetDate(revVal), nextAmt || 0, '');
-                rerenderActiveTab();
-              }
-            })
-            .catch(() => {});
-        }
-      } else {
-        showAlert('Submission failed: ' + ((r.res && r.res.error) || 'Unknown error'), 'e');
-      }
-    }
-  } finally { hideLoader(); }
-  $('emi-detail').style.display = 'none';
-  S.selectedEmiLoanId = null;
-  document.querySelectorAll('.emi-card').forEach(r => r.classList.remove('selected'));
-  if ($('emi-received')) $('emi-received').value = 'true';
 }
 
 // ── Fetch approved partial payments ──────────────────────────────────────
@@ -825,6 +569,7 @@ function cdCard(l, type) {
       ${hasPendingEmi ? `<span class="emi-late-pill" style="${pillStyle}">⏳ Pending</span>` : ''}
       ${partialIndicator(l, sc)}
     </div>
+    ${recoveryChargeHtml(l)}
     ${commentRowHtml(l, sc)}
   </div>`;
 }
@@ -901,7 +646,7 @@ async function openCdDetail(loanId) {
     ['Late Payment Fine',            M(l.latePaymentFine)],
     ['Early Loan Closing Settlement',M(l.earlyClosing)],
     ['Extra EMI Received',           M(l.extraEmiReceived)],
-    ['Recovery Charge',              M(l.recoveryCharge)],
+    ['Recovery Charge',              M(recoveryChargeOf(l.loanId, l))],
     ['Lock App Removed',             Bool(l.lockRemoved)],
     ['Defaulted',                    Bool(l.isDefaulted)],
     ['Default Comment',              D(l.defaultComment)],
@@ -912,9 +657,11 @@ async function openCdDetail(loanId) {
     ['Down Payment %',               D(l.downPaymentPct)],
   ];
 
-  const jabt = mobileJabtInfo(l.loanId);
+  const jabt = mobileJabtInfo(l.loanId, l);
   if (jabt) {
+    rows.push(['Mobile Jabt Date', D(jabt.date)]);
     rows.push(['Mobile Jabt Resale Price', M(jabt.resalePrice)]);
+    rows.push(['Mobile Jabt Recovery Charge', M(recoveryChargeOf(l.loanId, l))]);
     rows.push(['Flipkart Link', jabt.link ? '<a href="'+jabt.link.replace(/"/g,'&quot;')+'" target="_blank" style="color:#534AB7;word-break:break-all">'+jabt.link+'</a>' : '—']);
   }
 
@@ -946,9 +693,11 @@ async function openCdDetail(loanId) {
   if (cdfEl) {
     const fine = l.latePaymentFine || 0;
     const extra = l.extraEmiReceived || 0;
-    cdfEl.innerHTML = (fine || extra) ? `<div style="display:flex;gap:16px;flex-wrap:wrap">
+    const rec = recoveryChargeOf(l.loanId, l);
+    cdfEl.innerHTML = (fine || extra || rec) ? `<div style="display:flex;gap:16px;flex-wrap:wrap">
       ${fine ? `<span style="color:#A32D2D;font-weight:500">Late fine: ${fmtAmt(fine)}</span>` : ''}
       ${extra ? `<span style="color:#0F6E56;font-weight:500">Extra EMI: ${fmtAmt(extra)}</span>` : ''}
+      ${rec ? `<span style="color:#A32D2D;font-weight:500">Recovery charge: ${fmtAmt(rec)}</span>` : ''}
     </div>` : '';
   }
   $('cd-detail-kv').innerHTML = rows
@@ -1223,10 +972,11 @@ function closeRevisedDateForm() {
 // by a read. Record what we just saved locally so the tab is correct right now,
 // in the same shape readAllRevisedDates() would have returned. Pushed onto the
 // end, so every "last revision wins" lookup picks it up.
-function noteLocalRevisedDate(loanId, emiNum, revisedDate, amount, note) {
+function noteLocalRevisedDate(loanId, emiNum, revisedDate, amount, note, recoveryCharge) {
   if (!Array.isArray(S.revisedDates)) S.revisedDates = [];
   S.revisedDates.push({ loanId: loanId, emiNum: emiNum, revisedDate: revisedDate,
                         amount: amount || 0, note: note || '',
+                        recoveryCharge: Number(recoveryCharge) || 0,
                         createdAt: new Date().toISOString() });
 }
 
@@ -1237,6 +987,17 @@ function ymdToSheetDate(str) {
   if (!m) return str || '';
   const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   return parseInt(m[3], 10) + '-' + M[parseInt(m[2], 10) - 1] + '-' + String(parseInt(m[1], 10)).slice(-2);
+}
+
+// Inverse of ymdToSheetDate(): a sheet date (or Date) → the YYYY-MM-DD an
+// <input type="date"> needs. Built from local parts, never UTC, so an evening
+// entry in IST never lands on the previous day.
+function sheetDateToYmd(d) {
+  const dt = d instanceof Date ? d : parseSheetDate(d);
+  if (!dt || isNaN(dt)) return '';
+  return dt.getFullYear() + '-'
+    + String(dt.getMonth() + 1).padStart(2, '0') + '-'
+    + String(dt.getDate()).padStart(2, '0');
 }
 
 async function submitRevisedDate() {
@@ -1266,7 +1027,7 @@ async function submitRevisedDate() {
       showAlert("Couldn't confirm the save — it may still have gone through. Refresh the page to check.", 'w');
     } else if (r.outcome === 'done') {
       // Lean {ok:true} — record the row we just wrote locally instead of
-      // reading the sheet back: no follow-up GET, no selectEmiLoan() re-read.
+      // reading the sheet back: no follow-up GET, no detail re-read.
       noteLocalRevisedDate(loanId, emiNum, ymdToSheetDate(revisedDate), amount, note);
       rerenderActiveTab();
       renderApprovals($('appr-search') ? $('appr-search').value : '');
@@ -1593,6 +1354,7 @@ function overviewCard(l, type) {
       ${lateTxt ? `<span class="emi-late-pill" style="${pillStyle}">&#9888; ${lateTxt}</span>` : ''}
       ${partialIndicator(l, sc)}
     </div>
+    ${recoveryChargeHtml(l)}
     ${commentRowHtml(l, sc)}
   </div>`;
 }
@@ -1768,6 +1530,17 @@ async function selectOverviewLoan(loanId) {
       }
     }
 
+    // Recovery charge — directly below the partial-payment banner, so the two
+    // money already taken off the customer read together.
+    const recBannerEl = $('ov-recovery-banner');
+    if (recBannerEl) {
+      const recAmt = recoveryChargeOf(loanId, loan);
+      recBannerEl.innerHTML = recAmt > 0 ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;margin:6px 0;background:#fdf0ed;border-radius:8px;border:0.5px solid #e8c8c8">
+        <div style="font-size:13px;font-weight:500;color:#A32D2D">Recovery Charge</div>
+        <div style="font-size:13px;font-weight:700;color:#A32D2D">${fmtAmt(recAmt)}</div>
+      </div>` : '';
+    }
+
     // Revised stats
     const statsEl = $('ov-revised-stats');
     const btnWrap = $('ov-revised-btn-wrap');
@@ -1831,6 +1604,9 @@ async function selectOverviewLoan(loanId) {
       $('ov-emi-amt').value  = stdEmi || '';
       $('ov-emi-date').value = new Date().toISOString().split('T')[0];
       $('ov-emi-notes').value  = '';
+      // A hint left over from the previously selected loan must not linger.
+      const recHint = $('ov-emi-recovery-hint');
+      if (recHint) { recHint.style.display = 'none'; recHint.textContent = ''; }
       // Leave the reason blank; typing an amount that differs from the standard
       // EMI opens the reason box via checkOverviewEmiDiff().
       $('ov-emi-reason').value = '';
@@ -1936,7 +1712,7 @@ async function selectOverviewLoan(loanId) {
       ['Late Payment Fine',            Mf(loan.latePaymentFine)],
       ['Early Loan Closing Settlement',Mf(loan.earlyClosing)],
       ['Extra EMI Received',           Mf(loan.extraEmiReceived)],
-      ['Recovery Charge',              Mf(loan.recoveryCharge)],
+      ['Recovery Charge',              Mf(recoveryChargeOf(loan.loanId, loan))],
       ['Lock App Removed',             Boolf(loan.lockRemoved)],
       ['Defaulted',                    Boolf(loan.isDefaulted)],
       ['Default Comment',              Df(loan.defaultComment)],
@@ -1997,7 +1773,7 @@ async function selectOverviewLoan(loanId) {
         return custCodes.length ? lockCodeLines(custCodes) : '—';
       })()],
       ['Lock App Removed', Boolf(loan.lockRemoved)],
-      ['Recovery Charge', Mf(loan.recoveryCharge)],
+      ['Recovery Charge', Mf(recoveryChargeOf(loan.loanId, loan))],
       ['Defaulted', Boolf(loan.isDefaulted)],
       ['Default Comment', Df(loan.defaultComment)],
       ['Drive Link', (() => {
@@ -2031,12 +1807,14 @@ async function selectOverviewLoan(loanId) {
       ['AK Share', akPct + '%'],
       ['AKS Share', aksPct + '%'],
     ];
-    const jabt = mobileJabtInfo(loan.loanId);
+    const jabt = mobileJabtInfo(loan.loanId, loan);
     const jabtHtml = jabt ? `
       <div class="divider"></div>
       <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px;text-align:left">Mobile Jabt Detail</div>
       <div class="kv" style="font-size:12px;text-align:left">
+        <span class="kv-l">Date</span><span class="kv-v">${Df(jabt.date)}</span>
         <span class="kv-l">Resale Price</span><span class="kv-v">${Mf(jabt.resalePrice)}</span>
+        <span class="kv-l">Recovery Charge</span><span class="kv-v">${Mf(recoveryChargeOf(loan.loanId, loan))}</span>
         <span class="kv-l">Flipkart Link</span><span class="kv-v">${jabt.link ? '<a href="'+jabt.link.replace(/"/g,'&quot;')+'" target="_blank" style="color:#534AB7;word-break:break-all">'+jabt.link+'</a>' : '—'}</span>
       </div>` : '';
     const newSections = `
@@ -2274,7 +2052,24 @@ function checkOverviewEmiDiff() {
   const raw     = $('ov-emi-amt') ? $('ov-emi-amt').value : '';
   if (raw === '') return;
   const got     = parseFloat(raw) || 0;
-  const diff = got - stdEmi;
+  // The amount actually logged is what is left after a Mobile Jabt recovery
+  // charge, so the "differs from standard EMI" rule must compare that figure —
+  // otherwise a resale settlement that nets out exactly to the EMI would still
+  // demand a reason.
+  const recovery = pendingRecoveryDeduction(loanId, loan);
+  const net  = Math.max(0, got - recovery);
+  const diff = net - stdEmi;
+  const hintEl = $('ov-emi-recovery-hint');
+  if (hintEl) {
+    if (recovery > 0) {
+      hintEl.style.display = 'block';
+      hintEl.textContent = 'Recovery charge ' + fmtAmt(recovery) + ' will be deducted: ' +
+        fmtAmt(got) + ' → ' + fmtAmt(net) + ' logged as EMI ' + ((loan.numReceivedEmi || 0) + 1) + '.';
+    } else {
+      hintEl.style.display = 'none';
+      hintEl.textContent = '';
+    }
+  }
   if (Math.abs(diff) > 1) {
     $('ov-emi-reason-wrap').style.display = 'block';
     $('ov-emi-diff-warn').style.display   = 'block';
@@ -2312,9 +2107,27 @@ async function submitOverviewEmi() {
   const nextNum = (loan.numReceivedEmi || 0) + 1;
   if (nextNum > (loan.emiDuration || 0)) { showAlert('All EMIs already collected for this loan.', 'e'); return; }
   const amtRaw = $('ov-emi-amt') ? $('ov-emi-amt').value : '';
-  const amt  = parseFloat(amtRaw);
+  let amt      = parseFloat(amtRaw);
   const date = $('ov-emi-date') ? $('ov-emi-date').value : '';
   if (amtRaw === '' || isNaN(amt) || !date) { showAlert('Please enter amount and payment date.', 'e'); return; }
+
+  // Mobile Jabt resale: the recovery charge is money already paid out when the
+  // device was collected, so it comes off the proceeds before the receipt is
+  // logged. Confirm the arithmetic here — everything downstream (reason check,
+  // partial logic, the saved row) then sees only the net amount.
+  const recovery = pendingRecoveryDeduction(loanId, loan);
+  const grossAmt = amt;
+  if (recovery > 0) {
+    if (amt <= recovery) {
+      showAlert('The amount entered (' + fmtAmt(amt) + ') must be greater than the recovery charge (' + fmtAmt(recovery) + ').', 'e');
+      return;
+    }
+    amt = Math.round((grossAmt - recovery) * 100) / 100;
+    if (!confirm('Mobile Jabt resale — recovery charge\n\n' +
+        'Amount entered: ' + fmtAmt(grossAmt) + '\n' +
+        'Recovery charge: −' + fmtAmt(recovery) + '\n' +
+        'EMI to be logged: ' + fmtAmt(amt) + '\n\nContinue?')) return;
+  }
 
   // Warn if scheduled date is far in the future
   if (loan.emiStartDate) {
@@ -2394,7 +2207,12 @@ async function submitOverviewEmi() {
     mode: $('ov-emi-mode') ? $('ov-emi-mode').value : 'Cash',
     reason: reason,
     miscType: reason,
-    notes: $('ov-emi-notes') ? $('ov-emi-notes').value : '',
+    notes: (() => {
+      const base = $('ov-emi-notes') ? String($('ov-emi-notes').value || '').trim() : '';
+      if (!(recovery > 0)) return base;
+      const note = recoveryNoteText(grossAmt, recovery);
+      return base ? base + ' | ' + note : note;
+    })(),
     akShare:  Math.round((loan.akShare  || 0) * 100),
     aksShare: Math.round((loan.aksShare || 0) * 100),
   };
@@ -2426,7 +2244,9 @@ async function submitOverviewEmi() {
         cacheState();
         refreshNav();
         rerenderActiveTab();
-        showAlert('EMI payment submitted for approval.');
+        showAlert(recovery > 0
+          ? 'EMI payment submitted for approval: ' + fmtAmt(amt) + ' logged (recovery charge ' + fmtAmt(recovery) + ' deducted from ' + fmtAmt(grossAmt) + ').'
+          : 'EMI payment submitted for approval.');
         // Revised date syncs quietly in the background (recorded locally on success).
         const revDt = $('ov-emi-next-revised-date');
         const revVal = revDt ? revDt.value : '';
@@ -2472,11 +2292,10 @@ function renderOverviewRevised() {
   const filtered = q ? source.filter(l => overviewMatches(l, q, overviewSearchScope())) : source;
   const today = new Date(); today.setHours(0,0,0,0);
   const hasRevDates = filtered.filter(l => {
+    // Revised dates (including Mobile Jabt) are irrelevant once a loan is
+    // closed or defaulted — leave it out of this filter entirely.
+    if (isClosedOrDefaulted(l)) return false;
     const revs = S.revisedDates.filter(rd => rd.loanId === l.loanId);
-    const hasJabt = revs.some(rd => rd.note === 'Mobile Jabt');
-    // A loan carrying the Mobile Jabt flag is done once it is defaulted or has
-    // completed its EMIs — keep it out of the Mobile Jabt section entirely.
-    if (hasJabt && (l.isDefaulted || l.emiCompleted || l.status === 'Closed')) return false;
     return revs.some(rd => {
       if (rd.note === 'Mobile Jabt') return true;
       const slot = (l.slots || []).find(s => s.num === rd.emiNum);
@@ -2636,10 +2455,18 @@ function openMobileJabtForm() {
   const loanId = S.selectedEmiLoanId;
   if (!loanId) return;
   const existing = mobileJabtInfo(loanId);
+  const dateEl  = $('jabt-date');
   const priceEl = $('jabt-resale-price');
   const linkEl  = $('jabt-flipkart-link');
+  const recEl   = $('jabt-recovery-charge');
+  // Re-marking keeps the date already on the Jabt row; a fresh mark defaults
+  // to today.
+  const prevRow = mobileJabtRow(loanId);
+  if (dateEl) dateEl.value = (prevRow && sheetDateToYmd(prevRow.revisedDate)) || sheetDateToYmd(new Date());
   if (priceEl) priceEl.value = existing && existing.resalePrice ? existing.resalePrice : '';
   if (linkEl)  linkEl.value  = existing ? existing.link : '';
+  // Default 0 — the field is explicit so a blank is never ambiguous.
+  if (recEl) recEl.value = recoveryChargeOf(loanId) || 0;
   const modal = $('mobile-jabt-modal');
   if (modal) modal.style.display = 'flex';
   setTimeout(() => { if (priceEl) priceEl.focus(); }, 0);
@@ -2653,16 +2480,34 @@ function closeMobileJabtForm() {
 async function submitMobileJabt() {
   const loanId = S.selectedEmiLoanId;
   if (!loanId) return;
+  const dateEl  = $('jabt-date');
   const priceEl = $('jabt-resale-price');
   const linkEl  = $('jabt-flipkart-link');
+  const recEl   = $('jabt-recovery-charge');
+  const date = dateEl ? String(dateEl.value || '').trim() : '';
   const priceRaw = priceEl ? String(priceEl.value || '').trim() : '';
   const resalePrice = parseFloat(priceRaw);
+  const recRaw = recEl ? String(recEl.value || '').trim() : '';
+  const recoveryCharge = recRaw === '' ? 0 : parseFloat(recRaw);
   let flipkartLink = linkEl ? String(linkEl.value || '').trim() : '';
+  if (!date) {
+    showAlert('Select the date.', 'e');
+    if (dateEl) dateEl.focus();
+    return;
+  }
   if (priceRaw === '' || isNaN(resalePrice) || resalePrice < 0) {
     showAlert('Enter the resale price.', 'e');
     if (priceEl) priceEl.focus();
     return;
   }
+  if (isNaN(recoveryCharge) || recoveryCharge < 0) {
+    showAlert('Recovery charge must be 0 or more.', 'e');
+    if (recEl) recEl.focus();
+    return;
+  }
+  if (recoveryCharge > resalePrice && !confirm(
+      'Recovery charge ' + fmtAmt(recoveryCharge) + ' is higher than the resale price ' +
+      fmtAmt(resalePrice) + '. The net EMI will be lower than the recovery charge. Continue?')) return;
   if (!flipkartLink) {
     showAlert('Enter the Flipkart link.', 'e');
     if (linkEl) linkEl.focus();
@@ -2674,17 +2519,18 @@ async function submitMobileJabt() {
   closeRevisedDateForm();
   showLoader();
   try {
-    // EMI_Num (column B) carries the Flipkart link for Mobile Jabt rows;
-    // Amount (column D) carries the resale price.
-    const res = await gasPost({ action: 'setRevisedDate', loanId, emiNum: flipkartLink, revisedDate: '', amount: resalePrice, note: 'Mobile Jabt' });
+    // Revised_Date (column C) carries the date, EMI_Num (column B) the Flipkart
+    // link, Amount (column D) the resale price and Recovery_Charge (column G)
+    // the amount paid to the customer when the device was collected.
+    const res = await gasPost({ action: 'setRevisedDate', loanId, emiNum: flipkartLink, revisedDate: date, amount: resalePrice, note: 'Mobile Jabt', recoveryCharge: recoveryCharge });
     if (res.ok) {
       // Lean {ok:true} — record it locally instead of reading the sheet back:
-      // no follow-up GET, and no selectEmiLoan() re-read either (a write is
-      // never followed by a read).
-      noteLocalRevisedDate(loanId, flipkartLink, '', resalePrice, 'Mobile Jabt');
+      // no follow-up GET, and no detail re-read either (a write is never
+      // followed by a read).
+      noteLocalRevisedDate(loanId, flipkartLink, ymdToSheetDate(date), resalePrice, 'Mobile Jabt', recoveryCharge);
       rerenderActiveTab();
       renderApprovals($('appr-search') ? $('appr-search').value : '');
-      showAlert('Loan marked as Mobile Jabt.');
+      showAlert('Loan marked as Mobile Jabt.' + (recoveryCharge > 0 ? ' Recovery charge ' + fmtAmt(recoveryCharge) + ' saved.' : ''));
     } else {
       showWriteFailure(res, 'The Mobile Jabt mark');
     }

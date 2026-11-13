@@ -673,7 +673,15 @@ async function submitStockActivationDate() {
       activationDate,
     });
     if (!res || !res.ok) {
-      showAlert('Could not save the activation date: ' + ((res && res.error) || 'Unknown error'), 'e');
+      const msg = (res && res.error) || 'Unknown error';
+      if (/unknown action:\s*markStockActivation/i.test(msg)) {
+        showAlert('The Apps Script deployment is still the old version, so it does not know markStockActivation yet. '
+          + 'Open the Apps Script project, paste the latest google-apps-script-separate-sheets.js, then '
+          + 'Deploy → Manage deployments → Edit → Version: New version → Deploy. '
+          + 'Edit the existing deployment (do not create a new one) so the URL stays the same.', 'e');
+      } else {
+        showAlert('Could not save the activation date: ' + msg, 'e');
+      }
       return;
     }
     closeStockActivationDateModal();

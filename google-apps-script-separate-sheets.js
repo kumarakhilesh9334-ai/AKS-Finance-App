@@ -355,7 +355,10 @@ function handleGet(e, opts) {
       if (!sheet) return jsonResponse({ok:true, partials:[]});
       const b = configBounds(ss)[UNAPP_EMI_SHEET];
       tm('part.cfg');
-      const rows = readDataRows(sheet, 2, b, 17, 'part.');
+      // 19 columns: Notes (18) carries the Mobile Jabt recovery marker, and the
+      // client needs it to know the charge was already deducted from an approved
+      // partial receipt.
+      const rows = readDataRows(sheet, 2, b, 19, 'part.');
       // Every approved row still in Unapproved_EMI is a partial contribution:
       // full EMIs are logged and deleted, so only incomplete ones remain.
       const stdByLoan = {};
@@ -380,6 +383,7 @@ function handleGet(e, opts) {
             // monthly EMI wins when available (older rows may lack a usable MISC).
             expected: stdFor(loanId) || Math.max(0, amount - misc),
             miscType: String(r[16]||'').trim(),
+            notes: String(r[18]||'').trim(),
           };
         });
       tm('part.filter');
@@ -1601,10 +1605,11 @@ function doPost(e) {
 
     // ── Set revised date ────────────────────────────────────────────
     if (payload.action === 'setRevisedDate') {
-      const { loanId, emiNum, revisedDate, amount, note } = payload;
+      const { loanId, emiNum, revisedDate, amount, note, recoveryCharge } = payload;
       const noteTxt = String(note||'').trim();
       const isJabt = noteTxt.toLowerCase() === 'mobile jabt';
-      const sheet = ensureSheet(ss, REVISED_DATES_SHEET, ['LoanID','EMI_Num','Revised_Date','Amount','Note','CreatedAt']);
+      const sheet = ensureSheet(ss, REVISED_DATES_SHEET, ['LoanID','EMI_Num','Revised_Date','Amount','Note','CreatedAt','Recovery_Charge']);
+      ensureRevisedCols_(sheet);
       sheet.appendRow([
         String(loanId||'').trim(),
         // Mobile Jabt reuses EMI_Num (column B) for the Flipkart link; every
@@ -1614,6 +1619,9 @@ function doPost(e) {
         parseFloat(amount)||0,
         noteTxt,
         new Date().toISOString(),
+        // Recovery charge is a Mobile Jabt concept. Every other revision writes
+        // 0 so the Data-tab lookup can key on LoanID + Note="Mobile Jabt".
+        isJabt ? (parseFloat(recoveryCharge)||0) : 0,
       ]);
       // Lean response, exactly like saveLoan/saveEmi: the row is committed, so
       // nothing that runs afterwards may decide the outcome. This used to
@@ -1762,7 +1770,9 @@ function readAllRevisedDates(ss) {
   if (!sheet) return [];
   const b = configBounds(ss)[REVISED_DATES_SHEET];
   tm('rev.cfg');
-  const rows = readDataRows(sheet, 2, b, 6, 'rev.');
+  // minCols 7: Config may still report the pre-Recovery_Charge width of 6, and
+  // readDataRows only ever widens a Config count, never narrows the sheet.
+  const rows = readDataRows(sheet, 2, b, 7, 'rev.');
   return rows.filter(r => r[0] && String(r[0]).trim()).map(r => {
     const note = String(r[4]||'').trim();
     return {
@@ -1774,6 +1784,7 @@ function readAllRevisedDates(ss) {
       amount: parseFloat(r[3])||0,
       note,
       createdAt: String(r[5]||''),
+      recoveryCharge: parseFloat(r[6])||0,
     };
   });
 }
@@ -1802,7 +1813,7 @@ function bustLoanDataCaches(loanId) {
   try { CacheService.getScriptCache().remove(loanDetailCacheKey(loanId)); } catch(e) {}
   try { CacheService.getScriptCache().remove('lock_status_map'); } catch(e) {}
   try { CacheService.getScriptCache().remove('emi_log_byloan'); } catch(e) {}
-  try { CacheService.getScriptCache().remove('revised_dates_raw'); } catch(e) {}
+  try { CacheService.getScriptCache().remove('revised_dates_raw_v2'); } catch(e) {}
 }
 
 function cachePutIfSmall(cache, key, value, ttl) {
@@ -1860,14 +1871,20 @@ function applyMiscTypes(loan, byLoan) {
 function getCachedRevisedDatesFor(ss, loanId) {
   const cache = CacheService.getScriptCache();
   let rows = null;
-  const hit = cache.get('revised_dates_raw');
+  // v2: the row gained a Recovery_Charge column. A pre-deploy cache entry would
+  // otherwise be served without it for the rest of its TTL.
+  const hit = cache.get('revised_dates_raw_v2');
   if (hit) { try { rows = JSON.parse(hit); } catch(e) { rows = null; } }
   if (!rows) {
     rows = [];
     try {
       const revSheet = ss.getSheetByName(REVISED_DATES_SHEET);
       if (revSheet && revSheet.getLastRow() > 1) {
-        rows = revSheet.getRange(2, 1, revSheet.getLastRow()-1, 6).getValues().map(r => {
+        // Clamp to the sheet's real width: a tab that predates Recovery_Charge
+        // may still have only 6 columns, and asking for a 7th would throw and
+        // silently hide every revised date for the loan.
+        const width = Math.min(7, revSheet.getMaxColumns());
+        rows = revSheet.getRange(2, 1, revSheet.getLastRow()-1, width).getValues().map(r => {
           const note = String(r[4]||'').trim();
           return [
             String(r[0]||'').trim(),
@@ -1877,14 +1894,16 @@ function getCachedRevisedDatesFor(ss, loanId) {
             parseFloat(r[3])||0,
             note,
             String(r[5]||''),
+            parseFloat(r[6])||0,
           ];
         });
       }
     } catch(e) { /* non-critical */ }
-    cachePutIfSmall(cache, 'revised_dates_raw', rows, DETAIL_CACHE_TTL);
+    cachePutIfSmall(cache, 'revised_dates_raw_v2', rows, DETAIL_CACHE_TTL);
   }
   return rows.filter(r => r[0] === String(loanId)).map(r => ({
     emiNum: r[1], revisedDate: r[2], amount: r[3], note: r[4], createdAt: r[5],
+    recoveryCharge: r[6] || 0,
   }));
 }
 
@@ -2166,6 +2185,15 @@ function ensureEmiCols_(sheet) {
   if (sheet.getMaxColumns() < 19) sheet.insertColumnsAfter(sheet.getMaxColumns(), 19 - sheet.getMaxColumns());
   if (!String(sheet.getRange(1, 18).getValue() || '').trim()) sheet.getRange(1, 18).setValue('Payment Mode');
   if (!String(sheet.getRange(1, 19).getValue() || '').trim()) sheet.getRange(1, 19).setValue('Notes');
+}
+
+// Revised_Dates grew a 7th column (Recovery_Charge) after the sheet already
+// existed in production. ensureSheet() only writes headers when it creates the
+// tab, so without this an existing sheet would receive a G value with no
+// header — which the Data-tab lookup formula could not key on.
+function ensureRevisedCols_(sheet) {
+  if (sheet.getMaxColumns() < 7) sheet.insertColumnsAfter(sheet.getMaxColumns(), 7 - sheet.getMaxColumns());
+  if (!String(sheet.getRange(1, 7).getValue() || '').trim()) sheet.getRange(1, 7).setValue('Recovery_Charge');
 }
 
 function deleteFromSheet(ss, sheetName, id) {

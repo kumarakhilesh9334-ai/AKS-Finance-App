@@ -113,6 +113,9 @@ function completeLogin(user) {
   S._booting = true;
   restoreState();   // hydrate from cache for instant first paint
   buildNav();
+  // Scope default is role-based (admin → All Detail), set once per login so a
+  // later choice in the dropdown survives tab switches.
+  applySearchScopeDefault();
   goTo(S.page || defPage());
   focusLandingSearch();
 

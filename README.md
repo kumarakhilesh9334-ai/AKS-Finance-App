@@ -72,7 +72,8 @@ saved yet; add another entry to the list when you have the URL.
 Saving the date needs the `markStockActivation` action, so after this change
 paste the latest `google-apps-script-separate-sheets.js` into Apps Script and
 create a **new deployment version**. Until that is done, **Add date** reports
-`Unknown action: markStockActivation`.
+`Unknown action: markStockActivation`. Edit the **existing** deployment rather
+than creating a new one, so the `/exec` URL in `js/state.js` does not change.
 
 ### Batch check
 
