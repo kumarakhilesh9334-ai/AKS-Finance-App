@@ -538,8 +538,8 @@ function _stockActivationUrl(brand) {
   return '';
 }
 
-// Clipboard writes have to start inside the click handler; window.open moves
-// focus to the new tab, so do both synchronously.
+// Clipboard writes have to start inside the click handler; following the link
+// moves focus to the new tab, so start the copy synchronously.
 function _stockCopyText(text) {
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -598,24 +598,40 @@ function _stockRowCtx(rowIndex) {
   };
 }
 
+function copyStockActivationImei(rowIndex) {
+  const c = _stockRowCtx(rowIndex);
+  if (!c) return;
+  if (!c.imei1) { showAlert('This row has no IMEI_1.', 'e'); return; }
+  if (_stockCopyText(c.imei1)) {
+    showAlert('IMEI ' + _esc(c.imei1) + ' copied. Paste it on the page, then solve the captcha.', 's');
+  } else {
+    showAlert('Could not copy automatically. IMEI: ' + _esc(c.imei1), 'w');
+  }
+}
+
+// Used by brands without a saved activation page. Known brands render a real
+// <a target="_blank"> in the row instead, so an installed PWA hands the URL to
+// Chrome as a new tab rather than opening a window on top of the app.
 function openStockActivationCheck(rowIndex) {
   const c = _stockRowCtx(rowIndex);
   if (!c) { showAlert('Stock row not found. Refresh the Stock tab and try again.', 'e'); return; }
   if (!c.imei1) { showAlert('This row has no IMEI_1.', 'e'); return; }
-
   const url = _stockActivationUrl(c.brand);
   const copied = _stockCopyText(c.imei1);
   if (!url) {
     showAlert('No activation page saved for ' + _esc(c.brand || 'this brand') + ' yet. IMEI '
-      + _esc(c.imei1) + ' was copied.', 'w');
+      + _esc(c.imei1) + (copied ? ' was copied.' : ' could not be copied.'), copied ? 'w' : 'e');
     return;
   }
-  // Open synchronously so the browser treats it as part of the click.
-  const win = window.open(url, '_blank');
-  if (win) { try { win.opener = null; } catch (e) {} }
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
   if (copied) {
-    showAlert('IMEI ' + _esc(c.imei1) + ' copied. Paste it on the ' + _esc(c.brand)
-      + ' page, then solve the captcha.', 's');
+    showAlert('IMEI ' + _esc(c.imei1) + ' copied. Paste it on the page, then solve the captcha.', 's');
   } else {
     showAlert('Could not copy automatically. IMEI: ' + _esc(c.imei1), 'w');
   }
@@ -842,9 +858,19 @@ function buildAvailableRows(data, headers) {
     if (!_stockCanEdit) return '';
     const idx = _stockRowMap.has(r) ? _stockRowMap.get(r) : -1;
     const hasDate = aIdx >= 0 && _stockHasActivationDate(r[aIdx]);
+    const brand = bIdx >= 0 && r[bIdx] != null ? String(r[bIdx]).trim() : '';
+    const url = _stockActivationUrl(brand);
+    // A real <a target="_blank"> is what makes an installed PWA hand the URL to
+    // Chrome as a NEW TAB. window.open() opens a separate window on top of the
+    // app instead, which breaks side-by-side use.
+    const check = url
+      ? '<a class="btn btn-sm" href="' + _esc(url) + '" target="_blank" rel="noopener noreferrer"'
+        + ' title="Copy IMEI_1 and open ' + _esc(brand) + '\'s activation page"'
+        + ' onclick="copyStockActivationImei(' + idx + ')">Check</a>'
+      : '<button class="btn btn-sm" title="Copy IMEI_1 and look up this brand\'s activation page"'
+        + ' onclick="openStockActivationCheck(' + idx + ')">Check</button>';
     return '<td class="st-action-cell"><div class="st-action-stack">'
-      + '<button class="btn btn-sm" title="Copy IMEI_1 and open this brand\'s activation page"'
-      + ' onclick="openStockActivationCheck(' + idx + ')">Check</button>'
+      + check
       + '<button class="btn btn-sm" title="' + (hasDate ? 'Edit' : 'Add') + ' the activation date"'
       + ' onclick="openStockActivationDateModal(' + idx + ')">' + (hasDate ? 'Edit date' : 'Add date') + '</button>'
       + '<button class="btn btn-sm" onclick="openStockSellModal(' + idx + ')">Sell</button>'
