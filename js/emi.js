@@ -385,8 +385,11 @@ function recoveryChargeOf(loanId, loan) {
   return Number((loan && loan.recoveryCharge) || 0);
 }
 
-// The small red pill shown just below the partial-payment indicator.
+// The small red pill shown just below the partial-payment indicator. A
+// closed/defaulted loan is finished, so its recovery charge is history only and
+// is not surfaced on the card.
 function recoveryChargeHtml(l) {
+  if (isClosedOrDefaulted(l)) return '';
   const amt = recoveryChargeOf(l.loanId, l);
   if (!(amt > 0)) return '';
   return `<div style="display:flex;justify-content:flex-end;margin-top:2px">
@@ -693,7 +696,9 @@ async function openCdDetail(loanId) {
   if (cdfEl) {
     const fine = l.latePaymentFine || 0;
     const extra = l.extraEmiReceived || 0;
-    const rec = recoveryChargeOf(l.loanId, l);
+    // Closed/defaulted loans keep the recovery charge in the sheet as history,
+    // but it is not part of the finished loan's summary any more.
+    const rec = isClosedOrDefaulted(l) ? 0 : recoveryChargeOf(l.loanId, l);
     cdfEl.innerHTML = (fine || extra || rec) ? `<div style="display:flex;gap:16px;flex-wrap:wrap">
       ${fine ? `<span style="color:#A32D2D;font-weight:500">Late fine: ${fmtAmt(fine)}</span>` : ''}
       ${extra ? `<span style="color:#0F6E56;font-weight:500">Extra EMI: ${fmtAmt(extra)}</span>` : ''}
@@ -1534,7 +1539,7 @@ async function selectOverviewLoan(loanId) {
     // money already taken off the customer read together.
     const recBannerEl = $('ov-recovery-banner');
     if (recBannerEl) {
-      const recAmt = recoveryChargeOf(loanId, loan);
+      const recAmt = isClosedOrDefaulted(loan) ? 0 : recoveryChargeOf(loanId, loan);
       recBannerEl.innerHTML = recAmt > 0 ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;margin:6px 0;background:#fdf0ed;border-radius:8px;border:0.5px solid #e8c8c8">
         <div style="font-size:13px;font-weight:500;color:#A32D2D">Recovery Charge</div>
         <div style="font-size:13px;font-weight:700;color:#A32D2D">${fmtAmt(recAmt)}</div>
@@ -1773,7 +1778,9 @@ async function selectOverviewLoan(loanId) {
         return custCodes.length ? lockCodeLines(custCodes) : '—';
       })()],
       ['Lock App Removed', Boolf(loan.lockRemoved)],
-      ['Recovery Charge', Mf(recoveryChargeOf(loan.loanId, loan))],
+      // Omitted for closed/defaulted loans — the charge is historical there and
+      // would read like money still outstanding.
+      ...(isClosedOrDefaulted(loan) ? [] : [['Recovery Charge', Mf(recoveryChargeOf(loan.loanId, loan))]]),
       ['Defaulted', Boolf(loan.isDefaulted)],
       ['Default Comment', Df(loan.defaultComment)],
       ['Drive Link', (() => {
