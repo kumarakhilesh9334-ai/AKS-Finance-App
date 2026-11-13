@@ -1,0 +1,25 @@
+# Line endings
+#
+# Every text file in this project is stored and served with LF. The app is a
+# static site: the bytes in the repo are the bytes the host sends to the tablet,
+# so keeping LF in the repo keeps production identical to the working copy.
+#
+# Git for Windows installs with core.autocrlf=true (system gitconfig). Without
+# these rules that setting rewrites every checked-out file to CRLF, which makes
+# GitHub Desktop warn about each one and turns a one-line edit into a
+# whole-file diff on the next clone. The rules below override autocrlf.
+* text=auto eol=lf
+
+# Windows batch files must stay CRLF. cmd.exe can mis-parse LF-only files that
+# contain labels or multi-line blocks.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets: never normalise these.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary

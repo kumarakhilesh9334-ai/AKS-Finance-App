@@ -20,7 +20,9 @@ aks-financing/
 │   ├── activation.js           ← "Find recent sales" UI (Stock tab)
 │   └── export.js               ← Google Sheets export logic
 ├── activation-check/           ← Local Playwright runner behind the Stock button
+├── Serve App on LAN.bat        ← Serve a no-cache copy to the tablet over Wi-Fi
 ├── Start Activation Checker.bat
+├── .gitattributes              ← Keeps repo files LF, batch files CRLF
 └── google-apps-script-separate-sheets.js  ← Paste into Apps Script (see below)
 ```
 
@@ -31,6 +33,137 @@ Just open `index.html` in a browser — no build step, no server needed.
 Demo credentials:
 - **Admin:** AKS / 0000
 - **Agent:** agent1 / 1111
+
+## Testing on the tablet without deploying
+
+The tablet only sees whatever is at the URL it was installed from, so a change
+has to be served from *some* address it can reach. Git is just one way to get
+files onto an address; none of the options below touch the repo.
+
+### 1. LAN copy from this PC — fastest, no internet needed
+
+Double-click **`Serve App on LAN.bat`**. It picks a free port (8080 is often
+taken), copies the app files to a temp folder (not the whole project —
+`activation-check/reports` and `activation-check/.profile` stay private), and
+prints the exact URL, e.g. `http://192.168.1.6:8081/`. Open that on the tablet,
+same Wi-Fi.
+
+What this does and does not test:
+
+- Good for: layout, the version pill, the version dialog, **Loaded files**, and
+  whether the `?v=` bumps actually landed.
+- Not representative of the installed app: a plain `http://` address is not a
+  secure context, so **no service worker** registers and the tablet will not
+  offer to install it. The version dialog reports the service worker as
+  *unavailable (http, not a secure context)* — that is expected here.
+- Tapping **Check** in this mode opens an ordinary Chrome tab (the plain link
+  path), so it does *not* prove that the installed app will hand off to Chrome.
+
+Re-run the script after editing files; it re-copies every time. Close the
+window to stop sharing. If Windows asks about the firewall, allow **Private
+networks** only.
+
+### 2. HTTPS tunnel — tests the real installed-app behaviour
+
+An installed PWA needs `https://` (or `localhost`). A temporary tunnel gives you
+that without any hosting account:
+
+```
+python -m http.server 8080 --bind 127.0.0.1 --directory "%TEMP%\aks-lan"
+cloudflared tunnel --url http://localhost:8080
+```
+
+(Download the standalone `cloudflared-windows-amd64.exe` from the Cloudflare
+GitHub releases page — a single file, no installer. `Serve App on LAN.bat` is
+the quick way to produce the `aks-lan` folder.)
+
+Open the printed `https://….trycloudflare.com` URL on the tablet and use
+**Install app** / *Add to Home screen*. That is a genuine WebAPK, so the Check
+button exercises the real `intent://` path. Two caveats: the URL changes every
+time cloudflared restarts, and the install is a separate origin from the
+deployed app (new icon, fresh `localStorage`, so you have to log in again).
+
+### 3. `adb reverse` over USB — HTTPS-free secure context
+
+With Android platform-tools installed (a zip, no admin rights needed) and USB
+debugging on:
+
+```
+adb reverse tcp:8080 tcp:8080
+```
+
+Then open `http://localhost:8080/` on the tablet. `localhost` counts as a secure
+context, so the service worker registers and Chrome will install it — the
+installed-app Check behaviour can be tested with no hosting at all.
+
+### 4. Direct upload, if a real deploy is acceptable
+
+If the current host is Cloudflare Pages, its **direct upload** flow (dashboard →
+*Create application* → *Pages* → *Upload assets*) accepts a folder and needs no
+git. Drag-and-drop hosts such as Netlify Drop work the same way. This produces a
+stable HTTPS URL, but it is still a deploy to a new origin, so the app must be
+installed again there.
+
+## Line endings and git
+
+GitHub Desktop may warn:
+
+> This file uses 'LF' line endings, but Git is configured to convert them to
+> 'CRLF' the next time the file is checked out.
+
+It is a warning, not an error — the commit still goes through, and the bytes
+stored in the repo stay LF. It appears because Git for Windows installs with
+`core.autocrlf=true` (in `C:/Program Files/Git/etc/gitconfig`), which rewrites
+checked-out files to CRLF. CSS, JS and HTML do not care which one they get, so
+the warning is cosmetic; the deployed site is unaffected because the stored
+blobs are already LF.
+
+`.gitattributes` in the project root removes the warning for good:
+
+```
+* text=auto eol=lf
+*.bat text eol=crlf
+*.png binary  /  *.jpg binary  …
+```
+
+So text files are stored *and* checked out as LF, while `.bat` files stay CRLF
+(cmd.exe can mis-parse LF-only batch files that contain labels or multi-line
+blocks). To apply it to an existing clone, once, from the repo folder:
+
+```
+git add .gitattributes
+git add --renormalize .
+git commit -m "Normalize line endings"
+```
+
+If every file shows as modified after `--renormalize`, that is expected — it is
+the one-off commit that records the normalised state. After that, edits show up
+as normal line diffs.
+
+Alternatives if you would rather not add the file: run
+`git config core.autocrlf false` inside that repo, or tick *Don't show this
+again* in the GitHub Desktop warning.
+
+## App version
+
+The header shows a small pill such as **v1.0.0** next to **Sign out**. Tap it for
+*Version info*: app version, release date, the files this device actually loaded,
+service-worker state, and the exact link mode used by the Stock **Check** button.
+**Copy details** puts that block on the clipboard for support.
+
+There are three separate numbers, and only the first one is the app version:
+
+| Where | Example | Meaning | How it changes |
+|---|---|---|---|
+| `APP_VERSION` in `js/version.js` | `1.1.0` | The version the header shows | Bumped by hand for a release |
+| `?v=N` on `<script>` / `<link>` tags | `js/stock.js?v=24` | Browser cache key for one file | Incremented whenever that file changes |
+| `CACHE_NAME` in `sw.js` | `aks-finance-v17` | Service-worker cache bucket | Incremented on each deploy that must discard old cached files |
+
+To release a change: edit the file, bump its `?v=`, bump `CACHE_NAME`, and bump
+`APP_VERSION` if the user-visible behaviour changed. The version dialog reads the
+`?v=` values straight from the DOM, so it always reports what the device really
+loaded — if the header says v1.0.0 but the dialog lists an old `stock.js`, that
+device is still on a cached copy and needs a full close and reopen.
 
 ## Activation checker (Stock tab)
 
@@ -66,6 +199,21 @@ the page as a new tab in the Chrome window that is already on the other side of
 the split screen. `S.browser_fallback_url` carries the plain page in case Chrome
 is missing or the link cannot be resolved. In a normal browser tab, on desktop,
 and on iOS the plain `target="_blank"` link is used instead.
+
+Android tablets differ in what they permit, so the **version dialog** (tap the
+version pill next to **Sign out**) has a **Check link mode** selector:
+
+| Mode | Link |
+|---|---|
+| Auto | `intent://` inside the installed app, normal link everywhere else |
+| Normal link | always a plain `<a target="_blank">` |
+| `intent://` | always hand off to the Chrome app |
+| `intent://` pinned | same, with `component=…Chrome.Main` to skip the chooser |
+| `android-app://` | alternate Chrome hand-off scheme |
+
+The choice is saved in `localStorage` (`aks_check_mode`) and applies on the next
+Stock render. Use it to find the variant that opens a real tab on a device,
+then set `auto` to that variant in `_stockActivationHref()`.
 
 Activation pages are configured in `_STOCK_ACTIVATION_SITES` in `js/stock.js`:
 

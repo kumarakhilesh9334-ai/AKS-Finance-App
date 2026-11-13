@@ -542,13 +542,52 @@ function _stockActivationUrl(brand) {
 // case where a normal link cannot reach Chrome: Android always opens
 // out-of-scope navigations (including target="_blank") in an in-app browser
 // task, which is the window that appears on top of the app.
+function _stockIsAndroid() {
+  return /Android/i.test(navigator.userAgent || '');
+}
+
 function _stockIsAndroidPwa() {
-  if (!/Android/i.test(navigator.userAgent || '')) return false;
+  if (!_stockIsAndroid()) return false;
   try {
     if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true;
     if (window.matchMedia && window.matchMedia('(display-mode: minimal-ui)').matches) return true;
   } catch (e) { /* older WebView */ }
   return false;
+}
+
+// How the Check link should open the page. 'auto' is what ships; the other
+// modes exist because Android tablets differ in what they allow, and they let
+// the exact variant be tested from the version dialog without a redeploy.
+//   auto              intent:// on an installed Android PWA, plain link elsewhere
+//   plain             always a normal <a target="_blank">
+//   intent            always intent:// -> com.android.chrome
+//   intent-component  intent:// pinned to Chrome's main activity
+//   android-app       android-app://com.android.chrome/... hand-off
+const _STOCK_CHECK_MODES = ['auto', 'plain', 'intent', 'intent-component', 'android-app'];
+const _STOCK_CHECK_MODE_LABELS = {
+  'auto':             'Auto (recommended)',
+  'plain':            'Normal link (new tab / in-app browser)',
+  'intent':           'intent:// -> Chrome app',
+  'intent-component': 'intent:// pinned to Chrome activity',
+  'android-app':      'android-app:// hand-off to Chrome',
+};
+
+function _stockCheckMode() {
+  try {
+    const m = localStorage.getItem('aks_check_mode');
+    if (_STOCK_CHECK_MODES.indexOf(m) !== -1) return m;
+  } catch (e) { /* ignore */ }
+  return 'auto';
+}
+
+function setStockCheckMode(mode) {
+  if (_STOCK_CHECK_MODES.indexOf(mode) === -1) mode = 'auto';
+  try { localStorage.setItem('aks_check_mode', mode); } catch (e) { /* ignore */ }
+  if (typeof renderStock === 'function' && _stock && _stock.headers && _stock.headers.length) {
+    renderStock();
+  }
+  if (typeof _verRefreshModeRow === 'function') _verRefreshModeRow();
+  if (typeof showAlert === 'function') showAlert('Check link: ' + (_STOCK_CHECK_MODE_LABELS[mode] || mode), 's');
 }
 
 // Android PWA -> Chrome tab.
@@ -561,19 +600,30 @@ function _stockIsAndroidPwa() {
 // <a target="_blank"> already opens a new tab there.
 function _stockActivationHref(url) {
   if (!url) return '';
-  if (!_stockIsAndroidPwa()) return url;
+  if (!_stockIsAndroid()) return url;
+  const mode = _stockCheckMode();
+  if (mode === 'plain') return url;
+  if (mode === 'auto' && !_stockIsAndroidPwa()) return url;
   // Parse by hand: the app only ever stores http(s) URLs, and this avoids
   // depending on URL() in older WebViews.
   const m = /^(https?):\/\/([^/?#]+)([^#]*)(#.*)?$/i.exec(url);
   if (!m) return url;
   const scheme = m[1].toLowerCase();
   const data = m[2] + (m[3] || '/') + (m[4] || '');
+
+  if (mode === 'android-app') {
+    return 'android-app://com.android.chrome/' + scheme + '/' + data;
+  }
+  const component = mode === 'intent-component'
+    ? ';component=com.android.chrome/com.google.android.apps.chrome.Main'
+    : '';
   // Keep path, query and hash. Android's intent parser splits on the LAST
   // '#', so a page hash such as mi.com's '#/en/tab/imei' survives.
   return 'intent://' + data
     + '#Intent;scheme=' + scheme
     + ';action=android.intent.action.VIEW'
     + ';package=com.android.chrome'
+    + component
     + ';S.browser_fallback_url=' + encodeURIComponent(url)
     + ';end';
 }

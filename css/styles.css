@@ -47,6 +47,42 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 .header-title{font-size:15px;font-weight:500;color:#534AB7}
 .header-right{display:flex;align-items:center;gap:8px;font-size:12px;color:#666}
 
+/* App version chip — sits next to Sign out. Tapping it opens the build details
+   dialog: the app version plus the cache-busted file versions actually loaded
+   on this device. */
+.app-version{
+  font-size:11px;font-weight:600;color:#534AB7;background:#EEEDFB;
+  border:0.5px solid #C9C5F0;padding:2px 8px;border-radius:999px;
+  cursor:pointer;font-variant-numeric:tabular-nums;user-select:none;white-space:nowrap;
+}
+.app-version:hover{background:#E3E1F8}
+
+.ver-mode{
+  border:0.5px solid #E2E0F2;background:#FAFAFE;border-radius:10px;
+  padding:10px 12px;margin-bottom:12px;
+}
+.ver-mode-hd{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.ver-mode-title{font-size:12px;font-weight:600;color:#534AB7}
+.ver-mode-now{font-size:10px;color:#7a7a8c;font-family:ui-monospace,Consolas,monospace}
+.ver-mode select{
+  width:100%;padding:6px 8px;border:0.5px solid #cfcfe0;border-radius:8px;
+  font-size:12px;font-family:inherit;background:#fff;color:#222;
+}
+.ver-mode-note{font-size:11px;color:#777;line-height:1.4;margin-top:7px}
+.ver-mode-note code{font-size:10.5px;background:#EFEFF8;padding:0 3px;border-radius:3px}
+.ver-mode .btn{margin-top:8px}
+
+.ver-list{display:flex;flex-direction:column;gap:6px}
+.ver-row{display:flex;gap:10px;font-size:12px;line-height:1.35;border-bottom:0.5px solid #f0f0f0;padding-bottom:6px}
+.ver-row:last-child{border-bottom:none;padding-bottom:0}
+.ver-k{flex:0 0 112px;color:#888}
+.ver-v{flex:1;color:#222;word-break:break-word}
+@media (max-width:600px){
+  .app-version{font-size:10px;padding:2px 6px}
+  .ver-k{flex-basis:94px;font-size:11px}
+  .ver-v{font-size:11px}
+}
+
 .nav{background:#fff;border-bottom:0.5px solid #ddd;display:flex;overflow-x:auto;position:sticky;top:41px;z-index:9}
 /* "Data as of" strip — how old the numbers on screen are (rendered by snapshot.js) */
 .data-asof{background:#F4F3FB;border-bottom:0.5px solid #E2E0F2;padding:5px 1.5rem;font-size:11.5px;color:#5A5A6E;user-select:none}
