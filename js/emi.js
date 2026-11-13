@@ -880,14 +880,14 @@ function isDefaultedOrOverdue(loan) {
   return due < today;
 }
 
-// Column R is free text ("Guarantor / Alternate No / Comments"). On an overdue
-// or defaulted card it becomes the card's last row, but only when it has text.
-// One line keeps the lists compact; the full value stays in the loan detail and
-// in the title tooltip. A hairline above it separates the row from the card's
-// main details. Plain text on purpose — tapping anywhere still opens the loan,
-// the same as the rest of the card.
+// Column R is free text ("Guarantor / Alternate No / Comments"). Every card
+// shows it as its last row when it has text, so the same note is visible on an
+// active card as on an overdue or defaulted one. One line keeps the lists
+// compact; the full value stays in the loan detail and in the title tooltip. A
+// hairline above it separates the row from the card's main details. Plain text
+// on purpose — tapping anywhere still opens the loan, the same as the rest of
+// the card.
 function commentRowHtml(loan, colour, maxWidth) {
-  if (!isDefaultedOrOverdue(loan)) return '';
   const text = String((loan && loan.guarantor) || '').replace(/\s+/g, ' ').trim();
   if (!text) return '';
   const safe = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
@@ -1778,9 +1778,6 @@ async function selectOverviewLoan(loanId) {
         return custCodes.length ? lockCodeLines(custCodes) : '—';
       })()],
       ['Lock App Removed', Boolf(loan.lockRemoved)],
-      // Omitted for closed/defaulted loans — the charge is historical there and
-      // would read like money still outstanding.
-      ...(isClosedOrDefaulted(loan) ? [] : [['Recovery Charge', Mf(recoveryChargeOf(loan.loanId, loan))]]),
       ['Defaulted', Boolf(loan.isDefaulted)],
       ['Default Comment', Df(loan.defaultComment)],
       ['Drive Link', (() => {
@@ -1798,6 +1795,9 @@ async function selectOverviewLoan(loanId) {
     const loanRows = [
       ['Bill Date', Dtf(loan.billDate)],
       ['Loan ID', Df(loan.loanId)],
+      // Shown for every loan, not just Mobile Jabt ones — ₹0 when none was
+      // recorded, so the row is always present in the Loan Detail section.
+      ['Recovery Charge', Mf(recoveryChargeOf(loan.loanId, loan))],
       ['Mobile Model', Df(loan.model)],
       ['Device Type', Df(loan.deviceType)],
       ['Mobile Amount', Mf(loan.mobileAmount)],
