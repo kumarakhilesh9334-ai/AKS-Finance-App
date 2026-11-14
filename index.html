@@ -718,7 +718,7 @@
                placeholder="com.sec.android.app.sbrowser">
         <datalist id="ver-pkg-list"></datalist>
         <label class="ver-pkg-label ver-act-label" for="ver-act-input">
-          Activity (optional — leave empty unless Android still asks)
+          Activity (clear this to let Android ask which app)
         </label>
         <input id="ver-act-input" class="ver-pkg-input" spellcheck="false"
                autocomplete="off" onchange="setStockCheckActivity(this.value)"
@@ -728,8 +728,8 @@
         In the installed app, Chrome will not hand a link back to Chrome — it opens
         its own browser view with an X instead, which covers the app. <b>Auto</b>
         therefore only copies the IMEI. <b>other-browser</b> launches a different
-        browser app instead. Filling in <b>Activity</b> pins the launch to a single
-        activity, so Android cannot show an "open with" chooser.
+        browser app instead. The intent is pinned to one activity, so Android
+        cannot show an "open with" chooser; clear the activity to unpin it.
       </div>
       <a id="ver-test-link" class="btn btn-sm" target="_blank" rel="noopener noreferrer">Test link (Nothing page)</a>
     </div>
@@ -769,7 +769,7 @@
 <script src="js/approvals.js?v=20"></script>
 <script src="js/my-subs.js?v=4"></script>
 <script src="js/emi-messages.js?v=19"></script>
-<script src="js/stock.js?v=26"></script>
+<script src="js/stock.js?v=27"></script>
 <script src="js/activation.js?v=3"></script>
 <script src="js/users.js?v=7"></script>
 

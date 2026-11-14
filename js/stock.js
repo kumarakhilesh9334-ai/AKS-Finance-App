@@ -609,8 +609,10 @@ const _STOCK_BROWSER_PKGS = [
 ];
 const _STOCK_DEFAULT_BROWSER_PKG = 'com.sec.android.app.sbrowser';
 
-// Only used as the placeholder in the dialog's activity field: if a chooser
-// still appears, typing this pins the launch to one activity instead.
+// Only used as the default in the dialog's activity field: an explicit
+// component pins the launch to one activity, which is the only way to stop
+// Android showing its own "open with" chooser. Clearing the field goes back to
+// package= (and, on a device with no default browser, the chooser).
 const _STOCK_ACTIVITY_HINTS = {
   'com.sec.android.app.sbrowser': 'com.sec.android.app.sbrowser.BrowserActivity',
   'com.android.chrome': 'com.google.android.apps.chrome.Main',
@@ -639,15 +641,18 @@ function _stockCheckPkg() {
   return _STOCK_DEFAULT_BROWSER_PKG;
 }
 
-// '' means "do not pin": the intent only names the package, which is what the
-// app ships. A value here pins the launch to one activity and takes the chooser
-// out of the picture entirely - useful if Android still asks.
+// The activity the Check link is pinned to. A stored '' means "do not pin";
+// with nothing stored the known activity for the chosen package is used, so
+// the trip through Android's chooser does not happen by default.
 function _stockCheckActivity() {
-  try {
-    const a = String(localStorage.getItem('aks_check_activity') || '').trim();
-    if (/^[A-Za-z.][A-Za-z0-9_.]*$/.test(a)) return a;
-  } catch (e) { /* ignore */ }
-  return '';
+  let raw = null;
+  try { raw = localStorage.getItem('aks_check_activity'); } catch (e) { /* ignore */ }
+  if (raw !== null) {
+    const a = String(raw).trim();
+    if (!a) return '';                                   // deliberately unpinned
+    if (/^[A-Za-z.][A-Za-z0-9_.]*$/.test(a)) return a;    // else fall through
+  }
+  return _stockActivityHint(_stockCheckPkg());
 }
 
 function setStockCheckActivity(activity) {
@@ -657,8 +662,9 @@ function setStockCheckActivity(activity) {
     return;
   }
   try {
-    if (a) localStorage.setItem('aks_check_activity', a);
-    else localStorage.removeItem('aks_check_activity');
+    // Store '' rather than removing the key: an empty value is the explicit
+    // "no pin", while a missing key means "use the default for this package".
+    localStorage.setItem('aks_check_activity', a);
   } catch (e) { /* ignore */ }
   if (typeof renderStock === 'function' && _stock && _stock.headers && _stock.headers.length) {
     renderStock();

@@ -173,7 +173,7 @@ row in *Version info* are the quickest way to prove which build a device has.
 
 ## App version
 
-The header shows a small pill such as **v1.2.2** next to **Sign out**. Tap it for
+The header shows a small pill such as **v1.2.3** next to **Sign out**. Tap it for
 *Version info*: app version, release date, the files this device actually loaded,
 service-worker state, and the exact link mode used by the Stock **Check** button.
 **Copy details** puts that block on the clipboard for support.
@@ -182,14 +182,14 @@ There are three separate numbers, and only the first one is the app version:
 
 | Where | Example | Meaning | How it changes |
 |---|---|---|---|
-| `APP_VERSION` in `js/version.js` | `1.2.2` | The version the header shows | Bumped by hand for a release |
-| `?v=N` on `<script>` / `<link>` tags | `js/stock.js?v=26` | Browser cache key for one file | Incremented whenever that file changes |
-| `CACHE_NAME` in `sw.js` | `aks-finance-v21` | Service-worker cache bucket | Incremented on each deploy that must discard old cached files |
+| `APP_VERSION` in `js/version.js` | `1.2.3` | The version the header shows | Bumped by hand for a release |
+| `?v=N` on `<script>` / `<link>` tags | `js/stock.js?v=27` | Browser cache key for one file | Incremented whenever that file changes |
+| `CACHE_NAME` in `sw.js` | `aks-finance-v22` | Service-worker cache bucket | Incremented on each deploy that must discard old cached files |
 
 To release a change: edit the file, bump its `?v=`, bump `CACHE_NAME`, and bump
 `APP_VERSION` if the user-visible behaviour changed. The version dialog reads the
 `?v=` values straight from the DOM, so it always reports what the device really
-loaded - if the header says v1.2.2 but the dialog lists an old `stock.js`, that
+loaded - if the header says v1.2.3 but the dialog lists an old `stock.js`, that
 device is still on a cached copy and needs a full close and reopen.
 
 ## Activation checker (Stock tab)
@@ -247,29 +247,42 @@ are known not to escape the app.
 
 ##### Why the hand-off sometimes shows an "open with" chooser
 
-Chrome only launches an external activity that is **BROWSABLE**. An intent
-without `category=android.intent.category.BROWSABLE` is refused, and Chrome then
-falls back to a plain navigation — which Android resolves against every browser
-on the device, producing the chooser that lists Chrome and Samsung Internet side
-by side. The app has always sent this category since v1.2.2; if you see the
-chooser, check the *Check link mode* row in **Version info** and make sure the
-build is at least v1.2.2.
+Because **no default browser is set on the tablet**. Chrome hands the `intent://`
+to Android, and an `https` hand-off with no `component=` is resolved by the
+system: with no default browser, every browser on the device is a candidate, so
+Android asks. The dialog lists Chrome and Samsung Internet side by side, which
+is only possible when nothing is configured as *the* browser.
 
-If a chooser still appears, pin the exact activity. The **Activity** field under
-*Browser app to open* is empty by default and its placeholder shows the known
-value for the selected package, for example:
+Neither the `BROWSABLE` category nor the `package=` value prevents this. Both
+were tried, and v1.2.2 with the category added changed nothing on the device.
+Chrome discards the package constraint when it hands a plain `https` URL back to
+the system, so the constraint has to be spelled out as a component instead.
 
-| Browser | Activity to type |
-|---|---|
-| Samsung Internet | `com.sec.android.app.sbrowser.BrowserActivity` |
-| Chrome | `com.google.android.apps.chrome.Main` |
-| Firefox | `org.mozilla.firefox.App` |
-| Microsoft Edge | `com.microsoft.ruby.Main` |
+There are two independent fixes, and either one is enough:
 
-A pinned activity becomes `component=<package>/<activity>`, which resolves to
-exactly one activity, so a chooser is impossible. Leave the field empty to go
-back to `package=` only. Press **Test link** after changing either field — no
-Stock row and no redeploy needed.
+1. **Set a default browser** — Settings → Apps → Choose default apps → Browser
+   app → **Samsung Internet**. Android then has an answer without asking, and the
+   chooser stops appearing for every app, not just this one. This needs no code
+   change and no deploy. Tapping **Always** once in the chooser has the same
+   effect.
+2. **Pin the activity** — from v1.2.3 the Check link is pinned automatically. The
+   **Activity** field under *Browser app to open* is prefilled with the known
+   activity for the selected package:
+
+   | Browser | Activity |
+   |---|---|
+   | Samsung Internet | `com.sec.android.app.sbrowser.BrowserActivity` |
+   | Chrome | `com.google.android.apps.chrome.Main` |
+   | Firefox | `org.mozilla.firefox.App` |
+   | Microsoft Edge | `com.microsoft.ruby.Main` |
+
+   A pinned activity becomes `component=<package>/<activity>`, which resolves to
+   exactly one activity, so a chooser is impossible. Use **Test link** to apply a
+   change immediately — no Stock row and no redeploy needed.
+
+Clearing the Activity field is an explicit *unpin*: the link goes back to
+`package=` only, and the chooser can return. An empty field is stored as an empty
+value, so it is not confused with "never touched" (which means "use the pin").
 
 ##### "code: 401, message: unauthorized" after the hand-off
 
@@ -281,12 +294,14 @@ sends. Two things are worth ruling out before changing anything:
    pages refuse a deep link without one. Open the brand's page once in that
    browser normally (address bar, not from the app), solve any captcha or
    cookie prompt, then tap **Check** again. If it now works, the hand-off is
-   fine and only the first visit needed a session.
+   fine and only the first visit needed a session. This is the most likely
+   cause when Samsung Internet was reached through the chooser, because that
+   visit was its first ever to the site.
 2. **The browser is blocked by the site.** If the same URL typed directly into
    Samsung Internet also returns 401, the site is rejecting that browser
-   (usually its user agent), and no link format can help. Try the *Activity*
-   field with Chrome, or switch the package to `com.microsoft.emmx` (Edge), and
-   see whether the 401 follows the browser or the URL.
+   (usually its user agent), and no link format can help. Switch the package to
+   `org.mozilla.firefox` or `com.microsoft.emmx` (Edge) and press **Test link**,
+   then see whether the 401 follows the browser or disappears.
 
 The app sends the brand URL unchanged, with no extra headers, so the only
 variables are which browser opens it and what state that browser is in.
@@ -298,16 +313,16 @@ selector:
 |---|---|
 | Auto | copy-only inside the installed app, normal link everywhere else |
 | Copy IMEI only | never navigates; just copies the IMEI |
-| Different browser app | `intent://` aimed at the package in the field below it; optional activity pin |
+| Different browser app | `intent://` aimed at the package in the field below it, pinned to that browser's known activity |
 | Normal link | plain `<a target="_blank">` |
 | `intent://` / pinned / `android-app://` | Chrome hand-off attempts; all produce a Custom Tab on the tested tablet |
 
-Both choices are saved per device in `localStorage` (`aks_check_mode`,
-`aks_check_pkg` and, if it is filled in, `aks_check_activity`) and take effect on
-the next Stock render. The browser field accepts any package name; the
-suggestions are Samsung Internet (`com.sec.android.app.sbrowser`, the default),
-Firefox (`org.mozilla.firefox`), Edge (`com.microsoft.emmx`), Opera, Brave and
-DuckDuckGo.
+Both choices are saved per device in `localStorage` (`aks_check_mode` and
+`aks_check_pkg`) and take effect on the next Stock render. The activity pin is
+stored too (`aks_check_activity`) once it has been edited. The browser field
+accepts any package name; the suggestions are Samsung Internet
+(`com.sec.android.app.sbrowser`, the default), Firefox (`org.mozilla.firefox`),
+Edge (`com.microsoft.emmx`), Opera, Brave and DuckDuckGo.
 
 Activation pages are configured in `_STOCK_ACTIVATION_SITES` in `js/stock.js`:
 

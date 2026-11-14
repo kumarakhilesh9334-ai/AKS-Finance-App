@@ -10,7 +10,7 @@
 // They change more often than APP_VERSION and are listed in the dialog below so
 // a device can prove which files it actually loaded.
 
-const APP_VERSION = '1.2.2';
+const APP_VERSION = '1.2.3';
 const APP_RELEASED = '14-Nov-2026';
 
 function initAppVersion() {
