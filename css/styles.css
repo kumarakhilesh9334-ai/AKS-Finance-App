@@ -72,6 +72,13 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 .ver-mode-note code{font-size:10.5px;background:#EFEFF8;padding:0 3px;border-radius:3px}
 .ver-mode .btn{margin-top:8px}
 
+.ver-pkg-row{margin-top:8px}
+.ver-pkg-label{display:block;font-size:11px;color:#777;margin-bottom:4px}
+.ver-pkg-input{
+  width:100%;padding:6px 8px;border:0.5px solid #cfcfe0;border-radius:8px;
+  font-size:12px;font-family:ui-monospace,Consolas,monospace;background:#fff;color:#222;
+}
+
 .ver-list{display:flex;flex-direction:column;gap:6px}
 .ver-row{display:flex;gap:10px;font-size:12px;line-height:1.35;border-bottom:0.5px solid #f0f0f0;padding-bottom:6px}
 .ver-row:last-child{border-bottom:none;padding-bottom:0}

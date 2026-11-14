@@ -555,22 +555,51 @@ function _stockIsAndroidPwa() {
   return false;
 }
 
-// How the Check link should open the page. 'auto' is what ships; the other
-// modes exist because Android tablets differ in what they allow, and they let
-// the exact variant be tested from the version dialog without a redeploy.
-//   auto              intent:// on an installed Android PWA, plain link elsewhere
-//   plain             always a normal <a target="_blank">
-//   intent            always intent:// -> com.android.chrome
+// How the Check button should reach the brand page. 'auto' is what ships; the
+// other modes let each variant be tested from the version dialog without a
+// redeploy, because Android decides what an installed app may do and the answer
+// is not the same on every device.
+//
+//   auto            copy-only inside an installed Android PWA, plain link elsewhere
+//   copy            never navigate: copy the IMEI, leave the app where it is
+//   other-browser   intent:// to a DIFFERENT browser app (Samsung Internet, ...)
+//   plain           always a normal <a target="_blank">
+//   intent          intent:// -> com.android.chrome
 //   intent-component  intent:// pinned to Chrome's main activity
-//   android-app       android-app://com.android.chrome/... hand-off
-const _STOCK_CHECK_MODES = ['auto', 'plain', 'intent', 'intent-component', 'android-app'];
+//   android-app     android-app://com.android.chrome/... hand-off
+//
+// Why the three Chrome modes are not the default: an installed PWA is itself
+// hosted by Chrome, and Chrome will not start a second Chrome task for a link
+// that came from inside itself. It renders the page in a Custom Tab instead -
+// the view with a close X and no tab strip that covers the whole app. Verified
+// on the Android tablet: all three produce that same Custom Tab. Targeting a
+// different browser package is the one hand-off Chrome does allow, because it
+// is not handing back to itself.
+const _STOCK_CHECK_MODES = [
+  'auto', 'copy', 'other-browser',
+  'plain', 'intent', 'intent-component', 'android-app',
+];
 const _STOCK_CHECK_MODE_LABELS = {
-  'auto':             'Auto (recommended)',
+  'auto':             'Auto (copy-only in the installed app)',
+  'copy':             'Copy IMEI only - opens nothing',
+  'other-browser':    'Open in a different browser app',
   'plain':            'Normal link (new tab / in-app browser)',
   'intent':           'intent:// -> Chrome app',
   'intent-component': 'intent:// pinned to Chrome activity',
   'android-app':      'android-app:// hand-off to Chrome',
 };
+
+// Browser apps that can receive the hand-off. Samsung Internet ships on Samsung
+// tablets; any package name can be typed in, so this is only a convenience list.
+const _STOCK_BROWSER_PKGS = [
+  ['Samsung Internet', 'com.sec.android.app.sbrowser'],
+  ['Firefox',          'org.mozilla.firefox'],
+  ['Microsoft Edge',   'com.microsoft.emmx'],
+  ['Opera',            'com.opera.browser'],
+  ['Brave',            'com.brave.browser'],
+  ['DuckDuckGo',       'com.duckduckgo.mobile.android'],
+];
+const _STOCK_DEFAULT_BROWSER_PKG = 'com.sec.android.app.sbrowser';
 
 function _stockCheckMode() {
   try {
@@ -578,6 +607,32 @@ function _stockCheckMode() {
     if (_STOCK_CHECK_MODES.indexOf(m) !== -1) return m;
   } catch (e) { /* ignore */ }
   return 'auto';
+}
+
+function _stockCheckPkg() {
+  try {
+    const p = String(localStorage.getItem('aks_check_pkg') || '').trim();
+    // Reject anything that would break the intent URI rather than guess.
+    if (/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/.test(p)) return p;
+  } catch (e) { /* ignore */ }
+  return _STOCK_DEFAULT_BROWSER_PKG;
+}
+
+function setStockCheckPkg(pkg) {
+  const p = String(pkg || '').trim();
+  if (p && !/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/.test(p)) {
+    if (typeof showAlert === 'function') showAlert('That does not look like a package name.', 'e');
+    return;
+  }
+  try {
+    if (p) localStorage.setItem('aks_check_pkg', p);
+    else localStorage.removeItem('aks_check_pkg');
+  } catch (e) { /* ignore */ }
+  if (typeof renderStock === 'function' && _stock && _stock.headers && _stock.headers.length) {
+    renderStock();
+  }
+  if (typeof _verRefreshModeRow === 'function') _verRefreshModeRow();
+  if (typeof showAlert === 'function') showAlert('Check opens: ' + (p || _STOCK_DEFAULT_BROWSER_PKG), 's');
 }
 
 function setStockCheckMode(mode) {
@@ -590,20 +645,18 @@ function setStockCheckMode(mode) {
   if (typeof showAlert === 'function') showAlert('Check link: ' + (_STOCK_CHECK_MODE_LABELS[mode] || mode), 's');
 }
 
-// Android PWA -> Chrome tab.
-// An intent:// URL makes Android launch the Chrome app itself (package
-// com.android.chrome) instead of the PWA's in-app browser. Chrome then treats
-// it as an external link and adds a tab to the Chrome window that is already
-// on the other half of the split screen. If Chrome is missing, Chrome falls
-// back to S.browser_fallback_url, which is the plain page.
-// Everything else (desktop, browser tab, iOS) keeps the plain URL: a real
-// <a target="_blank"> already opens a new tab there.
+// Returns the href for a Check link, or '' when Check must not navigate at all
+// (copy-only mode). Desktop, iOS and an ordinary browser tab always get the
+// plain URL: there, target="_blank" already means a real new tab.
 function _stockActivationHref(url) {
   if (!url) return '';
-  if (!_stockIsAndroid()) return url;
   const mode = _stockCheckMode();
+  if (mode === 'copy') return '';
+  if (!_stockIsAndroid()) return url;
+  // auto used to point at Chrome. That cannot work from the installed app, so
+  // auto now does the one thing that always keeps the app usable: copy only.
+  if (mode === 'auto') return _stockIsAndroidPwa() ? '' : url;
   if (mode === 'plain') return url;
-  if (mode === 'auto' && !_stockIsAndroidPwa()) return url;
   // Parse by hand: the app only ever stores http(s) URLs, and this avoids
   // depending on URL() in older WebViews.
   const m = /^(https?):\/\/([^/?#]+)([^#]*)(#.*)?$/i.exec(url);
@@ -614,6 +667,7 @@ function _stockActivationHref(url) {
   if (mode === 'android-app') {
     return 'android-app://com.android.chrome/' + scheme + '/' + data;
   }
+  const pkg = mode === 'other-browser' ? _stockCheckPkg() : 'com.android.chrome';
   const component = mode === 'intent-component'
     ? ';component=com.android.chrome/com.google.android.apps.chrome.Main'
     : '';
@@ -622,7 +676,7 @@ function _stockActivationHref(url) {
   return 'intent://' + data
     + '#Intent;scheme=' + scheme
     + ';action=android.intent.action.VIEW'
-    + ';package=com.android.chrome'
+    + ';package=' + pkg
     + component
     + ';S.browser_fallback_url=' + encodeURIComponent(url)
     + ';end';
@@ -699,32 +753,41 @@ function copyStockActivationImei(rowIndex) {
   }
 }
 
-// Used by brands without a saved activation page. Known brands render a real
-// <a target="_blank"> in the row instead, so an installed PWA hands the URL to
-// Chrome as a new tab rather than opening a window on top of the app.
+// Check for a row that cannot be a plain link: copy-only mode, or a brand with
+// no saved activation page.
 function openStockActivationCheck(rowIndex) {
   const c = _stockRowCtx(rowIndex);
   if (!c) { showAlert('Stock row not found. Refresh the Stock tab and try again.', 'e'); return; }
   if (!c.imei1) { showAlert('This row has no IMEI_1.', 'e'); return; }
   const url = _stockActivationUrl(c.brand);
+  const href = _stockActivationHref(url);
   const copied = _stockCopyText(c.imei1);
+  const copyNote = copied
+    ? 'IMEI ' + _esc(c.imei1) + ' copied.'
+    : 'Could not copy automatically. IMEI: ' + _esc(c.imei1);
+
   if (!url) {
-    showAlert('No activation page saved for ' + _esc(c.brand || 'this brand') + ' yet. IMEI '
-      + _esc(c.imei1) + (copied ? ' was copied.' : ' could not be copied.'), copied ? 'w' : 'e');
+    showAlert('No activation page saved for ' + _esc(c.brand || 'this brand') + ' yet. '
+      + copyNote, copied ? 'w' : 'e');
+    return;
+  }
+  // Copy-only: the brand page is meant to stay open in the other half of the
+  // split screen, so do not navigate anywhere.
+  if (!href) {
+    showAlert(copyNote + ' Paste it into the ' + _esc(c.brand)
+      + ' page on the other half of the screen, then solve the captcha.', copied ? 's' : 'w');
     return;
   }
   const a = document.createElement('a');
-  a.href = url;
-  a.target = '_blank';
-  a.rel = 'noopener noreferrer';
+  a.href = href;
+  if (href.indexOf('intent://') !== 0 && href.indexOf('android-app://') !== 0) {
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+  }
   document.body.appendChild(a);
   a.click();
   a.remove();
-  if (copied) {
-    showAlert('IMEI ' + _esc(c.imei1) + ' copied. Paste it on the page, then solve the captcha.', 's');
-  } else {
-    showAlert('Could not copy automatically. IMEI: ' + _esc(c.imei1), 'w');
-  }
+  showAlert(copyNote + ' Paste it on the page, then solve the captcha.', copied ? 's' : 'w');
 }
 
 function _stockYMD(d) {
@@ -951,19 +1014,22 @@ function buildAvailableRows(data, headers) {
     const brand = bIdx >= 0 && r[bIdx] != null ? String(r[bIdx]).trim() : '';
     const url = _stockActivationUrl(brand);
     const href = _stockActivationHref(url);
-    // Android PWA: an intent:// href launches Chrome, which adds a tab to the
-    // Chrome window already on the other side of the split screen. It must NOT
-    // carry target="_blank", or the PWA opens a throwaway blank window first.
-    // Everywhere else the plain URL keeps target="_blank" and becomes a tab.
+    // href is '' in copy-only mode (the default inside the installed app): the
+    // row then gets a <button>, so Check copies the IMEI and nothing navigates
+    // over the app. An intent:// href must not carry target="_blank", or the
+    // PWA opens a throwaway window first. Every other href is a plain URL where
+    // target="_blank" means a real tab.
     const isIntent = href.indexOf('intent://') === 0;
     const linkAttrs = isIntent
       ? ' href="' + _esc(href) + '"'
       : ' href="' + _esc(href) + '" target="_blank" rel="noopener noreferrer"';
-    const check = url
+    const check = (url && href)
       ? '<a class="btn btn-sm"' + linkAttrs
         + ' title="Copy IMEI_1 and open ' + _esc(brand) + '\'s activation page"'
         + ' onclick="copyStockActivationImei(' + idx + ')">Check</a>'
-      : '<button class="btn btn-sm" title="Copy IMEI_1 and look up this brand\'s activation page"'
+      : '<button class="btn btn-sm" title="' + (url
+          ? 'Copy IMEI_1 (copy-only mode: paste it in the brand page)'
+          : 'Copy IMEI_1 and look up this brand\'s activation page') + '"'
         + ' onclick="openStockActivationCheck(' + idx + ')">Check</button>';
     return '<td class="st-action-cell"><div class="st-action-stack">'
       + check

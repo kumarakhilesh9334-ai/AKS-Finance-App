@@ -1,4 +1,4 @@
-// ── APP VERSION ─────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ APP VERSION Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 // APP_VERSION is the ONE number shown in the header. Bump it by hand when a
 // release changes behaviour the user can see. It is not derived from anything:
 // there is no build step in this project, so this constant is the source of
@@ -10,14 +10,14 @@
 // They change more often than APP_VERSION and are listed in the dialog below so
 // a device can prove which files it actually loaded.
 
-const APP_VERSION = '1.1.1';
-const APP_RELEASED = '13-Nov-2026';
+const APP_VERSION = '1.2.0';
+const APP_RELEASED = '14-Nov-2026';
 
 function initAppVersion() {
   const el = $('app-version');
   if (!el) return;
   el.textContent = 'v' + APP_VERSION;
-  el.title = 'App version — tap for build details';
+  el.title = 'App version Ã¢â‚¬â€ tap for build details';
 }
 
 function _verDisplayMode() {
@@ -50,7 +50,9 @@ function _verCheckMode() {
   if (typeof _stockActivationHref !== 'function') return 'not loaded';
   const mode = typeof _stockCheckMode === 'function' ? _stockCheckMode() : 'auto';
   const href = _stockActivationHref('https://in.nothing.tech/pages/imei');
-  const kind = href.indexOf('intent://') === 0 ? 'intent://'
+  if (!href) return mode + ' -> no navigation (copy only)';
+  const kind = href.indexOf('intent://') === 0
+    ? 'intent:// -> ' + (typeof _stockCheckPkg === 'function' ? _stockCheckPkg() : '?')
     : href.indexOf('android-app://') === 0 ? 'android-app://'
     : 'normal link';
   return mode + ' -> ' + kind;
@@ -68,21 +70,58 @@ function _verFillModeSelect() {
   ).join('');
 }
 
+// Target browser for 'other-browser'. A <datalist> gives the common packages as
+// suggestions while still allowing any package name to be typed.
+function _verFillPkgInput() {
+  const input = $('ver-pkg-input');
+  const list = $('ver-pkg-list');
+  if (typeof _STOCK_BROWSER_PKGS === 'undefined') return;
+  if (list) {
+    list.innerHTML = _STOCK_BROWSER_PKGS.map(p =>
+      '<option value="' + _verEsc(p[1]) + '">' + _verEsc(p[0]) + '</option>'
+    ).join('');
+  }
+  if (input && !input.value) {
+    input.value = typeof _stockCheckPkg === 'function' ? _stockCheckPkg() : '';
+  }
+}
+
 function _verRefreshModeRow() {
   const now = $('ver-mode-now');
   const test = $('ver-test-link');
+  const pkgRow = $('ver-pkg-row');
   if (typeof _stockActivationHref !== 'function') return;
   const href = _stockActivationHref('https://in.nothing.tech/pages/imei');
   const isAppScheme = href.indexOf('intent://') === 0 || href.indexOf('android-app://') === 0;
-  if (now) now.textContent = isAppScheme ? (href.split(':')[0] + '://') : 'normal link';
+  const mode = typeof _stockCheckMode === 'function' ? _stockCheckMode() : 'auto';
+
+  if (now) {
+    now.textContent = !href ? 'no link' : isAppScheme ? (href.split(':')[0] + '://') : 'normal link';
+  }
+  // The package field is only meaningful for the other-browser hand-off.
+  if (pkgRow) pkgRow.style.display = mode === 'other-browser' ? '' : 'none';
+
   if (test) {
-    test.setAttribute('href', href);
-    if (isAppScheme) {
+    if (!href) {
+      // Copy-only mode has no link to test. Disable rather than pretend.
+      test.removeAttribute('href');
       test.removeAttribute('target');
       test.removeAttribute('rel');
+      test.style.opacity = '0.45';
+      test.style.pointerEvents = 'none';
+      test.textContent = 'No link in this mode';
     } else {
-      test.setAttribute('target', '_blank');
-      test.setAttribute('rel', 'noopener noreferrer');
+      test.style.opacity = '';
+      test.style.pointerEvents = '';
+      test.textContent = 'Test link (Nothing page)';
+      test.setAttribute('href', href);
+      if (isAppScheme) {
+        test.removeAttribute('target');
+        test.removeAttribute('rel');
+      } else {
+        test.setAttribute('target', '_blank');
+        test.setAttribute('rel', 'noopener noreferrer');
+      }
     }
   }
   // Keep the summary row in sync with the selector without rebuilding the
@@ -102,6 +141,7 @@ async function showAppVersion() {
   if (!modal || !box) return;
 
   _verFillModeSelect();
+  _verFillPkgInput();
   _verRefreshModeRow();
 
   let sw = 'not registered';
