@@ -2263,10 +2263,11 @@ function fmtDate(val) {
 }
 
 function readAllUsers(ss) {
-  const DEFAULT_ADMIN = [{ id:'u1', username:'AKS', pin:'0000', name:'AKS (You)', role:'admin',
-    perms:{ loan:true, allLoans:true, approvals:true, submit:true, stock:true } }];
+  // There are no built-in accounts: the Users sheet is the only source of
+  // logins. A missing or empty sheet therefore returns nobody, and sign-in
+  // fails until an admin row is added to the sheet.
   const sheet = ss.getSheetByName(USERS_SHEET);
-  if (!sheet) return DEFAULT_ADMIN;
+  if (!sheet) return [];
   // Header + every data row in ONE read. This used to be getLastRow(),
   // getLastColumn(), a header getValues(), getLastRow() again, then a data
   // getValues() - five separate round-trips on a tab that a single push reads
@@ -2274,7 +2275,7 @@ function readAllUsers(ss) {
   // of the columns the mapping below looks for, so an under-counting Config
   // cannot make col() report -1 for a column that really is there.
   const all = readDataRows(sheet, 1, configBounds(ss)[USERS_SHEET], 10, 'users.');
-  if (all.length < 2) return DEFAULT_ADMIN;
+  if (all.length < 2) return [];
   const headers = all[0].map(h => String(h || '').trim().toLowerCase());
   const col = name => {
     const i = headers.indexOf(name);
@@ -2300,11 +2301,6 @@ function readAllUsers(ss) {
       stock:     readBool(r, 'stock'),
     },
   }));
-  // Ensure default admin is always present (even if not in the sheet)
-  if (!users.some(u => u.id === 'u1')) {
-    users.unshift({ id:'u1', username:'AKS', pin:'0000', name:'AKS (You)', role:'admin',
-      perms:{ loan:true, allLoans:true, approvals:true, submit:true, stock:true } });
-  }
   return users;
 }
 

@@ -5,12 +5,12 @@
 // truth.
 //
 // Do not confuse it with the other two counters, which are cache busters:
-//   index.html  <script src="js/stock.js?v=23">  per-file browser cache key
-//   sw.js       CACHE_NAME = 'aks-finance-v15'    service-worker cache bucket
+//   index.html  <script src="js/stock.js?v=28">  per-file browser cache key
+//   sw.js       CACHE_NAME = 'aks-finance-v25'    service-worker cache bucket
 // They change more often than APP_VERSION and are listed in the dialog below so
 // a device can prove which files it actually loaded.
 
-const APP_VERSION = '1.2.3';
+const APP_VERSION = '1.4.0';
 const APP_RELEASED = '14-Nov-2026';
 
 function initAppVersion() {
@@ -46,132 +46,10 @@ function _verLoadedAssets() {
   return out;
 }
 
-function _verCheckMode() {
-  if (typeof _stockActivationHref !== 'function') return 'not loaded';
-  const mode = typeof _stockCheckMode === 'function' ? _stockCheckMode() : 'auto';
-  const href = _stockActivationHref('https://in.nothing.tech/pages/imei');
-  if (!href) return mode + ' -> no navigation (copy only)';
-  if (href.indexOf('intent://') === 0) {
-    const pkg = typeof _stockCheckPkg === 'function' ? _stockCheckPkg() : '?';
-    const act = typeof _stockCheckActivity === 'function' ? _stockCheckActivity() : '';
-    return mode + ' -> ' + pkg + (act ? ' pinned' : '');
-  }
-  const kind = href.indexOf('android-app://') === 0 ? 'android-app://' : 'normal link';
-  return mode + ' -> ' + kind;
-}
-
-// The mode selector lives in the version dialog so the Check behaviour can be
-// tested on the device without shipping a new build.
-function _verFillModeSelect() {
-  const sel = $('ver-mode-select');
-  if (!sel || typeof _STOCK_CHECK_MODES === 'undefined') return;
-  const mode = typeof _stockCheckMode === 'function' ? _stockCheckMode() : 'auto';
-  sel.innerHTML = _STOCK_CHECK_MODES.map(m =>
-    '<option value="' + _verEsc(m) + '"' + (m === mode ? ' selected' : '') + '>'
-    + _verEsc(_STOCK_CHECK_MODE_LABELS[m] || m) + '</option>'
-  ).join('');
-}
-
-// Target browser for 'other-browser'. A <datalist> gives the common packages as
-// suggestions while still allowing any package name to be typed. The optional
-// activity field pins the launch to one activity, which removes the chooser.
-function _verFillPkgInput() {
-  const input = $('ver-pkg-input');
-  const list = $('ver-pkg-list');
-  const act = $('ver-act-input');
-  if (typeof _STOCK_BROWSER_PKGS === 'undefined') return;
-  if (list) {
-    list.innerHTML = _STOCK_BROWSER_PKGS.map(p =>
-      '<option value="' + _verEsc(p[1]) + '">' + _verEsc(p[0]) + '</option>'
-    ).join('');
-  }
-  if (input && !input.value) {
-    input.value = typeof _stockCheckPkg === 'function' ? _stockCheckPkg() : '';
-  }
-  if (act) {
-    // Dialog opening is never mid-typing, so sync it from storage outright.
-    act.value = typeof _stockCheckActivity === 'function' ? _stockCheckActivity() : '';
-    // Placeholder shows the known activity for the chosen package, so it can be
-    // typed in without guessing if a chooser still appears.
-    const savedPkg = typeof _stockCheckPkg === 'function' ? _stockCheckPkg() : '';
-    const hint = typeof _stockActivityHint === 'function'
-      ? _stockActivityHint(savedPkg) : '';
-    act.placeholder = hint || 'pin the browser\'s activity';
-  }
-}
-
-function _verRefreshModeRow() {
-  const now = $('ver-mode-now');
-  const test = $('ver-test-link');
-  const pkgRow = $('ver-pkg-row');
-  if (typeof _stockActivationHref !== 'function') return;
-  const href = _stockActivationHref('https://in.nothing.tech/pages/imei');
-  const isAppScheme = href.indexOf('intent://') === 0 || href.indexOf('android-app://') === 0;
-  const mode = typeof _stockCheckMode === 'function' ? _stockCheckMode() : 'auto';
-
-  if (now) {
-    now.textContent = !href ? 'no link' : isAppScheme ? (href.split(':')[0] + '://') : 'normal link';
-  }
-  // The package field is only meaningful for the other-browser hand-off.
-  if (pkgRow) pkgRow.style.display = mode === 'other-browser' ? '' : 'none';
-  // Keep the optional activity pin in step with whichever package is selected.
-  // The pkg field is also rewritten from storage so a rejected value snaps back
-  // to the default instead of sitting there as if it had been accepted.
-  const actInput = $('ver-act-input');
-  const pkgInput = $('ver-pkg-input');
-  const savedPkg = typeof _stockCheckPkg === 'function' ? _stockCheckPkg() : '';
-  if (pkgInput && mode === 'other-browser' && savedPkg) pkgInput.value = savedPkg;
-  if (actInput) {
-    // Only seed the field when it is empty: never overwrite what is being typed.
-    if (!actInput.value && typeof _stockCheckActivity === 'function') {
-      actInput.value = _stockCheckActivity();
-    }
-    const hint = typeof _stockActivityHint === 'function' ? _stockActivityHint(savedPkg) : '';
-    actInput.placeholder = hint || 'pin the browser\'s activity';
-  }
-
-  if (test) {
-    if (!href) {
-      // Copy-only mode has no link to test. Disable rather than pretend.
-      test.removeAttribute('href');
-      test.removeAttribute('target');
-      test.removeAttribute('rel');
-      test.style.opacity = '0.45';
-      test.style.pointerEvents = 'none';
-      test.textContent = 'No link in this mode';
-    } else {
-      test.style.opacity = '';
-      test.style.pointerEvents = '';
-      test.textContent = 'Test link (Nothing page)';
-      test.setAttribute('href', href);
-      if (isAppScheme) {
-        test.removeAttribute('target');
-        test.removeAttribute('rel');
-      } else {
-        test.setAttribute('target', '_blank');
-        test.setAttribute('rel', 'noopener noreferrer');
-      }
-    }
-  }
-  // Keep the summary row in sync with the selector without rebuilding the
-  // whole list (which would reset the select's focus while it is open).
-  const rows = document.querySelectorAll('#ver-info .ver-row');
-  for (let i = 0; i < rows.length; i++) {
-    if (!rows[i] || !rows[i].querySelector) continue;
-    const k = rows[i].querySelector('.ver-k');
-    const val = rows[i].querySelector('.ver-v');
-    if (k && val && k.textContent === 'Check link mode') val.textContent = _verCheckMode();
-  }
-}
-
 async function showAppVersion() {
   const modal = $('app-version-modal');
   const box = $('ver-info');
   if (!modal || !box) return;
-
-  _verFillModeSelect();
-  _verFillPkgInput();
-  _verRefreshModeRow();
 
   let sw = 'not registered';
   try {
@@ -193,7 +71,6 @@ async function showAppVersion() {
   const rows = [
     ['App version', 'v' + APP_VERSION],
     ['Released', APP_RELEASED],
-    ['Check link mode', _verCheckMode()],
     ['Display mode', _verDisplayMode()],
     ['Service worker', sw],
     ['SW cache', cachesTxt || 'none'],

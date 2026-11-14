@@ -6,7 +6,6 @@ const TAB_ICONS = {
   'all-loans':       { icon: '📊', label: 'All Loans' },
   'approvals':       { icon: '✅', label: 'Approvals' },
   'my-subs':         { icon: '📝', label: 'My Subs' },
-  'users':           { icon: '👥', label: 'Users' },
   'emi-msgs':        { icon: '📱', label: 'EMI Msgs' },
   'stock':           { icon: '📦', label: 'Stock' },
 };
@@ -23,7 +22,6 @@ function buildNav() {
   if (u.role === 'admin' || u.perms.approvals) tabs.push({ id: 'approvals', label: 'Approvals', badge: pc });
   if (u.role === 'admin') tabs.push({ id: 'emi-msgs', label: 'EMI Msgs' });
   if (u.role === 'admin' || u.perms.stock) tabs.push({ id: 'stock', label: 'Stock' });
-  if (u.role === 'admin') tabs.push({ id: 'users', label: 'Users' });
 
   // Desktop top nav
   $('nav').innerHTML = tabs.map(t =>
@@ -60,34 +58,11 @@ function goTo(pg) {
   if (pg === 'my-subs')   renderMySubs();
   if (pg === 'emi-msgs')  initEmiMsgsPage();
   if (pg === 'stock')     initStockPage();
-  if (pg === 'users')     renderUsers();
 }
 
 function refreshNav() { buildNav(); }
 
 // ── Mobile column switchers ───────────────────────────────────────────────
-function mobSwitchEmiCol(col) {
-  ['all','upcoming','overdue','partials'].forEach(c => {
-    const wrap = $('emi-col-' + c);
-    const tab  = $('mob-tab-emi-' + c);
-    if (!wrap || !tab) return;
-    const active = c === col;
-    wrap.classList.toggle('mob-active', active);
-    tab.classList.toggle('active', active);
-  });
-}
-
-function mobSwitchCdCol(col) {
-  ['all','running','closed','defaulted'].forEach(c => {
-    const wrap = $('cd-col-' + c);
-    const tab  = $('mob-tab-cd-' + c);
-    if (!wrap || !tab) return;
-    const active = c === col;
-    wrap.classList.toggle('mob-active', active);
-    tab.classList.toggle('active', active);
-  });
-}
-
 function mobSwitchApprCol(col) {
   ['loan','emi'].forEach(c => {
     const wrap = $('appr-col-' + c);

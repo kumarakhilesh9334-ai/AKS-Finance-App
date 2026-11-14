@@ -13,7 +13,7 @@
   if (location.protocol === 'http:' || location.protocol === 'https:')
     document.write('<link rel="manifest" href="manifest.json">');
 </script>
-<link rel="stylesheet" href="css/styles.css?v=24">
+<link rel="stylesheet" href="css/styles.css?v=27">
 <style>
   #install-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:99999;align-items:center;justify-content:center}
   #install-overlay.show{display:flex}
@@ -412,10 +412,6 @@
           <button class="stock-tab" data-f="sold" onclick="setStockFilter('sold')">Sold</button>
         <button class="stock-tab" data-f="undelivered" onclick="setStockFilter('undelivered')">Undelivered</button>
       </div>
-      <div class="act-toolbar" id="act-toolbar" style="display:none">
-        <button class="btn btn-sm act-open" id="activation-btn" onclick="openActivationModal()">🔎 Find recent sales</button>
-        <span class="act-toolbar-note">Checks brand activation for units still marked Available</span>
-      </div>
       <div id="stock-results"></div>
       <button class="stock-fab" id="stock-fab" onclick="openStockOrderModal()" title="Log new order" aria-label="Log new order">+</button>
     </div>
@@ -557,45 +553,6 @@
       </div>
     </div>
 
-    <!-- ── STOCK: ACTIVATION CHECK ───────────────────────────────────── -->
-    <div id="activation-modal" class="stock-modal">
-      <div class="stock-modal-card act-card">
-        <div class="stock-modal-hd">
-          <span class="stock-modal-title">Find recent sales</span>
-          <button class="btn btn-sm" onclick="closeActivationModal()">✕ Close</button>
-        </div>
-        <div class="act-body">
-          <div id="act-server" class="act-server"></div>
-          <div id="act-summary" class="act-summary"></div>
-          <div id="act-progress-wrap" style="display:none">
-            <div class="act-progress"><div id="act-progress-bar" class="act-progress-bar"></div></div>
-            <div id="act-phase" class="act-phase"></div>
-            <div id="act-counts" class="act-counts"></div>
-          </div>
-          <div id="act-results" class="act-results"></div>
-          <details id="act-log-wrap" class="act-log-wrap" style="display:none">
-            <summary>Activity log</summary>
-            <div id="act-log" class="act-log"></div>
-          </details>
-          <details class="act-advanced">
-            <summary>Checker address</summary>
-            <div style="display:flex;gap:6px;margin-top:6px">
-              <input type="text" id="act-server-url" placeholder="http://127.0.0.1:8787" style="flex:1">
-              <button class="btn btn-sm" onclick="retryActivationServer()">Connect</button>
-            </div>
-            <div style="margin-top:4px">Only change this if the checker runs on another computer. Open the app from that
-              computer's local address — an HTTPS page cannot reach a plain-HTTP checker on your network.</div>
-          </details>
-        </div>
-        <div class="submit-row act-actions">
-          <button class="btn" onclick="closeActivationModal()">Close</button>
-          <button class="btn" id="act-stop" style="display:none" onclick="stopActivationCheck()">Stop</button>
-          <button class="btn btn-primary" id="act-start" onclick="startActivationCheck()">Check now</button>
-          <button class="btn btn-primary" id="act-download" style="display:none" onclick="downloadActivationCsv()">Download CSV</button>
-        </div>
-      </div>
-    </div>
-
     <!-- ── EDIT MODAL ────────────────────────────────────────────────── -->
     <div id="edit-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;align-items:flex-end;justify-content:center">
       <div style="background:#fff;border-radius:16px 16px 0 0;width:100%;max-width:600px;max-height:85vh;overflow-y:auto;padding:1.25rem">
@@ -608,33 +565,6 @@
           <button class="btn" onclick="closeEditModal()">Cancel</button>
           <button class="btn btn-primary" onclick="saveEdit()">Save changes</button>
         </div>
-      </div>
-    </div>
-
-    <!-- ── USERS (admin) ─────────────────────────────────────────────── -->
-    <div class="page" id="page-users">
-      <div style="font-size:15px;font-weight:500;margin-bottom:1rem">User management</div>
-      <div class="card"><div id="users-list"></div></div>
-      <div class="card" style="margin-top:0.75rem">
-        <div style="font-size:13px;font-weight:500;margin-bottom:0.75rem">Add new user</div>
-        <div class="fg fg-2">
-          <div><label>Username</label><input id="nu-user" type="text" placeholder="e.g. ravi"></div>
-          <div><label>Display name</label><input id="nu-name" type="text" placeholder="e.g. Ravi Kumar"></div>
-          <div><label>PIN</label><input id="nu-pin" type="password" placeholder="4–6 digit PIN"></div>
-          <div><label>Role</label><select id="nu-role"><option value="agent">Agent</option><option value="admin">Admin</option></select></div>
-          <div class="full">
-            <label style="margin-bottom:6px">Tab access</label>
-            <label style="display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:13px"><input type="checkbox" id="p-loan" checked> New Loan</label>
-            <label style="display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:13px"><input type="checkbox" id="p-allLoans" checked> All Loans</label>
-            <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="p-approvals" checked> Approvals</label>
-            <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="p-stock"> Stock</label>
-          </div>
-          <div class="full" style="margin-top:8px">
-            <label style="margin-bottom:6px">Permissions</label>
-            <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="p-submit" checked> Submit for approval</label>
-          </div>
-        </div>
-        <div class="submit-row"><button class="btn btn-primary" onclick="addUser()">Add user</button></div>
       </div>
     </div>
 
@@ -705,34 +635,6 @@
       <span class="stock-modal-title">Version info</span>
       <button class="btn btn-sm" onclick="closeAppVersion()">✕ Close</button>
     </div>
-    <div class="ver-mode">
-      <div class="ver-mode-hd">
-        <span class="ver-mode-title">Check link mode</span>
-        <span id="ver-mode-now" class="ver-mode-now"></span>
-      </div>
-      <select id="ver-mode-select" onchange="setStockCheckMode(this.value)"></select>
-      <div id="ver-pkg-row" class="ver-pkg-row" style="display:none">
-        <label class="ver-pkg-label" for="ver-pkg-input">Browser app to open</label>
-        <input id="ver-pkg-input" class="ver-pkg-input" list="ver-pkg-list" spellcheck="false"
-               autocomplete="off" onchange="setStockCheckPkg(this.value)"
-               placeholder="com.sec.android.app.sbrowser">
-        <datalist id="ver-pkg-list"></datalist>
-        <label class="ver-pkg-label ver-act-label" for="ver-act-input">
-          Activity (clear this to let Android ask which app)
-        </label>
-        <input id="ver-act-input" class="ver-pkg-input" spellcheck="false"
-               autocomplete="off" onchange="setStockCheckActivity(this.value)"
-               placeholder="pin the browser's activity">
-      </div>
-      <div class="ver-mode-note">
-        In the installed app, Chrome will not hand a link back to Chrome — it opens
-        its own browser view with an X instead, which covers the app. <b>Auto</b>
-        therefore only copies the IMEI. <b>other-browser</b> launches a different
-        browser app instead. The intent is pinned to one activity, so Android
-        cannot show an "open with" chooser; clear the activity to unpin it.
-      </div>
-      <a id="ver-test-link" class="btn btn-sm" target="_blank" rel="noopener noreferrer">Test link (Nothing page)</a>
-    </div>
     <div id="ver-info" class="ver-list"></div>
     <div class="submit-row" style="margin-top:1rem">
       <button class="btn" onclick="copyAppVersion()">Copy details</button>
@@ -760,18 +662,16 @@
 
 <!-- ── SCRIPTS (order matters) ────────────────────────────────────────── -->
 <script src="js/state.js?v=19"></script>
-<script src="js/version.js?v=6"></script>
+<script src="js/version.js?v=9"></script>
 <script src="js/snapshot.js?v=9"></script>
 <script src="js/auth.js?v=11"></script>
-<script src="js/nav.js?v=9"></script>
-<script src="js/loans.js?v=10"></script>
-<script src="js/emi.js?v=51"></script>
+<script src="js/nav.js?v=11"></script>
+<script src="js/loans.js?v=11"></script>
+<script src="js/emi.js?v=52"></script>
 <script src="js/approvals.js?v=20"></script>
 <script src="js/my-subs.js?v=4"></script>
 <script src="js/emi-messages.js?v=19"></script>
-<script src="js/stock.js?v=27"></script>
-<script src="js/activation.js?v=3"></script>
-<script src="js/users.js?v=7"></script>
+<script src="js/stock.js?v=28"></script>
 
 <!-- ── Install Banner ─────────────────────────────────────────────────── -->
 <div id="install-overlay">

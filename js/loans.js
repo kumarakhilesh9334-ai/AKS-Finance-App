@@ -267,9 +267,6 @@ function calcLoan() {
     roi = monthlyRate * 12 * 100;
   }
 
-  const akAmt  = Math.round(financeAmount * akPct  / 100);
-  const aksAmt = Math.round(financeAmount * aksPct / 100);
-
   if (price || monthlyEmi) {
     $('calc-preview').style.display = 'block';
     $('cp-finance').textContent  = lFmt(financeAmount);

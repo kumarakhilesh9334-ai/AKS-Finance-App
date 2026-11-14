@@ -6,9 +6,9 @@
 // summed Cost Price of everything under it. Undelivered is two levels —
 // Model > Specs. Cost Sheet is a flat roll-up: one row per Device/Model/Specs
 // holding the HIGHEST cost seen, for units that have both an order and a
-// selling date. A leaf in the Available view also carries Check (copy IMEI_1
-// and open the brand's activation page), Add/Edit date, and Sell; a leaf whose
-// Activation date is filled is tinted amber until the sale is logged.
+// selling date. A leaf in the Available view carries four buttons — Copy IMEI_1,
+// Copy brand URL, Add/Edit date, Sell — and a leaf whose Activation date is
+// filled is tinted amber until the sale is logged.
 
 let _stock = { headers: [], rows: [] };
 let _stockLoaded = false;
@@ -166,10 +166,6 @@ function _syncStockFab() {
   const admin = _stockIsAdmin();
   const fab = $('stock-fab');
   if (fab) fab.style.display = admin ? 'flex' : 'none';
-  // The activation checker is an admin tool as well. Hiding it here keeps a
-  // read-only Stock tab clean without a second admin check in activation.js.
-  const bar = $('act-toolbar');
-  if (bar) bar.style.display = admin ? 'flex' : 'none';
 }
 
 // Local calendar date as YYYY-MM-DD. toISOString() is UTC, which is the
@@ -497,11 +493,12 @@ async function submitStockSold() {
   }
 }
 
-// ── Manual activation check (Stock tab) ─────────────────────────────────────
-// The batch checker (js/activation.js) asks the local server to visit every IMEI
-// and returns a CSV. This per-row path is deliberately manual: copy IMEI_1, open
-// the brand's own activation page, solve the captcha there, then log the date it
-// reports. That date is written to the Stock sheet's "Activation date" column.
+// ── Activation check (Stock tab) ────────────────────────────────────────────
+// Deliberately manual and per row: the two copy buttons put the IMEI_1 and the
+// brand's own activation page URL on the clipboard, the user pastes them into a
+// browser sitting beside the app, solves the captcha there, then logs the date
+// the page reports. That date is written to the Stock sheet's "Activation date"
+// column.
 // Brand -> activation page. Brand names come from the Stock sheet, so matching
 // is case/spacing-insensitive. Short aliases such as "mi" only match the whole
 // brand name, so they cannot swallow unrelated brands like "Micromax".
@@ -538,215 +535,11 @@ function _stockActivationUrl(brand) {
   return '';
 }
 
-// True only when the app runs as an installed PWA on Android. That is the one
-// case where a normal link cannot reach Chrome: Android always opens
-// out-of-scope navigations (including target="_blank") in an in-app browser
-// task, which is the window that appears on top of the app.
-function _stockIsAndroid() {
-  return /Android/i.test(navigator.userAgent || '');
-}
-
-function _stockIsAndroidPwa() {
-  if (!_stockIsAndroid()) return false;
-  try {
-    if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true;
-    if (window.matchMedia && window.matchMedia('(display-mode: minimal-ui)').matches) return true;
-  } catch (e) { /* older WebView */ }
-  return false;
-}
-
-// How the Check button should reach the brand page. 'auto' is what ships; the
-// other modes let each variant be tested from the version dialog without a
-// redeploy, because Android decides what an installed app may do and the answer
-// is not the same on every device.
-//
-//   auto            copy-only inside an installed Android PWA, plain link elsewhere
-//   copy            never navigate: copy the IMEI, leave the app where it is
-//   other-browser   intent:// to a DIFFERENT browser app (Samsung Internet, ...)
-//   plain           always a normal <a target="_blank">
-//   intent          intent:// -> com.android.chrome
-//   intent-component  intent:// pinned to Chrome's main activity
-//   android-app     android-app://com.android.chrome/... hand-off
-//
-// Why the three Chrome modes are not the default: an installed PWA is itself
-// hosted by Chrome, and Chrome will not start a second Chrome task for a link
-// that came from inside itself. It renders the page in a Custom Tab instead -
-// the view with a close X and no tab strip that covers the whole app. Verified
-// on the Android tablet: all three produce that same Custom Tab. Targeting a
-// different browser package is the one hand-off Chrome does allow, because it
-// is not handing back to itself.
-//
-// Two details make that hand-off work, and both were missing at first:
-//   1. Chrome only launches an external activity that is BROWSABLE, so the
-//      intent must carry category=android.intent.category.BROWSABLE. Without
-//      it Chrome discards the package constraint and Android shows its own
-//      "open with" chooser, listing every browser on the device.
-//   2. If a chooser still appears, pinning an explicit component= names one
-//      activity and no chooser is possible at all.
-const _STOCK_CHECK_MODES = [
-  'auto', 'copy', 'other-browser',
-  'plain', 'intent', 'intent-component', 'android-app',
-];
-const _STOCK_CHECK_MODE_LABELS = {
-  'auto':             'Auto (copy-only in the installed app)',
-  'copy':             'Copy IMEI only - opens nothing',
-  'other-browser':    'Open in a different browser app',
-  'plain':            'Normal link (new tab / in-app browser)',
-  'intent':           'intent:// -> Chrome app',
-  'intent-component': 'intent:// pinned to Chrome activity',
-  'android-app':      'android-app:// hand-off to Chrome',
-};
-
-// Browser apps that can receive the hand-off. Samsung Internet ships on Samsung
-// tablets; any package name can be typed in, so this is only a convenience list.
-const _STOCK_BROWSER_PKGS = [
-  ['Samsung Internet', 'com.sec.android.app.sbrowser'],
-  ['Firefox',          'org.mozilla.firefox'],
-  ['Microsoft Edge',   'com.microsoft.emmx'],
-  ['Opera',            'com.opera.browser'],
-  ['Brave',            'com.brave.browser'],
-  ['DuckDuckGo',       'com.duckduckgo.mobile.android'],
-];
-const _STOCK_DEFAULT_BROWSER_PKG = 'com.sec.android.app.sbrowser';
-
-// Only used as the default in the dialog's activity field: an explicit
-// component pins the launch to one activity, which is the only way to stop
-// Android showing its own "open with" chooser. Clearing the field goes back to
-// package= (and, on a device with no default browser, the chooser).
-const _STOCK_ACTIVITY_HINTS = {
-  'com.sec.android.app.sbrowser': 'com.sec.android.app.sbrowser.BrowserActivity',
-  'com.android.chrome': 'com.google.android.apps.chrome.Main',
-  'org.mozilla.firefox': 'org.mozilla.firefox.App',
-  'com.microsoft.emmx': 'com.microsoft.ruby.Main',
-};
-
-function _stockActivityHint(pkg) {
-  return _STOCK_ACTIVITY_HINTS[pkg] || '';
-}
-
-function _stockCheckMode() {
-  try {
-    const m = localStorage.getItem('aks_check_mode');
-    if (_STOCK_CHECK_MODES.indexOf(m) !== -1) return m;
-  } catch (e) { /* ignore */ }
-  return 'auto';
-}
-
-function _stockCheckPkg() {
-  try {
-    const p = String(localStorage.getItem('aks_check_pkg') || '').trim();
-    // Reject anything that would break the intent URI rather than guess.
-    if (/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/.test(p)) return p;
-  } catch (e) { /* ignore */ }
-  return _STOCK_DEFAULT_BROWSER_PKG;
-}
-
-// The activity the Check link is pinned to. A stored '' means "do not pin";
-// with nothing stored the known activity for the chosen package is used, so
-// the trip through Android's chooser does not happen by default.
-function _stockCheckActivity() {
-  let raw = null;
-  try { raw = localStorage.getItem('aks_check_activity'); } catch (e) { /* ignore */ }
-  if (raw !== null) {
-    const a = String(raw).trim();
-    if (!a) return '';                                   // deliberately unpinned
-    if (/^[A-Za-z.][A-Za-z0-9_.]*$/.test(a)) return a;    // else fall through
-  }
-  return _stockActivityHint(_stockCheckPkg());
-}
-
-function setStockCheckActivity(activity) {
-  const a = String(activity || '').trim();
-  if (a && !/^[A-Za-z.][A-Za-z0-9_.]*$/.test(a)) {
-    if (typeof showAlert === 'function') showAlert('That does not look like an activity name.', 'e');
-    return;
-  }
-  try {
-    // Store '' rather than removing the key: an empty value is the explicit
-    // "no pin", while a missing key means "use the default for this package".
-    localStorage.setItem('aks_check_activity', a);
-  } catch (e) { /* ignore */ }
-  if (typeof renderStock === 'function' && _stock && _stock.headers && _stock.headers.length) {
-    renderStock();
-  }
-  if (typeof _verRefreshModeRow === 'function') _verRefreshModeRow();
-  if (typeof showAlert === 'function') {
-    showAlert(a ? 'Pinned to ' + a : 'Unpinned: Android may ask which app to use.', 's');
-  }
-}
-
-function setStockCheckPkg(pkg) {
-  const p = String(pkg || '').trim();
-  if (p && !/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/.test(p)) {
-    if (typeof showAlert === 'function') showAlert('That does not look like a package name.', 'e');
-    return;
-  }
-  try {
-    if (p) localStorage.setItem('aks_check_pkg', p);
-    else localStorage.removeItem('aks_check_pkg');
-  } catch (e) { /* ignore */ }
-  if (typeof renderStock === 'function' && _stock && _stock.headers && _stock.headers.length) {
-    renderStock();
-  }
-  if (typeof _verRefreshModeRow === 'function') _verRefreshModeRow();
-  if (typeof showAlert === 'function') showAlert('Check opens: ' + (p || _STOCK_DEFAULT_BROWSER_PKG), 's');
-}
-
-function setStockCheckMode(mode) {
-  if (_STOCK_CHECK_MODES.indexOf(mode) === -1) mode = 'auto';
-  try { localStorage.setItem('aks_check_mode', mode); } catch (e) { /* ignore */ }
-  if (typeof renderStock === 'function' && _stock && _stock.headers && _stock.headers.length) {
-    renderStock();
-  }
-  if (typeof _verRefreshModeRow === 'function') _verRefreshModeRow();
-  if (typeof showAlert === 'function') showAlert('Check link: ' + (_STOCK_CHECK_MODE_LABELS[mode] || mode), 's');
-}
-
-// Returns the href for a Check link, or '' when Check must not navigate at all
-// (copy-only mode). Desktop, iOS and an ordinary browser tab always get the
-// plain URL: there, target="_blank" already means a real new tab.
-function _stockActivationHref(url) {
-  if (!url) return '';
-  const mode = _stockCheckMode();
-  if (mode === 'copy') return '';
-  if (!_stockIsAndroid()) return url;
-  // auto used to point at Chrome. That cannot work from the installed app, so
-  // auto now does the one thing that always keeps the app usable: copy only.
-  if (mode === 'auto') return _stockIsAndroidPwa() ? '' : url;
-  if (mode === 'plain') return url;
-  // Parse by hand: the app only ever stores http(s) URLs, and this avoids
-  // depending on URL() in older WebViews.
-  const m = /^(https?):\/\/([^/?#]+)([^#]*)(#.*)?$/i.exec(url);
-  if (!m) return url;
-  const scheme = m[1].toLowerCase();
-  const data = m[2] + (m[3] || '/') + (m[4] || '');
-
-  if (mode === 'android-app') {
-    return 'android-app://com.android.chrome/' + scheme + '/' + data;
-  }
-  const pkg = mode === 'other-browser' ? _stockCheckPkg() : 'com.android.chrome';
-  // An explicit component beats the chooser. Only 'other-browser' can pin a
-  // user-chosen activity; 'intent-component' keeps its historical Chrome pin.
-  let component = '';
-  if (mode === 'intent-component') {
-    component = 'com.android.chrome/com.google.android.apps.chrome.Main';
-  } else if (mode === 'other-browser') {
-    const act = _stockCheckActivity();
-    if (act) component = pkg + '/' + act;
-  }
-  // Keep path, query and hash. Android's intent parser splits on the LAST
-  // '#', so a page hash such as mi.com's '#/en/tab/imei' survives.
-  return 'intent://' + data
-    + '#Intent;scheme=' + scheme
-    + ';action=android.intent.action.VIEW'
-    // Required: Chrome refuses to start a non-BROWSABLE activity and quietly
-    // drops the package= constraint, which is what produced the chooser.
-    + ';category=android.intent.category.BROWSABLE'
-    + ';package=' + pkg
-    + (component ? ';component=' + component : '')
-    + ';S.browser_fallback_url=' + encodeURIComponent(url)
-    + ';end';
-}
+// Deliberately nothing here about which browser to use. The app never launches
+// a brand page: the two copy buttons put the IMEI and the URL on the clipboard
+// and the user pastes them into whichever browser is already open beside the
+// app. That is the only behaviour Android cannot interfere with, and it is the
+// same on every device.
 
 // Clipboard writes have to start inside the click handler; following the link
 // moves focus to the new tab, so start the copy synchronously.
@@ -808,52 +601,34 @@ function _stockRowCtx(rowIndex) {
   };
 }
 
-function copyStockActivationImei(rowIndex) {
+// Copies the row's IMEI_1 so it can be pasted into the brand's page.
+function copyStockImei(rowIndex) {
   const c = _stockRowCtx(rowIndex);
   if (!c) return;
   if (!c.imei1) { showAlert('This row has no IMEI_1.', 'e'); return; }
   if (_stockCopyText(c.imei1)) {
-    showAlert('IMEI ' + _esc(c.imei1) + ' copied. Paste it on the page, then solve the captcha.', 's');
+    showAlert('IMEI ' + _esc(c.imei1) + ' copied.', 's');
   } else {
     showAlert('Could not copy automatically. IMEI: ' + _esc(c.imei1), 'w');
   }
 }
 
-// Check for a row that cannot be a plain link: copy-only mode, or a brand with
-// no saved activation page.
-function openStockActivationCheck(rowIndex) {
+// Copies the brand's activation page URL. Nothing is opened: the page stays
+// where the user already has it, in the other half of the split screen.
+function copyStockBrandUrl(rowIndex) {
   const c = _stockRowCtx(rowIndex);
-  if (!c) { showAlert('Stock row not found. Refresh the Stock tab and try again.', 'e'); return; }
-  if (!c.imei1) { showAlert('This row has no IMEI_1.', 'e'); return; }
+  if (!c) return;
   const url = _stockActivationUrl(c.brand);
-  const href = _stockActivationHref(url);
-  const copied = _stockCopyText(c.imei1);
-  const copyNote = copied
-    ? 'IMEI ' + _esc(c.imei1) + ' copied.'
-    : 'Could not copy automatically. IMEI: ' + _esc(c.imei1);
-
   if (!url) {
-    showAlert('No activation page saved for ' + _esc(c.brand || 'this brand') + ' yet. '
-      + copyNote, copied ? 'w' : 'e');
+    showAlert('No activation page saved for ' + _esc(c.brand || 'this brand') + '. '
+      + 'Add it to _STOCK_ACTIVATION_SITES in js/stock.js.', 'w');
     return;
   }
-  // Copy-only: the brand page is meant to stay open in the other half of the
-  // split screen, so do not navigate anywhere.
-  if (!href) {
-    showAlert(copyNote + ' Paste it into the ' + _esc(c.brand)
-      + ' page on the other half of the screen, then solve the captcha.', copied ? 's' : 'w');
-    return;
+  if (_stockCopyText(url)) {
+    showAlert(_esc(c.brand) + ' page copied. Paste it in the browser address bar.', 's');
+  } else {
+    showAlert('Could not copy automatically. URL: ' + _esc(url), 'w');
   }
-  const a = document.createElement('a');
-  a.href = href;
-  if (href.indexOf('intent://') !== 0 && href.indexOf('android-app://') !== 0) {
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-  }
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  showAlert(copyNote + ' Paste it on the page, then solve the captcha.', copied ? 's' : 'w');
 }
 
 function _stockYMD(d) {
@@ -1071,34 +846,17 @@ function buildAvailableRows(data, headers) {
   const blank = '<td></td>';
   const searching = _stockSearchActive;
   // Action column exists only for admins. Every collapsed/group row leaves it
-  // blank; only a real unit (a leaf row) gets Check / Add date / Sell buttons.
+  // blank; only a real unit (a leaf row) gets the four buttons.
   const actBlank = _stockCanEdit ? '<td class="st-action-cell"></td>' : '';
   const actCell = r => {
     if (!_stockCanEdit) return '';
     const idx = _stockRowMap.has(r) ? _stockRowMap.get(r) : -1;
     const hasDate = aIdx >= 0 && _stockHasActivationDate(r[aIdx]);
-    const brand = bIdx >= 0 && r[bIdx] != null ? String(r[bIdx]).trim() : '';
-    const url = _stockActivationUrl(brand);
-    const href = _stockActivationHref(url);
-    // href is '' in copy-only mode (the default inside the installed app): the
-    // row then gets a <button>, so Check copies the IMEI and nothing navigates
-    // over the app. An intent:// href must not carry target="_blank", or the
-    // PWA opens a throwaway window first. Every other href is a plain URL where
-    // target="_blank" means a real tab.
-    const isIntent = href.indexOf('intent://') === 0;
-    const linkAttrs = isIntent
-      ? ' href="' + _esc(href) + '"'
-      : ' href="' + _esc(href) + '" target="_blank" rel="noopener noreferrer"';
-    const check = (url && href)
-      ? '<a class="btn btn-sm"' + linkAttrs
-        + ' title="Copy IMEI_1 and open ' + _esc(brand) + '\'s activation page"'
-        + ' onclick="copyStockActivationImei(' + idx + ')">Check</a>'
-      : '<button class="btn btn-sm" title="' + (url
-          ? 'Copy IMEI_1 (copy-only mode: paste it in the brand page)'
-          : 'Copy IMEI_1 and look up this brand\'s activation page') + '"'
-        + ' onclick="openStockActivationCheck(' + idx + ')">Check</button>';
     return '<td class="st-action-cell"><div class="st-action-stack">'
-      + check
+      + '<button class="btn btn-sm" title="Copy this row\'s IMEI_1"'
+      + ' onclick="copyStockImei(' + idx + ')">Copy IMEI_1</button>'
+      + '<button class="btn btn-sm" title="Copy the brand\'s activation page URL"'
+      + ' onclick="copyStockBrandUrl(' + idx + ')">Copy brand URL</button>'
       + '<button class="btn btn-sm" title="' + (hasDate ? 'Edit' : 'Add') + ' the activation date"'
       + ' onclick="openStockActivationDateModal(' + idx + ')">' + (hasDate ? 'Edit date' : 'Add date') + '</button>'
       + '<button class="btn btn-sm" onclick="openStockSellModal(' + idx + ')">Sell</button>'
