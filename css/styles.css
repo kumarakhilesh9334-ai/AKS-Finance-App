@@ -324,6 +324,16 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
   vertical-align: top;
 }
 
+/* The trailing columns (IMEI_1, IMEI_2, Activation Date, Cost Price, Action)
+   had only the thin row divider, so they looked detached from the boxed group
+   cells. Mirror the group border on every cell and header to give the whole
+   table continuous horizontal and vertical rules. */
+.emi-table.stock-avail-table th,
+.emi-table.stock-avail-table td {
+  border: 1px solid #c9c5e6;
+  background: #faf9ff;
+}
+
 /* Sold stock table: keep a comfortable width and scroll horizontally
    so the far-right totals (Kunal Telecom / AKS Share) are fully reachable */
 .emi-table.stock-table { width: 100%; min-width: 900px; }
