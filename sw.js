@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aks-finance-v25';
+const CACHE_NAME = 'aks-finance-v29';
 const PRECACHE = ['/'];
 
 self.addEventListener('install', e => {

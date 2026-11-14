@@ -290,10 +290,39 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 .st-month-cell:hover { color: #534AB7; }
 .st-chev { font-size: 9px; color: #888; margin-right: 2px; }
 
-/* Available pill: Device and Model hold real product names, so give those two
-   columns room instead of letting the table squeeze them into a sliver. */
-.stock-wide-device { min-width: 130px; }
-.stock-wide-model  { min-width: 200px; }
+/* Available pill: keep Device / Brand / Model compact and let long names wrap,
+   so the IMEI, date and cost columns keep usable width on a tablet. */
+.stock-avail-table th.stock-wide-device { width: 90px; }
+.stock-avail-table th.stock-wide-brand  { width: 70px; }
+.stock-avail-table th.stock-wide-model  { width: 130px; }
+.stock-avail-table th.stock-wide-device,
+.stock-avail-table th.stock-wide-brand,
+.stock-avail-table th.stock-wide-model,
+.stock-avail-table .st-dev-cell,
+.stock-avail-table .st-brand-cell,
+.stock-avail-table .st-model-cell { white-space: normal; overflow-wrap: break-word; }
+
+/* Remaining Available columns — Specs, IMEI_1, IMEI_2, Activation Date,
+   Cost Price. They must stay on one line, so trim their side padding and let
+   auto layout shrink each one to exactly the text it contains. */
+.stock-avail-table th.stock-compact { width: 1%; font-size: 11px; }
+.stock-avail-table td.stock-compact {
+  padding-left: 2px;
+  padding-right: 2px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* Each merged group cell is boxed, so a border always encloses exactly one
+   device, brand, model or spec group. */
+.stock-avail-table tbody td.st-dev-cell,
+.stock-avail-table tbody td.st-brand-cell,
+.stock-avail-table tbody td.st-model-cell,
+.stock-avail-table tbody td.st-spec-cell {
+  border: 1px solid #c9c5e6;
+  background: #faf9ff;
+  vertical-align: top;
+}
 
 /* Sold stock table: keep a comfortable width and scroll horizontally
    so the far-right totals (Kunal Telecom / AKS Share) are fully reachable */
@@ -316,9 +345,12 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 }
 
 /* An Available unit whose activation date is filled is almost always an
-   unrecorded sale. Tint the whole row so it stands out in the tree. */
-.st-activation-row > td { background: #FFF4D6; }
-.st-activation-row > td:first-child { box-shadow: inset 3px 0 0 #E0A100; }
+   unrecorded sale. Tint only the data columns — IMEI_1 through Cost Price —
+   so the Device / Brand / Model / Specs group boxes keep their plain
+   background and their borders read cleanly. */
+.st-activation-row > td.st-data-cell { background: #FFF4D6; }
+/* The amber left accent marks where the highlight begins, i.e. IMEI_1. */
+.st-activation-row > td.st-imei-cell { box-shadow: inset 3px 0 0 #E0A100; }
 
 /* Floating "+" button — stage 1 order entry (admin only). Sits above the
    mobile bottom nav; hidden by default and shown by renderStock(). */

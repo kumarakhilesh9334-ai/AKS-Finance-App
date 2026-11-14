@@ -824,10 +824,11 @@ function toggleStockAllDevices() {
   renderStock();
 }
 
-function _toggleCell(label, cls, onclickExpr, collapsed, count) {
+function _toggleCell(label, cls, onclickExpr, collapsed, count, span) {
   const chev = collapsed ? '▶' : '▼';
   const suffix = (count === undefined || count === null) ? '' : ' (' + count + ')';
-  return '<td class="' + cls + '" onclick="' + onclickExpr + '">'
+  const spanAttr = span > 1 ? ' rowspan="' + span + '"' : '';
+  return '<td' + spanAttr + ' class="' + cls + '" onclick="' + onclickExpr + '">'
     + '<span class="st-chev">' + chev + '</span> ' + _esc(String(label) + suffix) + '</td>';
 }
 
@@ -905,74 +906,108 @@ function buildAvailableRows(data, headers) {
     });
   }));
 
-  const devCell   = (d, collapsed, n) => _toggleCell(d, 'st-dev-cell',
-    "toggleStockDevice('" + _jsStr(d) + "')", collapsed, n);
-  const brandCell = (b, d, collapsed, n) => _toggleCell(b, 'st-brand-cell',
-    "toggleStockBrand('" + _jsStr(d) + "','" + _jsStr(b) + "')", collapsed, n);
-  const modelCell = (m, d, b, collapsed, n) => _toggleCell(m, 'st-model-cell',
-    "toggleStockModel('" + _jsStr(d) + "','" + _jsStr(b) + "','" + _jsStr(m) + "')", collapsed, n);
-  const specCell  = (s, d, b, m, collapsed, n) => _toggleCell(s, 'st-spec-cell',
-    "toggleStockSpec('" + _jsStr(d) + "','" + _jsStr(b) + "','" + _jsStr(m) + "','" + _jsStr(s) + "')", collapsed, n);
+  // How many rows each group will actually emit. A collapsed group emits one
+  // row; an expanded one emits the sum of its children. Search force-expands
+  // every group, so the collapse flags are ignored in that mode.
+  const rowsOfSpec = (spG, sKey) =>
+    (!searching && _stockCollapsedSpec[sKey]) ? 1 : spG.rows.length;
+  const rowsOfModel = (mKey, moG) =>
+    (!searching && _stockCollapsedMod[mKey]) ? 1
+      : moG.specs.reduce((n, spG) => n + rowsOfSpec(spG, mKey + '||' + spG.spec), 0);
+  const rowsOfBrand = (bKey, brG) =>
+    (!searching && _stockCollapsedB[bKey]) ? 1
+      : brG.models.reduce((n, moG) => n + rowsOfModel(bKey + '||' + moG.model, moG), 0);
+  const rowsOfDev = devG =>
+    (!searching && _stockCollapsedD[devG.dev]) ? 1
+      : devG.brands.reduce((n, brG) => n + rowsOfBrand(devG.dev + '||' + brG.brand, brG), 0);
 
   const html = [];
   devices.forEach(devG => {
     const d = devG.dev;
     const devN = count(devG);
+    const devSpan = rowsOfDev(devG);
+    // One cell per group, carrying its rowspan so the border encloses exactly
+    // the rows that belong to that device / brand / model / spec.
+    let devDone = false;
+    const takeDev = collapsed => {
+      if (devDone) return '';
+      devDone = true;
+      return _toggleCell(d, 'st-dev-cell',
+        "toggleStockDevice('" + _jsStr(d) + "')", collapsed, devN, devSpan);
+    };
+
     if (!searching && _stockCollapsedD[d]) {
-      html.push('<tr>' + devCell(d, true, devN) + blank + blank + blank + blank + blank + blank + '<td>'
+      html.push('<tr class="st-group-row">' + takeDev(true)
+        + blank + blank + blank + blank + blank + blank + '<td>'
         + _stockAmt(_sumCost(allRows(devG), cIdx)) + '</td>' + actBlank + '</tr>');
       return;
     }
-    // Each level emits its own cell exactly once — on the first row it shows.
-    let devDone = false;
-    const takeDev = () => { if (devDone) return blank; devDone = true; return devCell(d, false, devN); };
 
     devG.brands.forEach(brG => {
       const b = brG.brand, bKey = d + '||' + b, bN = count(brG);
+      const brSpan = rowsOfBrand(bKey, brG);
+      let brandDone = false;
+      const takeBrand = collapsed => {
+        if (brandDone) return '';
+        brandDone = true;
+        return _toggleCell(b, 'st-brand-cell',
+          "toggleStockBrand('" + _jsStr(d) + "','" + _jsStr(b) + "')", collapsed, bN, brSpan);
+      };
+
       if (!searching && _stockCollapsedB[bKey]) {
-        html.push('<tr>' + takeDev() + brandCell(b, d, true, bN)
+        html.push('<tr class="st-group-row">' + takeDev(false) + takeBrand(true)
           + blank + blank + blank + blank + blank + '<td>' + _stockAmt(_sumCost(allRows(brG), cIdx)) + '</td>' + actBlank + '</tr>');
-        devDone = true;
         return;
       }
-      let brandDone = false;
-      const takeBrand = () => { if (brandDone) return blank; brandDone = true; return brandCell(b, d, false, bN); };
 
       brG.models.forEach(moG => {
         const m = moG.model, mKey = bKey + '||' + m, mN = count(moG);
+        const moSpan = rowsOfModel(mKey, moG);
+        let modelDone = false;
+        const takeModel = collapsed => {
+          if (modelDone) return '';
+          modelDone = true;
+          return _toggleCell(m, 'st-model-cell',
+            "toggleStockModel('" + _jsStr(d) + "','" + _jsStr(b) + "','" + _jsStr(m) + "')", collapsed, mN, moSpan);
+        };
+
         if (!searching && _stockCollapsedMod[mKey]) {
-          html.push('<tr>' + takeDev() + takeBrand() + modelCell(m, d, b, true, mN)
+          html.push('<tr class="st-group-row">' + takeDev(false) + takeBrand(false) + takeModel(true)
             + blank + blank + blank + blank + '<td>' + _stockAmt(_sumCost(allRows(moG), cIdx)) + '</td>' + actBlank + '</tr>');
-          devDone = brandDone = true;
           return;
         }
-        let modelDone = false;
-        const takeModel = () => { if (modelDone) return blank; modelDone = true; return modelCell(m, d, b, false, mN); };
 
         moG.specs.forEach(spG => {
           const s = spG.spec, sKey = mKey + '||' + s, sN = spG.rows.length;
-          const lead = takeDev() + takeBrand() + takeModel();
+          const spSpan = rowsOfSpec(spG, sKey);
+          let specDone = false;
+          const takeSpec = collapsed => {
+            if (specDone) return '';
+            specDone = true;
+            return _toggleCell(s, 'st-spec-cell stock-compact',
+              "toggleStockSpec('" + _jsStr(d) + "','" + _jsStr(b) + "','" + _jsStr(m) + "','" + _jsStr(s) + "')", collapsed, sN, spSpan);
+          };
+
           if (!searching && _stockCollapsedSpec[sKey]) {
-            html.push('<tr>' + lead + specCell(s, d, b, m, true, sN)
+            html.push('<tr class="st-group-row">' + takeDev(false) + takeBrand(false) + takeModel(false) + takeSpec(true)
               + blank + blank + blank + '<td>' + _stockAmt(_sumCost(spG.rows, cIdx)) + '</td>' + actBlank + '</tr>');
-            devDone = brandDone = modelDone = true;
             return;
           }
-          const specHtml = specCell(s, d, b, m, false, sN);
-          // The group cells belong on the FIRST row of the group only; every
-          // row after it gets blanks, or the name repeats down the column.
-          const leadFirst = lead + specHtml;
-          const leadRest = blank + blank + blank + blank;
+
           const leaf = spG.rows.map((r, ri) => {
             const actDate = aIdx >= 0 && _stockHasActivationDate(r[aIdx]);
-            return '<tr' + (actDate ? ' class="st-activation-row"' : '') + '>' + (ri === 0 ? leadFirst : leadRest)
-              + '<td>' + _stockCell(r[iIdx], 'IMEI_1') + '</td>'
-              + '<td>' + _stockCell(r[i2Idx], 'IMEI_2') + '</td>'
-              + '<td>' + _stockCell(r[aIdx], 'Activation Date') + '</td>'
-              + '<td>' + _stockCell(r[cIdx], 'Cost Price') + '</td>'
+            // The group cells are already in the DOM with their rowspan on the
+            // group's first row, so later rows simply omit those columns.
+            const lead = ri === 0
+              ? takeDev(false) + takeBrand(false) + takeModel(false) + takeSpec(false)
+              : '';
+            return '<tr' + (actDate ? ' class="st-activation-row"' : '') + '>' + lead
+              + '<td class="stock-compact st-data-cell st-imei-cell">' + _stockCell(r[iIdx], 'IMEI_1') + '</td>'
+              + '<td class="stock-compact st-data-cell">' + _stockCell(r[i2Idx], 'IMEI_2') + '</td>'
+              + '<td class="stock-compact st-data-cell">' + _stockCell(r[aIdx], 'Activation Date') + '</td>'
+              + '<td class="stock-compact st-data-cell">' + _stockCell(r[cIdx], 'Cost Price') + '</td>'
               + actCell(r) + '</tr>';
           });
-          devDone = brandDone = modelDone = true;
           html.push(leaf.join(''));
         });
       });
@@ -1248,11 +1283,16 @@ function renderStock() {
 
   el.innerHTML = `<div style="font-size:12px;color:#888;margin-bottom:0.5rem">${data.length} of ${rows.length} rows${collapseBtn}</div>
     <div style="overflow-x:auto;border:0.5px solid #eee;border-radius:8px">
-      <table class="emi-table${_stockFilter === 'sold' ? ' stock-table' : ''}">
+      <table class="emi-table${_stockFilter === 'sold' ? ' stock-table' : ''}${_stockFilter === 'available' ? ' stock-avail-table' : ''}">
         <thead><tr>${displayCols.map(h => {
-          const wide = (_stockFilter === 'available' && (h === 'Device' || h === 'Model'))
-            ? ' class="stock-wide-' + (h === 'Device' ? 'device' : 'model') + '"' : '';
-          return '<th' + wide + '>' + _esc(h) + '</th>';
+          let cls = '';
+          if (_stockFilter === 'available') {
+            if (h === 'Device' || h === 'Brand' || h === 'Model')
+              cls = 'stock-wide-' + (h === 'Device' ? 'device' : h === 'Brand' ? 'brand' : 'model');
+            else if (h === 'Specs' || h === 'IMEI_1' || h === 'IMEI_2' || h === 'Activation Date' || h === 'Cost Price')
+              cls = 'stock-compact';
+          }
+          return '<th' + (cls ? ' class="' + cls + '"' : '') + '>' + _esc(h) + '</th>';
         }).join('')}</tr></thead>
         <tbody>${tbody}</tbody>
       </table>

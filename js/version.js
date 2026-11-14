@@ -6,7 +6,7 @@
 //
 // Do not confuse it with the other two counters, which are cache busters:
 //   index.html  <script src="js/stock.js?v=28">  per-file browser cache key
-//   sw.js       CACHE_NAME = 'aks-finance-v25'    service-worker cache bucket
+//   sw.js       CACHE_NAME = 'aks-finance-v29'    service-worker cache bucket
 // They change more often than APP_VERSION and are listed in the dialog below so
 // a device can prove which files it actually loaded.
 

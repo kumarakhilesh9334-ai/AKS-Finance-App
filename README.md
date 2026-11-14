@@ -203,8 +203,8 @@ There are three separate numbers, and only the first one is the app version:
 | Where | Example | Meaning | How it changes |
 |---|---|---|---|
 | `APP_VERSION` in `js/version.js` | `1.4.0` | The version the header shows | Bumped by hand for a release |
-| `?v=N` on `<script>` / `<link>` tags | `js/stock.js?v=28` | Browser cache key for one file | Incremented whenever that file changes |
-| `CACHE_NAME` in `sw.js` | `aks-finance-v25` | Service-worker cache bucket | Incremented on each deploy that must discard old cached files |
+| `?v=N` on `<script>` / `<link>` tags | `js/stock.js?v=31` | Browser cache key for one file | Incremented whenever that file changes |
+| `CACHE_NAME` in `sw.js` | `aks-finance-v29` | Service-worker cache bucket | Incremented on each deploy that must discard old cached files |
 
 To release a change: edit the file, bump its `?v=`, bump `CACHE_NAME`, and bump
 `APP_VERSION` if the user-visible behaviour changed. The version dialog reads the
