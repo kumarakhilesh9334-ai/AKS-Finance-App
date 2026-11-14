@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AKS Finance</title>
+<link rel="icon" href="LOGO.jpeg" sizes="any">
+<link rel="apple-touch-icon" href="LOGO.jpeg">
+<script>
+  // A manifest is only fetchable over http(s). When the app is opened straight
+  // from disk (file://) the browser blocks the request and logs a CORS error,
+  // so only emit the link when it can actually be used.
+  if (location.protocol === 'http:' || location.protocol === 'https:')
+    document.write('<link rel="manifest" href="manifest.json">');
+</script>
+<link rel="stylesheet" href="css/styles.css?v=23">
+<style>
+  #install-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:99999;align-items:center;justify-content:center}
+  #install-overlay.show{display:flex}
+  #install-banner{background:#fff;border-radius:16px;padding:24px;width:90%;max-width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.25);text-align:center;animation:ibSlideUp .3s ease-out}
+  @keyframes ibSlideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+  #install-banner .ib-icon{width:56px;height:56px;border-radius:14px;background:#534AB7;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:24px;color:#fff;font-weight:600}
+  #install-banner h3{font-size:16px;font-weight:600;margin-bottom:4px}
+  #install-banner .ib-desc{font-size:13px;color:#666;margin-bottom:16px;line-height:1.4}
+  #install-banner .ib-btns{display:flex;gap:10px;justify-content:center}
+  #install-banner .ib-btns button{flex:1;padding:10px 0;border-radius:10px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer;border:none;transition:background .15s}
+  #install-banner .ib-install{background:#534AB7;color:#fff}
+  #install-banner .ib-install:hover{background:#3C3489}
+  #install-banner .ib-dismiss{background:#f0f0f0;color:#555}
+  #install-banner .ib-dismiss:hover{background:#e0e0e0}
+  #install-banner .ib-sub{font-size:11px;color:#aaa;margin-top:12px}
+</style>
+</head>
+<body>
+<script>document.documentElement.className='s'</script>
+<style>.s #auth-screen{display:none!important}.s #app{display:block!important}</style>
+<script>(function(){try{if(!localStorage.getItem('aks_cu')&&!localStorage.getItem('aks_token'))document.documentElement.className=''}catch(e){document.documentElement.className=''}})()</script>
+
+<!-- ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ AUTH SCREEN ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <img src="LOGO.jpeg" alt="AKS Finance" style="width:100%;max-width:200px;display:block;margin:0 auto 1rem;border-radius:12px">
+    <p style="font-size:13px;color:#888;margin-bottom:1.25rem;text-align:center">Sign in to continue</p>
+    <div style="margin-bottom:0.75rem"><label>Username</label><input id="l-user" type="text" placeholder="Username" autocomplete="off"></div>
+    <div style="margin-bottom:1rem"><label>PIN</label><input id="l-pin" type="password" placeholder="PIN" maxlength="6"></div>
+    <div id="l-err" class="alert al-e" style="display:none"></div>
+    <button class="btn btn-primary" style="width:100%" onclick="doLogin()">Sign in</button>
+
+  </div>
+</div>
+
+<!-- ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ APP SHELL ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ -->
+<div id="app" style="display:none">
+  <div class="header">
+    <img src="LOGO.jpeg" alt="" style="height:28px;width:auto;border-radius:6px;margin-right:8px">
+    <span class="header-title">AKS Finance</span>
+    <div class="header-right">
+      <span id="hdr-name"></span>
+      <span id="hdr-badge"></span>
+      <span id="app-version" class="app-version" onclick="showAppVersion()" title="App version">vÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â</span>
+      <button class="btn btn-sm" onclick="doLogout()">Sign out</button>
+    </div>
+  </div>
+  <div class="nav" id="nav"></div>
+  <!-- "Data as of" ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â how old the numbers on screen are. Display only: it is
+       not a button and carries no click handler. An approvals user refreshes
+       the data by reloading the page. Rendered by snapshot.js -->
+  <div id="data-asof" class="data-asof" style="display:none"></div>
+  <!-- Mobile bottom nav (built by buildNav, shown on mobile only) -->
+  <div id="bottom-nav" style="display:none"></div>
+  <div class="main">
+    <div id="alert-box"></div>
+
+    <!-- ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ NEW LOAN ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ -->
+    <div class="page" id="page-new-loan">
+      <div style="font-size:15px;font-weight:500;margin-bottom:1rem">New loan application</div>
+      <div class="new-loan-layout">
+
+        <!-- LEFT: form -->
+        <div class="card" style="margin-bottom:0">
+          <div class="fg fg-2">
+            <div class="form-section">Customer details</div>
+
+            <!-- Aadhaar/PAN with autocomplete ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â FIRST field -->
+            <div id="idnum-wrap" style="position:relative">
+              <label>Aadhaar / PAN <span style="color:#A32D2D">*</span> <span style="font-size:11px;color:#888">ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â type to search existing customers</span></label>
+              <input type="text" id="f-idnum" placeholder="Aadhaar or PAN" autocomplete="off" oninput="onIdNumInput();genLoanId()" required>
+              <div id="idnum-dropdown" class="idnum-dd" style="display:none"></div>
+              <div id="customer-loans-panel" class="idnum-dd" style="display:none"></div>
+            </div>
+            <div><label>Bill date <span style="color:#A32D2D">*</span></label><input type="date" id="f-billdate" required></div>
+            <div><label>Customer name <span style="color:#A32D2D">*</span></label><input type="text" id="f-cname" placeholder="Full name" oninput="genLoanId()" required></div>
+            <div><label>YOB</label><input type="text" id="f-yob" placeholder="Year of Birth"></div>
+            <div class="fg fg-3" style="grid-column:1/-1">
+              <div><label>Landlord</label><input type="text" id="f-landlord"></div>
+              <div><label>Husband</label><input type="text" id="f-husband"></div>
+              <div><label>Father</label><input type="text" id="f-father"></div>
+            </div>
+            <div><label>Colony</label><input type="text" id="f-colony"></div>
+            <div><label>Area</label><input type="text" id="f-area"></div>
+            <div><label>District</label><input type="text" id="f-district"></div>
+            <div><label>Pincode</label><input type="text" id="f-pincode"></div>
+            <div id="guarantor-wrap" style="position:relative">
+              <label>Guarantor name <span style="font-size:11px;color:#888">ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â type to search existing customers</span></label>
+              <input type="text" id="f-guarantor-name" placeholder="Search by customer name" autocomplete="off" oninput="onGuarantorInput()">
+              <div id="guarantor-dropdown" class="idnum-dd" style="display:none"></div>
+            </div>
+            <div><label>Alternate no / Comments</label><input type="text" id="f-guar" placeholder="Alternate number or any comments"></div>
+
+            <div class="form-section">Device details</div>
+            <div><label>Mobile number <span style="color:#A32D2D">*</span></label><input type="text" id="f-phone" placeholder="10-digit" maxlength="10" required></div>
+            <div><label>Mobile model <span style="color:#A32D2D">*</span></label><input type="text" id="f-model" placeholder="e.g. Samsung Galaxy A55" required></div>
+            <div><label>Device type <span style="color:#A32D2D">*</span></label>
+              <select id="f-dtype" onchange="onDeviceTypeChange()" required>
+                <option>Mobile</option><option>TV</option><option>Sound Box</option><option>Fridge</option><option>AC</option><option>Washing Machine</option><option>Air Cooler</option><option>Induction</option><option>Mixer</option><option>Gas Stove</option><option>Inverter Battery</option><option>Inverter</option><option>Inverter &amp; Battery</option><option>Loan</option><option>Fan</option><option>Other</option>
+              </select>
+            </div>
+            <div><label>Device amount (ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹) <span style="color:#A32D2D">*</span></label><input type="number" id="f-price" placeholder="0" oninput="calcLoan()" required></div>
+            <div><label>Down payment (ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹) <span style="color:#A32D2D">*</span></label><input type="number" id="f-down" placeholder="0" oninput="calcLoan()" required></div>
+            <div><label>Processing fee (ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹) <span style="color:#A32D2D">*</span></label><input type="number" id="f-pfee" oninput="calcLoan()" required></div>
+            <div id="applock-wrap" style="display:none"><label>App lock charge (ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹)</label><input type="number" id="f-applock" oninput="calcLoan()"></div>
+            <div id="lockapp-wrap" style="display:none">
+              <label>Locking App</label>
+              <select id="f-lockapp" onchange="onLockAppChange()">
+                <option>101 Locker</option><option>YOGIC Locker</option><option>ZTE Locker</option><option>Other</option><option>None</option>
+              </select>
+            </div>
+            <div id="lockapp-other-wrap" style="display:none">
+              <label>Other Locker name <span style="color:#A32D2D">*</span></label>
+              <input type="text" id="f-lockapp-other" placeholder="Enter locker name">
+            </div>
+            <div id="lockappcode-wrap" style="display:none">
+              <label>Lock App Code</label>
+              <input type="text" id="f-lockappcode" placeholder="e.g. ABC1234">
+            </div>
+
+            <div class="form-section">Loan details</div>
+            <div>
+              <label>EMI duration (months) <span style="color:#A32D2D">*</span></label>
+              <input type="number" id="f-tenure" placeholder="e.g. 6" oninput="calcLoan()" required>
+            </div>
+            <div>
+              <label>Monthly EMI (ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹) <span style="color:#A32D2D">*</span></label>
+              <input type="number" id="f-monthly-emi" placeholder="e.g. 2500" oninput="calcLoan()" required>
+            </div>
+            <div>
+              <label>Interest (ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹) <span style="font-size:11px;color:#aaa">ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â auto-computed</span></label>
+              <input type="number" id="f-int" placeholder="auto" readonly style="background:#f5f5f3;color:#999;cursor:not-allowed">
+            </div>
+            <div>
+              <label>EMI start date <span style="color:#A32D2D">*</span> <span style="font-size:11px;color:#888">(5, 10, 15, 20, 25 only)</span></label>
+              <input type="date" id="f-emistart" onchange="onEmiStartChange()" required>
+              <div id="emistart-err" style="display:none;font-size:11px;color:#BA7517;margin-top:3px"></div>
+            </div>
+            <div><label>AK share (%) <span style="color:#A32D2D">*</span></label>
+              <select id="f-akshare" onchange="calcLoan()" required>
+                <option value="0">0% (AKS only)</option>
+                <option value="50">50%</option>
+                <option value="100">100% (AK only)</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+            <div id="ak-custom-wrap" style="display:none"><label>AK custom share (%)</label><input type="number" id="f-akcustom" placeholder="0-100" min="0" max="100" oninput="calcLoan()"></div>
+          </div>
+
+          <!-- Summary box -->
+          <div class="calc-box" id="calc-preview" style="display:none;margin-top:0.75rem">
+            <div style="font-size:11px;font-weight:500;color:#534AB7;margin-bottom:6px">Summary</div>
+            <div class="calc-row"><span>Finance amount</span><span id="cp-finance">ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â</span></div>
+            <div class="calc-row"><span>Total EMI amount</span><span id="cp-total">ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â</span></div>
+            <div class="calc-row total"><span>Monthly EMI</span><span id="cp-emi">ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â</span></div>
+          </div>
+
+          <div class="submit-row">
+            <button class="btn" onclick="resetLoanForm()">Clear</button>
+            <button class="btn btn-primary" onclick="submitLoan()">Submit for approval</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ ALL LOANS (merged overview) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ -->
+    <div class="page" id="page-all-loans">
+      <div class="ov-header">
+        <div class="ov-row1">
+          <button class="pill-toggle" id="ov-allcards-toggle" onclick="toggleOverviewAllCards()" style="font-size:11px;padding:4px 10px;border-radius:12px;border:1px solid #534AB7;background:#534AB7;color:#fff;cursor:pointer;white-space:nowrap">All</button>
+          <button class="pill-toggle" id="ov-revised-toggle" onclick="toggleOverviewRevised()" style="font-size:11px;padding:4px 10px;border-radius:12px;border:1px solid #D4A017;background:none;color:#D4A017;cursor:pointer;white-space:nowrap">Revised Date</button>
+          <button class="pill-toggle" id="ov-partials-toggle" onclick="toggleOverviewPartials()" style="font-size:11px;padding:4px 10px;border-radius:12px;border:1px solid #A32D2D;background:none;color:#A32D2D;cursor:pointer;white-space:nowrap">Partial Payment</button>
+          <button class="pill-toggle" id="ov-overdue-toggle" onclick="toggleOverviewOverdue()" style="font-size:11px;padding:4px 10px;border-radius:12px;border:1px solid #c62828;background:none;color:#c62828;cursor:pointer;white-space:nowrap">Overdues</button>
+          <button class="pill-toggle" id="ov-newsim-toggle" onclick="toggleOverviewNewSim()" style="font-size:11px;padding:4px 10px;border-radius:12px;border:1px solid #7B1FA2;background:none;color:#7B1FA2;cursor:pointer;white-space:nowrap">New SIM</button>
+          <button class="pill-toggle" id="ov-loans-toggle" onclick="toggleOverviewLoans()" style="font-size:11px;padding:4px 10px;border-radius:12px;border:1px solid #0F6E56;background:none;color:#0F6E56;cursor:pointer;white-space:nowrap">Loans</button>
+        </div>
+      </div>
+      <div class="landscape-wrap ov-wrap">
+        <div class="ls-left">
+      <div class="ov-sticky">
+        <div class="ov-row2">
+          <select id="ov-search-scope" class="ov-scope-select" onchange="onSearchScopeChange()" title="Search in">
+            <option value="customer" selected>Customer Detail</option>
+            <option value="all">All Detail</option>
+          </select>
+          <div class="emi-search-wrap" style="flex:1;margin-bottom:0">
+            <span class="emi-search-icon">ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â</span>
+            <input type="text" id="ov-search" placeholder="Search Loan ID or customerÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦" oninput="onSearchInput(this.value)">
+          </div>
+          <button class="btn btn-clear" onclick="clearOverviewSearch()" title="Clear search">Clear</button>
+        </div>
+        <div class="mob-five-tabs" id="ov-tabs">
+            <button class="mob-five-tab active" id="mob-tab-ov-all"       onclick="mobSwitchOvCol('all')">ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Âµ All</button>
+            <button class="mob-five-tab"        id="mob-tab-ov-overdue"   onclick="mobSwitchOvCol('overdue')">ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â´ Overdue</button>
+            <button class="mob-five-tab"        id="mob-tab-ov-upcoming"  onclick="mobSwitchOvCol('upcoming')">ÃƒÂ°Ã…Â¸Ã…Â¸Ã‚Â¢ Upcoming</button>
+            <button class="mob-five-tab"        id="mob-tab-ov-defaulted" onclick="mobSwitchOvCol('defaulted')">ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Defaulted</button>
+            <button class="mob-five-tab"        id="mob-tab-ov-closed"    onclick="mobSwitchOvCol('closed')">ÃƒÂ¢Ã…Â¡Ã‚Âª Closed</button>
+          </div>
+        </div>
+        <div class="emi-five-col">
+            <div class="emi-col-wrap mob-active" id="ov-col-all">
+              <div class="emi-col-hd" style="background:#534AB7;color:#fff"><span>ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Âµ All</span><span class="emi-section-count" id="ov-all-count">0</span></div>
+              <div class="emi-col-body" id="ov-all-list"><div class="emi-col-empty">LoadingÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦</div></div>
+            </div>
+            <div class="emi-col-wrap" id="ov-col-overdue">
+              <div class="emi-col-hd overdue-hd"><span>ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â´ Overdue</span><span class="emi-section-count" id="ov-overdue-count">0</span></div>
+              <div class="emi-col-body" id="ov-overdue-list"><div class="emi-col-empty">LoadingÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦</div></div>
+            </div>
+            <div class="emi-col-wrap" id="ov-col-upcoming">
+              <div class="emi-col-hd upcoming-hd"><span>ÃƒÂ°Ã…Â¸Ã…Â¸Ã‚Â¢ Upcoming</span><span class="emi-section-count" id="ov-upcoming-count">0</span></div>
+              <div class="emi-col-body" id="ov-upcoming-list"><div class="emi-col-empty">LoadingÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦</div></div>
+            </div>
+            <div class="emi-col-wrap" id="ov-col-defaulted">
+              <div class="emi-col-hd defaulted-hd"><span>ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Defaulted</span><span class="emi-section-count" id="ov-defaulted-count">0</span></div>
+              <div class="emi-col-body" id="ov-defaulted-list"><div class="emi-col-empty">LoadingÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦</div></div>
+            </div>
+            <div class="emi-col-wrap" id="ov-col-closed">
+              <div class="emi-col-hd closed-hd"><span>ÃƒÂ¢Ã…Â¡Ã‚Âª Closed</span><span class="emi-section-count" id="ov-closed-count">0</span></div>
+              <div class="emi-col-body" id="ov-closed-list"><div class="emi-col-empty">LoadingÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦</div></div>
+            </div>
+          </div>
+          <div id="ov-revised-view" style="display:none;margin-top:0.75rem"></div>
+          <div id="ov-partials-view" style="display:none;margin-top:0.75rem"></div>
+          <div id="ov-overdue-view" style="display:none;margin-top:0.75rem"></div>
+          <div id="ov-newsim-view" style="display:none;margin-top:0.75rem"></div>
+          <div id="ov-loans-view" style="display:none;margin-top:0.75rem"></div>
+        </div>
+        <div class="ls-right">
+          <div class="card" id="ov-detail" style="display:none">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
+              <div>
+                <div style="font-size:14px;font-weight:600;color:#534AB7" id="ov-detail-loanid"></div>
+                <div style="font-size:12px;color:#888;margin-top:2px" id="ov-detail-sub"></div>
+              </div>
+              <div id="ov-detail-collect" style="text-align:center;display:none">
+                <div style="font-size:14px;font-weight:600;color:#534AB7" id="ov-detail-collect-main"></div>
+                <div style="font-size:12px;color:#888;margin-top:2px" id="ov-detail-collect-sub"></div>
+              </div>
+              <button class="btn btn-sm" onclick="closeOverviewDetail()">ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¢ Close</button>
+            </div>
+            <div class="divider" style="margin-bottom:0.75rem"></div>
+            <div id="ov-emi-slots-wrap" style="margin-bottom:0.75rem">
+              <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:6px">EMI history</div>
+              <div id="ov-emi-slots"></div>
+            </div>
+            <div id="ov-partial-banner"></div>
+            <div id="ov-recovery-banner"></div>
+            <div id="ov-fine-extra" style="margin:6px 0;font-size:12px"></div>
+            <div id="ov-revised-stats" style="margin:8px 0;font-size:12px;color:#555"></div>
+            <div style="margin:8px 0;position:relative;min-height:26px" id="ov-revised-btn-wrap">
+              <button class="btn btn-sm" id="ov-lock-remove-btn" style="display:none;background:#A32D2D;color:#fff;border:none;padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer" onclick="toggleLockApp()">Remove Lock App</button>
+              <button class="btn btn-sm" id="ov-revised-date-btn" style="position:absolute;right:0;top:50%;transform:translateY(-50%);background:#399C9C;color:#fff;border:none;padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer" onclick="showRevisedDateForm()">Set Revised Date</button>
+            </div>
+            <div class="divider"></div>
+            <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px" id="ov-next-label"></div>
+            <div id="ov-emi-form-wrap">
+            <div class="fg fg-2">
+              <div><label>Amount received (ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹)</label><input type="number" id="ov-emi-amt" placeholder="0" oninput="checkOverviewEmiDiff()"></div>
+              <div><label>Payment date</label><input type="date" id="ov-emi-date"></div>
+            </div>
+            <div id="ov-emi-recovery-hint" style="display:none;font-size:11px;color:#A32D2D;background:#fdf0ed;border:0.5px solid #e8c8c8;border-radius:6px;padding:5px 8px;margin-bottom:0.6rem"></div>
+            <div class="fg fg-3" style="margin-bottom:0.75rem">
+              <div><label>Received</label>
+                <select id="ov-emi-received">
+                  <option value="true">TRUE</option>
+                  <option value="false">FALSE</option>
+                </select>
+              </div>
+              <div><label>Payment mode</label>
+                <select id="ov-emi-mode"><option>Cash</option><option>UPI</option><option>Bank transfer</option><option>Other</option></select>
+              </div>
+              <div><label>Notes</label>
+                <input type="text" id="ov-emi-notes" placeholder="Any remarks" style="height:28px;padding:4px 8px;border:0.5px solid #ccc;border-radius:6px;font-size:12px;width:100%;box-sizing:border-box">
+              </div>
+            </div>
+            <div id="ov-emi-reason-wrap" style="display:none"><label>Reason for difference <span style="color:#A32D2D">*</span></label>
+              <select id="ov-emi-reason" onchange="checkOverviewEmiReason()">
+                <option value="">ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Select reason ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â</option>
+                <option>Late payment fine included</option><option>Extra EMI received</option>
+                <option>Early loan closing settlement</option><option>Partial payment</option><option>Default Adjustment</option>
+                <option>Multiple EMI Payment</option>
+              </select>
+              <div id="ov-emi-multi-wrap" style="display:none;margin-top:8px">
+                <label>How many EMIs does this amount cover? <span style="color:#A32D2D">*</span></label>
+                <input type="number" id="ov-emi-multi-count" min="2" placeholder="e.g. 3">
+                <div style="font-size:11px;color:#888;margin-top:4px" id="ov-emi-multi-hint"></div>
+              </div>
+            </div>
+            <div class="full" id="ov-emi-diff-warn" style="display:none"><div class="diff-warn" id="ov-emi-diff-msg"></div></div>
+            <div id="ov-emi-revised-next-wrap" style="display:none;margin:0.5rem 0;padding:8px;background:#f5faf8;border:0.5px solid #b8d4cc;border-radius:8px">
+              <label style="font-size:12px;color:#399C9C;font-weight:500">Next EMI Revised Date</label>
+              <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+                <input type="date" id="ov-emi-next-revised-date" style="flex:1">
+                <button class="btn btn-clear" onclick="clearOverviewRevisedDateField()">Clear</button>
+              </div>
+            </div>
+            <div class="submit-row">
+              <button class="btn" onclick="closeOverviewDetail()">Cancel</button>
+              <button id="ov-emi-submit-btn" class="btn btn-primary" onclick="submitOverviewEmi()">Submit for approval</button>
+            </div>
+            </div>
+            <div class="divider" style="display:none"></div>
+            <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px;display:none">Loan Summary</div>
+            <div class="kv" id="ov-detail-kv" style="font-size:12px;display:none"></div>
+            <div class="divider" style="display:none"></div>
+            <div style="font-size:12px;font-weight:500;color:#534AB7;margin-bottom:8px;display:none">Loan Details</div>
+            <div class="kv" id="ov-detail-full" style="font-size:12px;display:none"></div>
+          </div>
+          <div class="ls-placeholder" id="ov-detail-ph">Select a loan to view details</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ APPROVALS (admin) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ -->
+    <div class="page" id="page-approvals">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+        <span style="font-size:15px;font-weight:500">Pending approvals</span>
+      </div>
+      <div class="emi-search-wrap">
+        <span class="emi-search-icon">ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â</span>
+        <input type="text" id="appr-search" placeholder="Search Loan ID or customerÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦" oninput="renderApprovals(this.value)">
+      </div>
+      <!-- Mobile tab switcher -->
+      <div class="mob-two-tabs" id="appr-mob-tabs">
+        <button class="mob-two-tab active" id="mob-tab-loan" onclick="mobSwitchApprCol('loan')">ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã¢â‚¬Â¹ New Loans <span class="emi-section-count" id="mob-appr-loan-count">0</span></button>
+        <button class="mob-two-tab"        id="mob-tab-emi"  onclick="mobSwitchApprCol('emi')">ÃƒÂ°Ã…Â¸Ã¢â‚¬â„¢Ã‚Â° Logged EMIs <span class="emi-section-count" id="mob-appr-emi-count">0</span></button>
+      </div>
+      <div class="approvals-two-col">
+        <!-- New Loans -->
+        <div class="appr-col-wrap" id="appr-col-loan">
+          <div class="appr-col-hd loan-appr-hd">
+            <span>ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã¢â‚¬Â¹ New Loans</span>
+            <span class="appr-hd-right">
+              <span class="emi-section-count" id="appr-loan-count">0</span>
+              <button class="btn btn-sm btn-success appr-approve-all" id="appr-approve-all-loan" onclick="approveAll('loan')" disabled>ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Approve all</button>
+            </span>
+          </div>
+          <div id="approvals-loans-list" class="appr-col-body">
+            <div class="empty" style="padding:1.5rem;color:#aaa;font-size:13px;text-align:center">LoadingÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦</div>
+          </div>
+        </div>
+        <!-- Logged EMIs -->
+        <div class="appr-col-wrap" id="appr-col-emi">
+          <div class="appr-col-hd emi-appr-hd">
+            <span>ÃƒÂ°Ã…Â¸Ã¢â‚¬â„¢Ã‚Â° Logged EMIs</span>
+            <span class="appr-hd-right">
+              <span class="emi-section-count" id="appr-emi-count">0</span>
+              <button class="btn btn-sm btn-success appr-approve-all" id="appr-approve-all-emi" onclick="approveAll('emi')" disabled>ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Approve all</button>
+            </span>
+          </div>
+          <div id="approvals-emis-list" class="appr-col-body">
+            <div class="empty" style="padding:1.5rem;color:#aaa;font-size:13px;text-align:center">LoadingÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ MY SUBMISSIONS ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ -->
+    <div class="page" id="page-my-subs">
+      <div style="font-size:15px;font-weight:500;margin-bottom:1rem">My submissions</div>
+      <div id="my-subs-list"></div>
+    </div>
+
+    <!-- ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ EMI MESSAGES (admin only) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ -->
+    <div class="page" id="page-emi-msgs">
+      <div style="font-size:15px;font-weight:500;margin-bottom:1rem">EMI Messages</div>
+      <div class="card" style="margin-bottom:0.75rem">
+        <div class="fg fg-2">
+          <div><label>From <span id="emsg-from-label" style="font-size:11px;color:#888"></span></label><input type="date" id="emsg-from"></div>
+          <div><label>To</label><input type="date" id="emsg-start"></div>
+        </div>
+        <div class="submit-row" style="margin-top:0.5rem">
+          <button class="btn" onclick="openQrModal()">QR Code</button>
+          <button class="btn btn-primary" style="margin-left:6px" onclick="generateMessages()">Generate</button>
+        </div>
+      </div>
+      <div id="emsg-results"></div>
+      <div id="emsg-mark-wrap" style="display:none;margin-top:0.75rem;text-align:center">
+        <button class="btn btn-primary" onclick="markMessagesDone()" style="padding:12px 32px;font-size:15px;font-weight:600">ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Mark as done</button>
+      </div>
+    </div>
+
+    <!-- ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ STOCK (admin) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ -->
+    <div class="page" id="page-stock">
+      <div style="font-size:15px;font-weight:500;margin-bottom:0.75rem">Stock</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:1rem">
+        <div class="emi-search-wrap" style="flex:1;margin-bottom:0">
+          <span class="emi-search-icon">ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â</span>
+          <input type="text" id="stock-search" placeholder="Search IMEI_1 or IMEI_2ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦" oninput="onStockSearchInput(this.value)">
+        </div>
+        <button class="btn btn-clear" onclick="clearStockSearch()" title="Clear search">Clear</button>
+      </div>
+      <div class="stock-tabs" id="stock-pills">
+          <button class="stock-tab active" data-f="available" onclick="setStockFilter('available')">Available</button>
+          <button class="stock-tab" data-f="costsheet" onclick="setStockFilter('costsheet')">Cost Sheet</button>
+          <button class="stock-tab" data-f="sold" onclick="setStockFilter('sold')">Sold</button>
+        <button class="stock-tab" data-f="undelivered" onclick="setStockFilter('undelivered')">Undelivered</button>
+      </div>
+      <div class="act-toolbar" id="act-toolbar" style="display:none">
+        <button class="btn btn-sm act-open" id="activation-btn" onclick="openActivationModal()">ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ…Â½ Find recent sales</button>
+        <span class="act-toolbar-note">Checks brand activation for units still marked Available</span>
+      </div>
+      <div id="stock-results"></div>
+      <button class="stock-fab" id="stock-fab" onclick="openStockOrderModal()" title="Log new order" aria-label="Log new order">+</button>
+    </div>
+
+    <!-- ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ STOCK: LOG NEW ORDER (stage 1) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ -->
+    <div id="stock-order-modal" class="stock-modal">
+      <div class="stock-modal-card">
+        <div class="stock-modal-hd">
+          <span class="stock-modal-title">Log new order</span>
+          <button class="btn btn-sm" onclick="closeStockOrderModal()">ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¢ Close</button>
+        </div>
+        <div class="fg fg-2">
+          <div><label>Order Date *</label><input type="date" id="so-date"></div>
+          <div><label>Cost Price *</label><input type="number" id="so-cost" min="0" step="1" placeholder="0"></div>
+          <div>
+            <label>Device *</label>
+            <select id="so-device" onchange="onStockSelectChange('so-device')"></select>
+            <div id="so-device-other-wrap" style="display:none;margin-top:6px">
+              <label>Device name *</label><input type="text" id="so-device-other" placeholder="Enter device">
+            </div>
+          </div>
+          <div>
+            <label>Brand *</label>
+            <select id="so-brand" onchange="onStockSelectChange('so-brand')"></select>
+            <div id="so-brand-other-wrap" style="display:none;margin-top:6px">
+              <label>Brand name *</label><input type="text" id="so-brand-other" placeholder="Enter brand">
+            </div>
+          </div>
+          <div>
+            <label>Model *</label>
+            <select id="so-model" onchange="onStockSelectChange('so-model')"></select>
+            <div id="so-model-other-wrap" style="display:none;margin-top:6px">
+              <label>Model name *</label><input type="text" id="so-model-other" placeholder="Enter model">
+            </div>
+          </div>
+          <div>
+            <label>Specification *</label>
+            <select id="so-specs" onchange="onStockSelectChange('so-specs')"></select>
+            <div id="so-specs-other-wrap" style="display:none;margin-top:6px">
+              <label>Specification name *</label><input type="text" id="so-specs-other" placeholder="Enter specification">
+            </div>
+          </div>
+          <div>
+            <label>Marketplace *</label>
+            <select id="so-marketplace" onchange="onStockSelectChange('so-marketplace')"></select>
+            <div id="so-marketplace-other-wrap" style="display:none;margin-top:6px">
+              <label>Marketplace name *</label><input type="text" id="so-marketplace-other" placeholder="Enter marketplace">
+            </div>
+          </div>
+          <div>
+            <label>Paid By *</label>
+            <select id="so-paidby" onchange="onStockSelectChange('so-paidby')"></select>
+            <div id="so-paidby-other-wrap" style="display:none;margin-top:6px">
+              <label>Paid By name *</label><input type="text" id="so-paidby-other" placeholder="Enter paid by">
+            </div>
+          </div>
+        </div>
+        <div class="submit-row">
+          <button class="btn" onclick="closeStockOrderModal()">Cancel</button>
+          <button class="btn btn-primary" id="so-submit" onclick="submitStockOrder()">Save order</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ STOCK: MARK DELIVERED (stage 2) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ -->
+    <div id="stock-delivery-modal" class="stock-modal">
+      <div class="stock-modal-card">
+        <div class="stock-modal-hd">
+          <span class="stock-modal-title">Mark delivered</span>
+          <button class="btn btn-sm" onclick="closeStockDeliveryModal()">ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¢ Close</button>
+        </div>
+        <div id="sd-context" class="stock-ctx"></div>
+        <div class="fg">
+          <div><label>Delivery Date *</label><input type="date" id="sd-date"></div>
+          <div><label>IMEI_1 *</label><input type="text" id="sd-imei1" inputmode="numeric" autocomplete="off"></div>
+          <div><label>IMEI_2 (optional)</label><input type="text" id="sd-imei2" inputmode="numeric" autocomplete="off"></div>
+        </div>
+        <div class="submit-row">
+          <button class="btn" onclick="closeStockDeliveryModal()">Cancel</button>
+          <button class="btn btn-primary" id="sd-submit" onclick="submitStockDelivery()">Mark delivered</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ STOCK: MARK SOLD (stage 3) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ -->
+    <div id="stock-sell-modal" class="stock-modal">
+      <div class="stock-modal-card">
+        <div class="stock-modal-hd">
+          <span class="stock-modal-title">Mark sold</span>
+          <button class="btn btn-sm" onclick="closeStockSellModal()">ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¢ Close</button>
+        </div>
+        <div id="ss-context" class="stock-ctx"></div>
+        <div class="fg fg-2">
+          <div><label>Selling Price *</label><input type="number" id="ss-price" min="0" step="1" placeholder="0"></div>
+          <div><label>Selling Date *</label><input type="date" id="ss-date"></div>
+          <div class="full"><label>Customer Name *</label><input type="text" id="ss-customer" autocomplete="off"></div>
+          <div>
+            <label>Payment Mode *</label>
+            <select id="ss-payment">
+              <option value="">SelectÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦</option>
+              <option value="Cash">Cash</option>
+              <option value="AKS Fin">AKS Fin</option>
+              <option value="Other Fin">Other Fin</option>
+            </select>
+          </div>
+          <div>
+            <label>Billing Date <span title="Exact date on the bill" style="cursor:help;color:#888;font-weight:400">ÃƒÂ¢Ã¢â‚¬Å“Ã‹Å“</span></label>
+            <input type="date" id="ss-billing" title="Exact date on the bill">
+          </div>
+        </div>
+        <div class="submit-row">
+          <button class="btn" onclick="closeStockSellModal()">Cancel</button>
+          <button class="btn btn-success" id="ss-submit" onclick="submitStockSold()">Mark sold</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ STOCK: ADD / EDIT ACTIVATION DATE ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ -->
+    <div id="stock-activation-modal" class="stock-modal">
+      <div class="stock-modal-card">
+        <div class="stock-modal-hd">
+          <span class="stock-modal-title">Activation date</span>
+          <button class="btn btn-sm" onclick="closeStockActivationDateModal()">ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¢ Close</button>
+        </div>
+        <div id="sa-context" class="stock-ctx"></div>
+        <div class="fg">
+          <div>
+            <label>Activation Date *</label>
+            <input type="date" id="sa-date">
+          </div>
+        </div>
+        <div class="stock-ctx" style="margin-top:0.6rem">
+          Saved to the <b>Activation date</b> column in the Stock sheet. The Available row turns amber.
+        </div>
+        <div class="submit-row">
+          <button class="btn" onclick="closeStockActivationDateModal()">Cancel</button>
+          <button class="btn btn-primary" id="sa-submit" onclick="submitStockActivationDate()">Save date</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ STOCK: ACTIVATION CHECK ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ -->
+    <div id="activation-modal" class="stock-modal">
+      <div class="stock-modal-card act-card">
+        <div class="stock-modal-hd">
+          <span class="stock-modal-title">Find recent sales</span>
+          <button class="btn btn-sm" onclick="closeActivationModal()">ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¢ Close</button>
+        </div>
+        <div class="act-body">
+          <div id="act-server" class="act-server"></div>
+          <div id="act-summary" class="act-summary"></div>
+          <div id="act-progress-wrap" style="display:none">
+            <div class="act-progress"><div id="act-progress-bar" class="act-progress-bar"></div></div>
+            <div id="act-phase" class="act-phase"></div>
+            <div id="act-counts" class="act-counts"></div>
+          </div>
+          <div id="act-results" class="act-results"></div>
+          <details id="act-log-wrap" class="act-log-wrap" style="display:none">
+            <summary>Activity log</summary>
+            <div id="act-log" class="act-log"></div>
+          </details>
+          <details class="act-advanced">
+            <summary>Checker address</summary>
+            <div style="display:flex;gap:6px;margin-top:6px">
+              <input type="text" id="act-server-url" placeholder="http://127.0.0.1:8787" style="flex:1">
+              <button class="btn btn-sm" onclick="retryActivationServer()">Connect</button>
+            </div>
+            <div style="margin-top:4px">Only change this if the checker runs on another computer. Open the app from that
+              computer's local address ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â an HTTPS page cannot reach a plain-HTTP checker on your network.</div>
+          </details>
+        </div>
+        <div class="submit-row act-actions">
+          <button class="btn" onclick="closeActivationModal()">Close</button>
+          <button class="btn" id="act-stop" style="display:none" onclick="stopActivationCheck()">Stop</button>
+          <button class="btn btn-primary" id="act-start" onclick="startActivationCheck()">Check now</button>
+          <button class="btn btn-primary" id="act-download" style="display:none" onclick="downloadActivationCsv()">Download CSV</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ EDIT MODAL ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ -->
+    <div id="edit-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;align-items:flex-end;justify-content:center">
+      <div style="background:#fff;border-radius:16px 16px 0 0;width:100%;max-width:600px;max-height:85vh;overflow-y:auto;padding:1.25rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+          <span style="font-size:14px;font-weight:600;color:#534AB7" id="edit-modal-title">Edit entry</span>
+          <button class="btn btn-sm" onclick="closeEditModal()">ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¢ Close</button>
+        </div>
+        <div id="edit-modal-body"></div>
+        <div class="submit-row" style="margin-top:1rem">
+          <button class="btn" onclick="closeEditModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="saveEdit()">Save changes</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ USERS (admin) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ -->
+    <div class="page" id="page-users">
+      <div style="font-size:15px;font-weight:500;margin-bottom:1rem">User management</div>
+      <div class="card"><div id="users-list"></div></div>
+      <div class="card" style="margin-top:0.75rem">
+        <div style="font-size:13px;font-weight:500;margin-bottom:0.75rem">Add new user</div>
+        <div class="fg fg-2">
+          <div><label>Username</label><input id="nu-user" type="text" placeholder="e.g. ravi"></div>
+          <div><label>Display name</label><input id="nu-name" type="text" placeholder="e.g. Ravi Kumar"></div>
+          <div><label>PIN</label><input id="nu-pin" type="password" placeholder="4ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“6 digit PIN"></div>
+          <div><label>Role</label><select id="nu-role"><option value="agent">Agent</option><option value="admin">Admin</option></select></div>
+          <div class="full">
+            <label style="margin-bottom:6px">Tab access</label>
+            <label style="display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:13px"><input type="checkbox" id="p-loan" checked> New Loan</label>
+            <label style="display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:13px"><input type="checkbox" id="p-allLoans" checked> All Loans</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="p-approvals" checked> Approvals</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="p-stock"> Stock</label>
+          </div>
+          <div class="full" style="margin-top:8px">
+            <label style="margin-bottom:6px">Permissions</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="p-submit" checked> Submit for approval</label>
+          </div>
+        </div>
+        <div class="submit-row"><button class="btn btn-primary" onclick="addUser()">Add user</button></div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<!-- Revised Date modal -->
+<div id="revised-date-modal" class="modal-overlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center" onclick="if(event.target===this)closeRevisedDateForm()">
+  <div class="card" style="width:90%;max-width:380px;margin:0;padding:16px" onclick="event.stopPropagation()">
+    <div style="font-size:14px;font-weight:600;color:#534AB7;margin-bottom:10px">Set Revised Date</div>
+    <div class="fg fg-2">
+      <div><label>EMI Number</label>
+        <select id="revised-emi-num"></select>
+      </div>
+      <div><label>Revised Date</label>
+        <input type="date" id="revised-date">
+      </div>
+      <div><label>Amount (ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹)</label>
+        <input type="number" id="revised-amt" placeholder="Full EMI amount">
+      </div>
+      <div><label>Note</label>
+        <input type="text" id="revised-note" placeholder="Optional">
+      </div>
+    </div>
+    <div class="submit-row" style="margin-top:12px">
+      <button class="btn" onclick="closeRevisedDateForm()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitRevisedDate()">Save</button>
+    </div>
+    <div class="divider" style="margin:12px 0"></div>
+    <div style="font-size:11px;color:#888;margin-bottom:6px">Or mark the device as seized:</div>
+    <button class="btn" style="width:100%;background:#000;color:#fff;border:none;padding:8px;border-radius:8px;font-size:12px;cursor:pointer" onclick="openMobileJabtForm()">Mark as Mobile Jabt</button>
+  </div>
+</div>
+
+<!-- Mobile Jabt modal -->
+<div id="mobile-jabt-modal" class="modal-overlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center" onclick="if(event.target===this)closeMobileJabtForm()">
+  <div class="card" style="width:90%;max-width:380px;margin:0;padding:16px" onclick="event.stopPropagation()">
+    <div style="font-size:14px;font-weight:600;color:#534AB7;margin-bottom:10px">Mark as Mobile Jabt</div>
+    <div class="fg" style="display:flex;flex-direction:column;gap:10px">
+      <div><label>Date</label>
+        <input type="date" id="jabt-date">
+      </div>
+      <div><label>Resale Price (ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹)</label>
+        <input type="number" id="jabt-resale-price" placeholder="Resale price" min="0" step="0.01">
+      </div>
+      <div><label>Recovery Charge (ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹)</label>
+        <input type="number" id="jabt-recovery-charge" placeholder="0" min="0" step="0.01" value="0">
+        <div style="font-size:11px;color:#888;margin-top:4px">Amount paid to the customer when the device was collected. Default 0.</div>
+      </div>
+      <div><label>Flipkart Link</label>
+        <input type="url" id="jabt-flipkart-link" placeholder="https://www.flipkart.com/...">
+      </div>
+    </div>
+    <div class="submit-row" style="margin-top:12px">
+      <button class="btn" onclick="closeMobileJabtForm()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitMobileJabt()">Confirm</button>
+    </div>
+    <div style="font-size:11px;color:#888;margin-top:8px">Date is saved to the Revised_Date column (C), resale price to the Amount column (D), the Flipkart link to the EMI number column (B) and the recovery charge to the Recovery_Charge column (G).</div>
+  </div>
+</div>
+
+<!-- App version / build details. Reuses the generic stock-modal sheet styles
+     (fixed overlay + bottom sheet on phones) because they already handle the
+     mobile and desktop layouts. -->
+<div id="app-version-modal" class="stock-modal" onclick="if(event.target===this)closeAppVersion()">
+  <div class="stock-modal-card">
+    <div class="stock-modal-hd">
+      <span class="stock-modal-title">Version info</span>
+      <button class="btn btn-sm" onclick="closeAppVersion()">ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¢ Close</button>
+    </div>
+    <div class="ver-mode">
+      <div class="ver-mode-hd">
+        <span class="ver-mode-title">Check link mode</span>
+        <span id="ver-mode-now" class="ver-mode-now"></span>
+      </div>
+      <select id="ver-mode-select" onchange="setStockCheckMode(this.value)"></select>
+      <div id="ver-pkg-row" class="ver-pkg-row" style="display:none">
+        <label class="ver-pkg-label" for="ver-pkg-input">Browser app to open</label>
+        <input id="ver-pkg-input" class="ver-pkg-input" list="ver-pkg-list" spellcheck="false"
+               autocomplete="off" onchange="setStockCheckPkg(this.value)"
+               placeholder="com.sec.android.app.sbrowser">
+        <datalist id="ver-pkg-list"></datalist>
+      </div>
+      <div class="ver-mode-note">
+        In the installed app, Chrome will not hand a link back to Chrome ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â it opens
+        its own browser view with an X instead, which covers the app. <b>Auto</b>
+        therefore only copies the IMEI. To open the brand page automatically, keep it
+        open in a second browser app and choose <b>other-browser</b>; or use
+        <b>copy</b> and paste into that page yourself.
+      </div>
+      <a id="ver-test-link" class="btn btn-sm" target="_blank" rel="noopener noreferrer">Test link (Nothing page)</a>
+    </div>
+    <div id="ver-info" class="ver-list"></div>
+    <div class="submit-row" style="margin-top:1rem">
+      <button class="btn" onclick="copyAppVersion()">Copy details</button>
+      <button class="btn btn-primary" onclick="closeAppVersion()">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- UPI QR modal -->
+<div id="qr-modal" class="modal-overlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center" onclick="if(event.target===this)closeQrModal()">
+  <div class="card" style="width:90%;max-width:380px;margin:0;padding:16px" onclick="event.stopPropagation()">
+    <div style="font-size:14px;font-weight:600;color:#534AB7;margin-bottom:10px">Payment QR Code</div>
+    <div style="text-align:center">
+      <img id="qr-modal-img" src="assets/upi-qr.png?v=1" alt="UPI QR code" style="width:100%;max-width:260px;border:1px solid #eee;border-radius:8px;background:#fff;-webkit-touch-callout:default;user-select:auto;-webkit-user-drag:auto">
+    </div>
+    <div style="font-size:11px;color:#888;text-align:center;margin-top:8px">Right-click (or long-press) the image and choose Copy Image, then paste it into the WhatsApp chat.</div>
+    <div class="submit-row" style="margin-top:12px">
+      <button class="btn" style="width:100%" onclick="closeQrModal()">Close</button>
+    </div>
+    <input type="file" id="qr-file-input" accept="image/png,image/jpeg" style="display:none" onchange="qrFilePicked(this)">
+    <button class="btn btn-sm" style="width:100%;margin-top:6px" onclick="document.getElementById('qr-file-input').click()">Load assets/upi-qr.png</button>
+    <div id="qr-modal-note" style="font-size:10px;color:#999;text-align:center;margin-top:8px"></div>
+  </div>
+</div>
+
+<!-- ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ SCRIPTS (order matters) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ -->
+<script src="js/state.js?v=19"></script>
+<script src="js/version.js?v=4"></script>
+<script src="js/snapshot.js?v=9"></script>
+<script src="js/auth.js?v=11"></script>
+<script src="js/nav.js?v=9"></script>
+<script src="js/loans.js?v=10"></script>
+<script src="js/emi.js?v=51"></script>
+<script src="js/approvals.js?v=20"></script>
+<script src="js/my-subs.js?v=4"></script>
+<script src="js/emi-messages.js?v=19"></script>
+<script src="js/stock.js?v=25"></script>
+<script src="js/activation.js?v=3"></script>
+<script src="js/users.js?v=7"></script>
+
+<!-- ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Install Banner ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ -->
+<div id="install-overlay">
+  <div id="install-banner">
+    <div class="ib-icon">ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹</div>
+    <h3>Install AKS Finance</h3>
+    <div class="ib-desc">Add to your home screen for quick access ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â works just like an app.</div>
+    <div class="ib-btns">
+      <button class="ib-dismiss" id="ib-dismiss">Not now</button>
+      <button class="ib-install" id="ib-install">Install</button>
+    </div>
+    <div class="ib-sub">AKS Finance App</div>
+  </div>
+</div>
+<script>
+if ('serviceWorker' in navigator && (location.protocol === 'http:' || location.protocol === 'https:')) navigator.serviceWorker.register('sw.js').catch(function () { /* insecure origin (LAN http) or offline: ignore */ });
+
+(function() {
+  if (localStorage.getItem('aks_install_dismissed')) return;
+  if (window.matchMedia('(display-mode: standalone)').matches) return;
+  if (navigator.userAgent.includes('iPhone') || navigator.userAgent.includes('iPad')) return;
+
+  let deferred;
+  window.addEventListener('beforeinstallprompt', function(e) {
+    e.preventDefault();
+    deferred = e;
+    setTimeout(function() {
+      if (deferred && !localStorage.getItem('aks_install_dismissed'))
+        document.getElementById('install-overlay').classList.add('show');
+    }, 3000);
+  });
+
+  document.getElementById('ib-install').addEventListener('click', function() {
+    if (!deferred) return;
+    deferred.prompt();
+    deferred.userChoice.then(function() {
+      deferred = null;
+      document.getElementById('install-overlay').classList.remove('show');
+    });
+  });
+
+  document.getElementById('ib-dismiss').addEventListener('click', function() {
+    localStorage.setItem('aks_install_dismissed', 'true');
+    document.getElementById('install-overlay').classList.remove('show');
+  });
+
+  window.addEventListener('appinstalled', function() {
+    document.getElementById('install-overlay').classList.remove('show');
+    deferred = null;
+  });
+})();
+</script>
+</body>
+</html>

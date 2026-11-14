@@ -575,6 +575,14 @@ function _stockIsAndroidPwa() {
 // on the Android tablet: all three produce that same Custom Tab. Targeting a
 // different browser package is the one hand-off Chrome does allow, because it
 // is not handing back to itself.
+//
+// Two details make that hand-off work, and both were missing at first:
+//   1. Chrome only launches an external activity that is BROWSABLE, so the
+//      intent must carry category=android.intent.category.BROWSABLE. Without
+//      it Chrome discards the package constraint and Android shows its own
+//      "open with" chooser, listing every browser on the device.
+//   2. If a chooser still appears, pinning an explicit component= names one
+//      activity and no chooser is possible at all.
 const _STOCK_CHECK_MODES = [
   'auto', 'copy', 'other-browser',
   'plain', 'intent', 'intent-component', 'android-app',
@@ -601,6 +609,19 @@ const _STOCK_BROWSER_PKGS = [
 ];
 const _STOCK_DEFAULT_BROWSER_PKG = 'com.sec.android.app.sbrowser';
 
+// Only used as the placeholder in the dialog's activity field: if a chooser
+// still appears, typing this pins the launch to one activity instead.
+const _STOCK_ACTIVITY_HINTS = {
+  'com.sec.android.app.sbrowser': 'com.sec.android.app.sbrowser.BrowserActivity',
+  'com.android.chrome': 'com.google.android.apps.chrome.Main',
+  'org.mozilla.firefox': 'org.mozilla.firefox.App',
+  'com.microsoft.emmx': 'com.microsoft.ruby.Main',
+};
+
+function _stockActivityHint(pkg) {
+  return _STOCK_ACTIVITY_HINTS[pkg] || '';
+}
+
 function _stockCheckMode() {
   try {
     const m = localStorage.getItem('aks_check_mode');
@@ -616,6 +637,36 @@ function _stockCheckPkg() {
     if (/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/.test(p)) return p;
   } catch (e) { /* ignore */ }
   return _STOCK_DEFAULT_BROWSER_PKG;
+}
+
+// '' means "do not pin": the intent only names the package, which is what the
+// app ships. A value here pins the launch to one activity and takes the chooser
+// out of the picture entirely - useful if Android still asks.
+function _stockCheckActivity() {
+  try {
+    const a = String(localStorage.getItem('aks_check_activity') || '').trim();
+    if (/^[A-Za-z.][A-Za-z0-9_.]*$/.test(a)) return a;
+  } catch (e) { /* ignore */ }
+  return '';
+}
+
+function setStockCheckActivity(activity) {
+  const a = String(activity || '').trim();
+  if (a && !/^[A-Za-z.][A-Za-z0-9_.]*$/.test(a)) {
+    if (typeof showAlert === 'function') showAlert('That does not look like an activity name.', 'e');
+    return;
+  }
+  try {
+    if (a) localStorage.setItem('aks_check_activity', a);
+    else localStorage.removeItem('aks_check_activity');
+  } catch (e) { /* ignore */ }
+  if (typeof renderStock === 'function' && _stock && _stock.headers && _stock.headers.length) {
+    renderStock();
+  }
+  if (typeof _verRefreshModeRow === 'function') _verRefreshModeRow();
+  if (typeof showAlert === 'function') {
+    showAlert(a ? 'Pinned to ' + a : 'Unpinned: Android may ask which app to use.', 's');
+  }
 }
 
 function setStockCheckPkg(pkg) {
@@ -668,16 +719,25 @@ function _stockActivationHref(url) {
     return 'android-app://com.android.chrome/' + scheme + '/' + data;
   }
   const pkg = mode === 'other-browser' ? _stockCheckPkg() : 'com.android.chrome';
-  const component = mode === 'intent-component'
-    ? ';component=com.android.chrome/com.google.android.apps.chrome.Main'
-    : '';
+  // An explicit component beats the chooser. Only 'other-browser' can pin a
+  // user-chosen activity; 'intent-component' keeps its historical Chrome pin.
+  let component = '';
+  if (mode === 'intent-component') {
+    component = 'com.android.chrome/com.google.android.apps.chrome.Main';
+  } else if (mode === 'other-browser') {
+    const act = _stockCheckActivity();
+    if (act) component = pkg + '/' + act;
+  }
   // Keep path, query and hash. Android's intent parser splits on the LAST
   // '#', so a page hash such as mi.com's '#/en/tab/imei' survives.
   return 'intent://' + data
     + '#Intent;scheme=' + scheme
     + ';action=android.intent.action.VIEW'
+    // Required: Chrome refuses to start a non-BROWSABLE activity and quietly
+    // drops the package= constraint, which is what produced the chooser.
+    + ';category=android.intent.category.BROWSABLE'
     + ';package=' + pkg
-    + component
+    + (component ? ';component=' + component : '')
     + ';S.browser_fallback_url=' + encodeURIComponent(url)
     + ';end';
 }

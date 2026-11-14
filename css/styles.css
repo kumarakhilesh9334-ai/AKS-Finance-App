@@ -74,6 +74,7 @@ label{display:block;font-size:12px;color:#666;margin-bottom:3px}
 
 .ver-pkg-row{margin-top:8px}
 .ver-pkg-label{display:block;font-size:11px;color:#777;margin-bottom:4px}
+.ver-act-label{margin-top:8px}
 .ver-pkg-input{
   width:100%;padding:6px 8px;border:0.5px solid #cfcfe0;border-radius:8px;
   font-size:12px;font-family:ui-monospace,Consolas,monospace;background:#fff;color:#222;

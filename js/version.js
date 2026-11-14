@@ -1,4 +1,4 @@
-// Ã¢â€â‚¬Ã¢â€â‚¬ APP VERSION Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// ── APP VERSION ─────────────────────────────────────────────────────────────
 // APP_VERSION is the ONE number shown in the header. Bump it by hand when a
 // release changes behaviour the user can see. It is not derived from anything:
 // there is no build step in this project, so this constant is the source of
@@ -10,14 +10,14 @@
 // They change more often than APP_VERSION and are listed in the dialog below so
 // a device can prove which files it actually loaded.
 
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.2.2';
 const APP_RELEASED = '14-Nov-2026';
 
 function initAppVersion() {
   const el = $('app-version');
   if (!el) return;
   el.textContent = 'v' + APP_VERSION;
-  el.title = 'App version Ã¢â‚¬â€ tap for build details';
+  el.title = 'App version — tap for build details';
 }
 
 function _verDisplayMode() {
@@ -51,10 +51,12 @@ function _verCheckMode() {
   const mode = typeof _stockCheckMode === 'function' ? _stockCheckMode() : 'auto';
   const href = _stockActivationHref('https://in.nothing.tech/pages/imei');
   if (!href) return mode + ' -> no navigation (copy only)';
-  const kind = href.indexOf('intent://') === 0
-    ? 'intent:// -> ' + (typeof _stockCheckPkg === 'function' ? _stockCheckPkg() : '?')
-    : href.indexOf('android-app://') === 0 ? 'android-app://'
-    : 'normal link';
+  if (href.indexOf('intent://') === 0) {
+    const pkg = typeof _stockCheckPkg === 'function' ? _stockCheckPkg() : '?';
+    const act = typeof _stockCheckActivity === 'function' ? _stockCheckActivity() : '';
+    return mode + ' -> ' + pkg + (act ? ' pinned' : '');
+  }
+  const kind = href.indexOf('android-app://') === 0 ? 'android-app://' : 'normal link';
   return mode + ' -> ' + kind;
 }
 
@@ -71,10 +73,12 @@ function _verFillModeSelect() {
 }
 
 // Target browser for 'other-browser'. A <datalist> gives the common packages as
-// suggestions while still allowing any package name to be typed.
+// suggestions while still allowing any package name to be typed. The optional
+// activity field pins the launch to one activity, which removes the chooser.
 function _verFillPkgInput() {
   const input = $('ver-pkg-input');
   const list = $('ver-pkg-list');
+  const act = $('ver-act-input');
   if (typeof _STOCK_BROWSER_PKGS === 'undefined') return;
   if (list) {
     list.innerHTML = _STOCK_BROWSER_PKGS.map(p =>
@@ -83,6 +87,16 @@ function _verFillPkgInput() {
   }
   if (input && !input.value) {
     input.value = typeof _stockCheckPkg === 'function' ? _stockCheckPkg() : '';
+  }
+  if (act) {
+    // Dialog opening is never mid-typing, so sync it from storage outright.
+    act.value = typeof _stockCheckActivity === 'function' ? _stockCheckActivity() : '';
+    // Placeholder shows the known activity for the chosen package, so it can be
+    // typed in without guessing if a chooser still appears.
+    const savedPkg = typeof _stockCheckPkg === 'function' ? _stockCheckPkg() : '';
+    const hint = typeof _stockActivityHint === 'function'
+      ? _stockActivityHint(savedPkg) : '';
+    act.placeholder = hint || 'pin the browser\'s activity';
   }
 }
 
@@ -100,6 +114,21 @@ function _verRefreshModeRow() {
   }
   // The package field is only meaningful for the other-browser hand-off.
   if (pkgRow) pkgRow.style.display = mode === 'other-browser' ? '' : 'none';
+  // Keep the optional activity pin in step with whichever package is selected.
+  // The pkg field is also rewritten from storage so a rejected value snaps back
+  // to the default instead of sitting there as if it had been accepted.
+  const actInput = $('ver-act-input');
+  const pkgInput = $('ver-pkg-input');
+  const savedPkg = typeof _stockCheckPkg === 'function' ? _stockCheckPkg() : '';
+  if (pkgInput && mode === 'other-browser' && savedPkg) pkgInput.value = savedPkg;
+  if (actInput) {
+    // Only seed the field when it is empty: never overwrite what is being typed.
+    if (!actInput.value && typeof _stockCheckActivity === 'function') {
+      actInput.value = _stockCheckActivity();
+    }
+    const hint = typeof _stockActivityHint === 'function' ? _stockActivityHint(savedPkg) : '';
+    actInput.placeholder = hint || 'pin the browser\'s activity';
+  }
 
   if (test) {
     if (!href) {
