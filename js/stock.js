@@ -506,7 +506,7 @@ const _STOCK_ACTIVATION_SITES = [
   { names: ['nothing'], url: 'https://in.nothing.tech/pages/imei' },
   { names: ['oppo'], url: 'https://support.oppo.com/in/check/' },
   { names: ['iqoo'], url: 'https://www.iqoo.com/in/support/IMEI' },
-  { names: ['vivo'], url: 'https://www.vivo.com/en/support/IMEI' },
+  { names: ['vivo'], url: 'https://www.vivo.com/in/support/IMEI' },
   { names: ['motorola', 'moto'], url: 'https://en-in.support.motorola.com/app/warranty/check' },
   { names: ['xiaomi', 'redmi', 'mi'], url: 'https://www.mi.com/global/verify/#/en/tab/imei' },
   { names: ['realme'], url: 'https://www.realme.com/in/support/phonecheck' },
